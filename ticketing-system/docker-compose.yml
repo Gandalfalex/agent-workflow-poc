@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  ticketing-postgres:
+    image: postgres:17
+    container_name: ticketing-postgres
+    environment:
+      POSTGRES_DB: ticketing
+      POSTGRES_USER: ticketing
+      POSTGRES_PASSWORD: ticketing
+    ports:
+      - "5433:5432"
+    volumes:
+      - ticketing_pgdata:/var/lib/postgresql/data
+
+  keycloak-postgres:
+    image: postgres:17
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+      - "5434:5432"
+    volumes:
+      - keycloak_pgdata:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.1
+    container_name: keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "8081:8080"
+    depends_on:
+      - keycloak-postgres
+    volumes:
+      - ./keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+
+  ticketing-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ticketing-api
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres:5432/ticketing?sslmode=disable
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ticketing
+      KEYCLOAK_CLIENT_ID: myclient
+      COOKIE_SECURE: "false"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ticketing-postgres
+      - keycloak
+
+volumes:
+  ticketing_pgdata:
+  keycloak_pgdata:

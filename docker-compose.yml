@@ -1,0 +1,137 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    networks: [mcpnet]
+
+  n8n:
+    image: n8nio/n8n
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: n8n
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678
+      GENERIC_TIMEZONE: Europe/Berlin
+      N8N_SECURE_COOKIE: false
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on: [postgres]
+    networks: [mcpnet]
+
+  init-n8n-db:
+    image: postgres:17
+    container_name: init-n8n-db
+    depends_on: [postgres]
+    entrypoint:
+      - bash
+      - -c
+      - |
+        until pg_isready -h postgres -U postgres; do sleep 1; done
+        psql -h postgres -U postgres -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='n8n'" | grep -q 1 || \
+          psql -h postgres -U postgres -d postgres -c "CREATE ROLE n8n LOGIN PASSWORD 'n8n'"
+        psql -h postgres -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='n8n'" | grep -q 1 || \
+          psql -h postgres -U postgres -d postgres -c "CREATE DATABASE n8n OWNER n8n"
+    environment:
+      PGPASSWORD: postgres
+    restart: "no"
+    networks: [mcpnet]
+
+  codex-agent:
+    build: ./codex-agent
+    container_name: codex-agent
+    ports:
+      - "9000:9000"
+    networks: [mcpnet]
+
+  ticketing-postgres:
+    image: postgres:17
+    container_name: ticketing-postgres
+    environment:
+      POSTGRES_DB: ticketing
+      POSTGRES_USER: ticketing
+      POSTGRES_PASSWORD: ticketing
+    ports:
+      - "5433:5432"
+    volumes:
+      - ticketing_pgdata:/var/lib/postgresql/data
+    networks: [mcpnet]
+
+  keycloak-postgres:
+    image: postgres:17
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+      - "5434:5432"
+    volumes:
+      - keycloak_pgdata:/var/lib/postgresql/data
+    networks: [mcpnet]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.1
+    container_name: keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "8081:8080"
+    depends_on:
+      - keycloak-postgres
+    volumes:
+      - ./ticketing-system/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+    networks: [mcpnet]
+
+  ticketing-api:
+    build:
+      context: ./ticketing-system
+      dockerfile: backend/Dockerfile
+    container_name: ticketing-api
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres:5432/ticketing?sslmode=disable
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ticketing
+      KEYCLOAK_CLIENT_ID: myclient
+      COOKIE_SECURE: "false"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ticketing-postgres
+      - keycloak
+    networks: [mcpnet]
+
+volumes:
+  pgdata:
+  n8n_data:
+  ticketing_pgdata:
+  keycloak_pgdata:
+
+networks:
+  mcpnet:

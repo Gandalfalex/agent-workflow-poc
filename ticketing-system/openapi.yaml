@@ -1,0 +1,1627 @@
+openapi: 3.0.3
+info:
+  title: Ticketing System API
+  version: 0.2.0
+  description: |
+    Jira-like ticketing system API with auth, Kanban workflow, projects, groups, and webhooks.
+servers:
+  - url: http://localhost:8080
+
+tags:
+  - name: auth
+  - name: users
+  - name: projects
+  - name: groups
+  - name: tickets
+  - name: workflow
+  - name: webhooks
+
+security:
+  - sessionAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /auth/login:
+    post:
+      summary: Login
+      operationId: login
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthLoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthLoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      summary: Logout
+      operationId: logout
+      tags: [auth]
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/me:
+    get:
+      summary: Current user
+      operationId: getCurrentUser
+      tags: [auth]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users:
+    get:
+      summary: List users
+      operationId: listUsers
+      tags: [users]
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search by name or email
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+
+  /projects:
+    get:
+      summary: List projects
+      operationId: listProjects
+      tags: [projects]
+      responses:
+        "200":
+          description: Project list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+    post:
+      summary: Create project
+      operationId: createProject
+      tags: [projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreateRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{projectId}:
+    get:
+      summary: Get project
+      operationId: getProject
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update project
+      operationId: updateProject
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdateRequest"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      summary: Delete project
+      operationId: deleteProject
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/groups:
+    get:
+      summary: List project groups
+      operationId: listProjectGroups
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project group list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGroupListResponse"
+    post:
+      summary: Add group to project
+      operationId: addProjectGroup
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectGroupCreateRequest"
+      responses:
+        "201":
+          description: Project group added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGroup"
+
+  /projects/{projectId}/groups/{groupId}:
+    patch:
+      summary: Update project group role
+      operationId: updateProjectGroup
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectGroupUpdateRequest"
+      responses:
+        "200":
+          description: Project group updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGroup"
+    delete:
+      summary: Remove group from project
+      operationId: deleteProjectGroup
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /groups:
+    get:
+      summary: List groups
+      operationId: listGroups
+      tags: [groups]
+      responses:
+        "200":
+          description: Group list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupListResponse"
+    post:
+      summary: Create group
+      operationId: createGroup
+      tags: [groups]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupCreateRequest"
+      responses:
+        "201":
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+
+  /groups/{groupId}:
+    get:
+      summary: Get group
+      operationId: getGroup
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+    patch:
+      summary: Update group
+      operationId: updateGroup
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupUpdateRequest"
+      responses:
+        "200":
+          description: Group updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+    delete:
+      summary: Delete group
+      operationId: deleteGroup
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /groups/{groupId}/members:
+    get:
+      summary: List group members
+      operationId: listGroupMembers
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Group member list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMemberListResponse"
+    post:
+      summary: Add user to group
+      operationId: addGroupMember
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupMemberCreateRequest"
+      responses:
+        "201":
+          description: Group member created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMember"
+
+  /groups/{groupId}/members/{userId}:
+    delete:
+      summary: Remove user from group
+      operationId: deleteGroupMember
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/board:
+    get:
+      summary: Kanban board snapshot
+      operationId: getBoard
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Board
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+
+  /projects/{projectId}/tickets:
+    get:
+      summary: List tickets for project
+      operationId: listTickets
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: stateId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: assigneeId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Ticket list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketListResponse"
+    post:
+      summary: Create ticket
+      operationId: createTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketCreateRequest"
+      responses:
+        "201":
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+
+  /tickets/{id}:
+    get:
+      summary: Get ticket
+      operationId: getTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ticket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update ticket
+      operationId: updateTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketUpdateRequest"
+      responses:
+        "200":
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+    delete:
+      summary: Delete ticket
+      operationId: deleteTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/stories:
+    get:
+      summary: List stories
+      operationId: listStories
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Story list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryListResponse"
+    post:
+      summary: Create story
+      operationId: createStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryCreateRequest"
+      responses:
+        "201":
+          description: Story created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+
+  /stories/{id}:
+    get:
+      summary: Get story
+      operationId: getStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Story
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+    patch:
+      summary: Update story
+      operationId: updateStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryUpdateRequest"
+      responses:
+        "200":
+          description: Story updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+    delete:
+      summary: Delete story
+      operationId: deleteStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /tickets/{id}/comments:
+    get:
+      summary: List ticket comments
+      operationId: listTicketComments
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Comment list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketCommentListResponse"
+    post:
+      summary: Add ticket comment
+      operationId: addTicketComment
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketCommentCreateRequest"
+      responses:
+        "201":
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketComment"
+
+  /tickets/{id}/comments/{commentId}:
+    delete:
+      summary: Delete ticket comment
+      operationId: deleteTicketComment
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: commentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/workflow:
+    get:
+      summary: Get workflow states
+      operationId: getWorkflow
+      tags: [workflow]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowResponse"
+    put:
+      summary: Update workflow states
+      operationId: updateWorkflow
+      tags: [workflow]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowUpdateRequest"
+      responses:
+        "200":
+          description: Workflow updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowResponse"
+
+  /projects/{projectId}/webhooks:
+    get:
+      summary: List webhooks
+      operationId: listWebhooks
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Webhook list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+    post:
+      summary: Create webhook
+      operationId: createWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookCreateRequest"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+
+  /projects/{projectId}/webhooks/{id}:
+    get:
+      summary: Get webhook
+      operationId: getWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Webhook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+    patch:
+      summary: Update webhook
+      operationId: updateWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookUpdateRequest"
+      responses:
+        "200":
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+    delete:
+      summary: Delete webhook
+      operationId: deleteWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/webhooks/{id}/test:
+    post:
+      summary: Send test webhook
+      operationId: testWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookTestRequest"
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookTestResponse"
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: ticketing_session
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+      required: [status]
+
+    AuthLoginRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: Email or username
+        email:
+          type: string
+          format: email
+          deprecated: true
+        username:
+          type: string
+          deprecated: true
+        password:
+          type: string
+          format: password
+      required: [password]
+
+    AuthLoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+      required: [user]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email, name, createdAt]
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+      required: [id, name]
+
+    UserListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserSummary"
+      required: [items]
+
+    ProjectKey:
+      type: string
+      description: 4-character uppercase alphanumeric project key.
+      pattern: "^[A-Z0-9]{4}$"
+      example: PROJ
+
+    TicketKey:
+      type: string
+      description: Ticket key in format PROJECT-###, where ### is a per-project sequence.
+      pattern: "^[A-Z0-9]{4}-\\d{3}$"
+      example: PROJ-001
+
+    ProjectRole:
+      type: string
+      enum: [admin, contributor, viewer]
+
+    ProjectPermission:
+      type: string
+      enum: [read, create, update, delete, admin]
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          $ref: "#/components/schemas/ProjectKey"
+        name:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, key, name, createdAt, updatedAt]
+
+    ProjectCreateRequest:
+      type: object
+      properties:
+        key:
+          $ref: "#/components/schemas/ProjectKey"
+        name:
+          type: string
+        description:
+          type: string
+      required: [key, name]
+
+    ProjectUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    ProjectListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+      required: [items]
+
+    Group:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, createdAt, updatedAt]
+
+    GroupCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required: [name]
+
+    GroupUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    GroupListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Group"
+      required: [items]
+
+    GroupMember:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        user:
+          $ref: "#/components/schemas/UserSummary"
+      required: [groupId, userId]
+
+    GroupMemberCreateRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+      required: [userId]
+
+    GroupMemberListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupMember"
+      required: [items]
+
+    ProjectGroup:
+      type: object
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectPermission"
+      required: [projectId, groupId, role, permissions]
+
+    ProjectGroupCreateRequest:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+      required: [groupId, role]
+
+    ProjectGroupUpdateRequest:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+      required: [role]
+
+    ProjectGroupListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectGroup"
+      required: [items]
+
+    WorkflowState:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        order:
+          type: integer
+        isDefault:
+          type: boolean
+        isClosed:
+          type: boolean
+      required: [id, projectId, name, order, isDefault, isClosed]
+
+    WorkflowStateInput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        order:
+          type: integer
+        isDefault:
+          type: boolean
+        isClosed:
+          type: boolean
+      required: [name, order, isDefault, isClosed]
+
+    WorkflowResponse:
+      type: object
+      properties:
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowState"
+      required: [states]
+
+    WorkflowUpdateRequest:
+      type: object
+      properties:
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowStateInput"
+      required: [states]
+
+    TicketPriority:
+      type: string
+      enum: [low, medium, high, urgent]
+
+    TicketType:
+      type: string
+      enum: [feature, bug]
+
+    Story:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, title, createdAt, updatedAt]
+
+    StoryCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+      required: [title]
+
+    StoryUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+
+    StoryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Story"
+      required: [items]
+
+    TicketComment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        authorName:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, authorId, authorName, message, createdAt]
+
+    TicketCommentCreateRequest:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    TicketCommentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketComment"
+      required: [items]
+
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          $ref: "#/components/schemas/TicketKey"
+        number:
+          type: integer
+        type:
+          $ref: "#/components/schemas/TicketType"
+        projectId:
+          type: string
+          format: uuid
+        projectKey:
+          $ref: "#/components/schemas/ProjectKey"
+        storyId:
+          type: string
+          format: uuid
+          nullable: true
+        story:
+          $ref: "#/components/schemas/Story"
+          nullable: true
+        title:
+          type: string
+        description:
+          type: string
+        stateId:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/WorkflowState"
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        assignee:
+          $ref: "#/components/schemas/UserSummary"
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        position:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - key
+        - number
+        - type
+        - projectId
+        - projectKey
+        - title
+        - stateId
+        - priority
+        - position
+        - createdAt
+        - updatedAt
+
+    TicketCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/TicketType"
+        storyId:
+          type: string
+          format: uuid
+          nullable: true
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+      required: [title]
+
+    TicketUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/TicketType"
+        storyId:
+          type: string
+          format: uuid
+          nullable: true
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        position:
+          type: number
+          format: float
+
+    TicketListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ticket"
+        total:
+          type: integer
+      required: [items, total]
+
+    BoardResponse:
+      type: object
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowState"
+        tickets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ticket"
+      required: [project, states, tickets]
+
+    WebhookEvent:
+      type: string
+      enum:
+        - ticket.created
+        - ticket.updated
+        - ticket.deleted
+        - ticket.state_changed
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        enabled:
+          type: boolean
+        secret:
+          type: string
+          writeOnly: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, url, events, enabled, createdAt, updatedAt]
+
+    WebhookCreateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        enabled:
+          type: boolean
+        secret:
+          type: string
+      required: [url, events]
+
+    WebhookUpdateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        enabled:
+          type: boolean
+        secret:
+          type: string
+
+    WebhookListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Webhook"
+      required: [items]
+
+    WebhookTestRequest:
+      type: object
+      properties:
+        event:
+          $ref: "#/components/schemas/WebhookEvent"
+        ticketId:
+          type: string
+          format: uuid
+        payload:
+          type: object
+          additionalProperties: true
+
+    WebhookTestResponse:
+      type: object
+      properties:
+        delivered:
+          type: boolean
+        statusCode:
+          type: integer
+        responseBody:
+          type: string
+      required: [delivered]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error]

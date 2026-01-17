@@ -1,0 +1,509 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
+import BoardView from "@/components/app/BoardView.vue";
+import NewTicketModal from "@/components/app/NewTicketModal.vue";
+import StoryModal from "@/components/app/StoryModal.vue";
+import TicketModal from "@/components/app/TicketModal.vue";
+import { useBoardStore } from "@/stores/board";
+import { useSessionStore } from "@/stores/session";
+import type { StoryRow } from "@/lib/types";
+import type { TicketResponse, TicketPriority, TicketType } from "@/lib/api";
+
+const props = defineProps<{ projectId: string }>();
+
+const boardStore = useBoardStore();
+const sessionStore = useSessionStore();
+
+const showNewTicket = ref(false);
+const showStoryModal = ref(false);
+const selectedTicket = ref<TicketResponse | null>(null);
+const ticketEditor = ref({
+    title: "",
+    description: "",
+    priority: "medium" as TicketPriority,
+    stateId: "",
+    type: "feature" as TicketType,
+});
+const ticketSaving = ref(false);
+const ticketError = ref("");
+const commentDraft = ref("");
+const newTicket = ref({
+    title: "",
+    description: "",
+    priority: "medium" as TicketPriority,
+    type: "feature" as TicketType,
+    storyId: "",
+    assignee: "",
+    stateId: "",
+});
+const newStory = ref({
+    title: "",
+    description: "",
+});
+const storySaving = ref(false);
+
+const states = computed(() => boardStore.states);
+const tickets = computed(() => boardStore.tickets);
+const stories = computed(() => boardStore.stories);
+const apiMode = computed(() => boardStore.apiMode);
+const loading = computed(() => boardStore.loading);
+const errorMessage = computed(() => boardStore.errorMessage);
+const webhooks = computed(() => boardStore.webhooks);
+const workflowSetupBusy = computed(() => boardStore.workflowSetupBusy);
+const workflowSetupError = computed(() => boardStore.workflowSetupError);
+const ticketComments = computed(() => boardStore.ticketComments);
+const commentSaving = computed(() => boardStore.commentSaving);
+const commentError = computed(() => boardStore.commentError);
+const storiesCount = computed(() => boardStore.stories.length);
+
+const priorities: TicketPriority[] = ["low", "medium", "high", "urgent"];
+const ticketTypes: TicketType[] = ["feature", "bug"];
+
+const defaultWorkflow = [
+    { name: "Backlog", order: 1, isDefault: true, isClosed: false },
+    { name: "In Progress", order: 2, isDefault: false, isClosed: false },
+    { name: "Review", order: 3, isDefault: false, isClosed: false },
+    { name: "Done", order: 4, isDefault: false, isClosed: true },
+];
+
+const handleAuthError = (err: unknown) => {
+    const error = err as Error & { status?: number };
+    if (error.status === 401 || error.status === 403) {
+        sessionStore.reset();
+        return true;
+    }
+    return false;
+};
+
+const refreshBoard = async () => {
+    if (!props.projectId) return;
+    try {
+        await boardStore.loadBoard(props.projectId);
+        await boardStore.loadStories(props.projectId);
+        await boardStore.loadWebhooks(props.projectId);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const initializeWorkflow = async () => {
+    if (!props.projectId) return;
+    try {
+        await boardStore.initializeWorkflow(props.projectId, defaultWorkflow);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const ticketsByState = computed(() => {
+    const map: Record<string, TicketResponse[]> = {};
+    states.value.forEach((state) => {
+        map[state.id] = [];
+    });
+    tickets.value.forEach((ticket) => {
+        const bucket = map[ticket.stateId];
+        if (bucket) {
+            bucket.push(ticket);
+        } else {
+            map[ticket.stateId] = [ticket];
+        }
+    });
+    Object.values(map).forEach((list) =>
+        list.sort((a, b) => a.position - b.position),
+    );
+    return map;
+});
+
+const storyRows = computed<StoryRow[]>(() => {
+    if (states.value.length === 0) {
+        return [];
+    }
+
+    const createBuckets = () => {
+        const buckets: Record<string, TicketResponse[]> = {};
+        states.value.forEach((state) => {
+            buckets[state.id] = [];
+        });
+        return buckets;
+    };
+
+    const rows = new Map<string, StoryRow>();
+    stories.value.forEach((story) => {
+        rows.set(story.id, {
+            id: story.id,
+            title: story.title,
+            description: story.description || undefined,
+            ticketsByState: createBuckets(),
+            isUngrouped: false,
+        });
+    });
+
+    const ungrouped: StoryRow = {
+        id: "ungrouped",
+        title: "No story assigned",
+        description: "Tickets without a story live here.",
+        ticketsByState: createBuckets(),
+        isUngrouped: true,
+    };
+
+    tickets.value.forEach((ticket) => {
+        const row = (ticket.storyId && rows.get(ticket.storyId)) || ungrouped;
+        const bucket = row.ticketsByState[ticket.stateId];
+        if (bucket) {
+            bucket.push(ticket);
+        } else {
+            row.ticketsByState[ticket.stateId] = [ticket];
+        }
+    });
+
+    const sortBuckets = (row: StoryRow) => {
+        Object.values(row.ticketsByState).forEach((bucket) =>
+            bucket.sort((a, b) => a.position - b.position),
+        );
+    };
+
+    rows.forEach(sortBuckets);
+    sortBuckets(ungrouped);
+
+    const ordered = Array.from(rows.values());
+    if (
+        Object.values(ungrouped.ticketsByState).some(
+            (bucket) => bucket.length > 0,
+        )
+    ) {
+        ordered.push(ungrouped);
+    } else if (rows.size === 0) {
+        ordered.push(ungrouped);
+    }
+
+    return ordered;
+});
+
+const canSubmit = computed(() => newTicket.value.title.trim().length > 0);
+const canCreateStory = computed(() => newStory.value.title.trim().length > 0);
+
+const openTicket = async (ticket: TicketResponse) => {
+    selectedTicket.value = ticket;
+    ticketEditor.value = {
+        title: ticket.title,
+        description: ticket.description || "",
+        priority: ticket.priority,
+        stateId: ticket.stateId,
+        type: ticket.type,
+    };
+    ticketError.value = "";
+    commentDraft.value = "";
+    boardStore.clearComments();
+    if (apiMode.value !== "demo") {
+        if (stories.value.length === 0 && props.projectId) {
+            await boardStore.loadStories(props.projectId);
+        }
+        await boardStore.loadTicketComments(ticket.id);
+    }
+};
+
+const closeTicket = () => {
+    selectedTicket.value = null;
+    ticketError.value = "";
+    commentDraft.value = "";
+    boardStore.clearComments();
+};
+
+const saveTicket = async () => {
+    if (!selectedTicket.value || ticketSaving.value) return;
+    ticketSaving.value = true;
+    ticketError.value = "";
+
+    const payload = {
+        title: ticketEditor.value.title.trim(),
+        description: ticketEditor.value.description.trim() || undefined,
+        priority: ticketEditor.value.priority,
+        stateId: ticketEditor.value.stateId,
+        type: ticketEditor.value.type,
+    };
+
+    try {
+        const updated = await boardStore.updateTicket(
+            selectedTicket.value.id,
+            payload,
+        );
+        selectedTicket.value = updated;
+        closeTicket();
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            ticketError.value = "Unable to update ticket.";
+        }
+    } finally {
+        ticketSaving.value = false;
+    }
+};
+
+const createStorySubmit = async () => {
+    if (!canCreateStory.value || storySaving.value || !props.projectId) return;
+    storySaving.value = true;
+
+    const payload = {
+        title: newStory.value.title.trim(),
+        description: newStory.value.description.trim() || undefined,
+    };
+
+    try {
+        const created = await boardStore.createStory(props.projectId, payload);
+        if (showNewTicket.value) {
+            newTicket.value.storyId = created.id;
+        }
+        newStory.value = { title: "", description: "" };
+        showStoryModal.value = false;
+    } catch (err) {
+        handleAuthError(err);
+    } finally {
+        storySaving.value = false;
+    }
+};
+
+const addCommentSubmit = async () => {
+    if (
+        !selectedTicket.value ||
+        !commentDraft.value.trim() ||
+        commentSaving.value
+    ) {
+        return;
+    }
+    const message = commentDraft.value.trim();
+    try {
+        const authorName = sessionStore.user?.name || "Demo User";
+        await boardStore.addTicketComment(
+            selectedTicket.value.id,
+            message,
+            authorName,
+        );
+        commentDraft.value = "";
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const openNewTicket = async (stateId?: string, storyId?: string) => {
+    const fallbackState = states.value[0]?.id || "";
+    newTicket.value = {
+        title: "",
+        description: "",
+        priority: "medium" as TicketPriority,
+        type: "feature" as TicketType,
+        storyId: storyId || "",
+        assignee: "",
+        stateId: stateId || fallbackState,
+    };
+    showNewTicket.value = true;
+    if (apiMode.value !== "demo" && props.projectId) {
+        await boardStore.loadStories(props.projectId);
+    }
+};
+
+const closeNewTicket = () => {
+    showNewTicket.value = false;
+};
+
+const openStoryModal = async () => {
+    showStoryModal.value = true;
+    if (apiMode.value !== "demo" && props.projectId) {
+        await boardStore.loadStories(props.projectId);
+    }
+};
+
+const deleteStorySubmit = async (storyId: string) => {
+    if (!storyId || storyId === "ungrouped") return;
+    const story = stories.value.find((item) => item.id === storyId);
+    const ticketCount = tickets.value.filter(
+        (ticket) => ticket.storyId === storyId,
+    ).length;
+    const label = story?.title ? `"${story.title}"` : "this story";
+    if (!window.confirm(`Delete ${label} and ${ticketCount} ticket(s)?`)) {
+        return;
+    }
+    try {
+        await boardStore.removeStory(storyId);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const createTicketSubmit = async () => {
+    if (!canSubmit.value || !props.projectId) return;
+    try {
+        await boardStore.createTicket(props.projectId, {
+            title: newTicket.value.title.trim(),
+            description: newTicket.value.description.trim(),
+            type: newTicket.value.type,
+            storyId: newTicket.value.storyId || undefined,
+            stateId: newTicket.value.stateId,
+            priority: newTicket.value.priority,
+        });
+        closeNewTicket();
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const deleteTicketSubmit = async () => {
+    if (!selectedTicket.value) return;
+    const label = selectedTicket.value.key || "this ticket";
+    if (!window.confirm(`Delete ${label}?`)) {
+        return;
+    }
+    try {
+        await boardStore.removeTicket(selectedTicket.value.id);
+        closeTicket();
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            ticketError.value = "Unable to delete ticket.";
+        }
+    }
+};
+
+const draggingId = ref<string | null>(null);
+
+const onDragStart = (ticketId: string) => {
+    draggingId.value = ticketId;
+};
+
+const onDragEnd = () => {
+    draggingId.value = null;
+};
+
+const moveToState = async (
+    ticketId: string,
+    stateId: string,
+    position: number,
+) => {
+    try {
+        await boardStore.updateTicket(ticketId, {
+            stateId,
+            position,
+        });
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const onDropColumn = async (stateId: string) => {
+    if (!draggingId.value) return;
+    const column = ticketsByState.value[stateId] || [];
+    const position = column.length + 1;
+    await moveToState(draggingId.value, stateId, position);
+    draggingId.value = null;
+};
+
+const onDropCard = async (targetId: string, stateId: string) => {
+    if (!draggingId.value || draggingId.value === targetId) return;
+    const moving = tickets.value.find(
+        (ticket) => ticket.id === draggingId.value,
+    );
+    if (!moving) return;
+    const targetStateTickets = ticketsByState.value[stateId] || [];
+    const nextPosition = targetStateTickets.length + 1;
+    await moveToState(moving.id, stateId, nextPosition);
+    draggingId.value = null;
+};
+
+const updateNewTicket = (value: typeof newTicket.value) => {
+    newTicket.value = value;
+};
+
+const updateTicketEditor = (value: typeof ticketEditor.value) => {
+    ticketEditor.value = value;
+};
+
+const updateCommentDraft = (value: string) => {
+    commentDraft.value = value;
+};
+
+const updateNewStory = (value: typeof newStory.value) => {
+    newStory.value = value;
+};
+
+onMounted(refreshBoard);
+
+watch(
+    () => props.projectId,
+    async (value) => {
+        if (!value) return;
+        await refreshBoard();
+    },
+);
+</script>
+
+<template>
+    <section
+        v-if="errorMessage"
+        class="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm"
+    >
+        {{ errorMessage }}
+    </section>
+
+    <BoardView
+        :loading="loading"
+        :states="states"
+        :story-rows="storyRows"
+        :stories-count="storiesCount"
+        :tickets-count="tickets.length"
+        :webhooks-count="webhooks.length"
+        :api-mode="apiMode"
+        :workflow-setup-busy="workflowSetupBusy"
+        :workflow-setup-error="workflowSetupError"
+        :on-initialize-workflow="initializeWorkflow"
+        :on-open-story-modal="openStoryModal"
+        :on-delete-story="deleteStorySubmit"
+        :on-open-ticket="openTicket"
+        :on-open-new-ticket="openNewTicket"
+        :on-drag-start="onDragStart"
+        :on-drag-end="onDragEnd"
+        :on-drop-column="onDropColumn"
+        :on-drop-card="onDropCard"
+    />
+
+    <NewTicketModal
+        :show="showNewTicket"
+        :ticket="newTicket"
+        :states="states"
+        :stories="stories"
+        :priorities="priorities"
+        :ticket-types="ticketTypes"
+        :can-submit="canSubmit"
+        @update:ticket="updateNewTicket"
+        @close="closeNewTicket"
+        @create="createTicketSubmit"
+    />
+
+    <StoryModal
+        :show="showStoryModal"
+        :story="newStory"
+        :can-create="canCreateStory"
+        :story-saving="storySaving"
+        :story-error="boardStore.storyError"
+        @update:story="updateNewStory"
+        @close="showStoryModal = false"
+        @create="createStorySubmit"
+    />
+
+    <TicketModal
+        :show="!!selectedTicket"
+        :ticket-key="selectedTicket?.key || ''"
+        :editor="ticketEditor"
+        :states="states"
+        :priorities="priorities"
+        :ticket-types="ticketTypes"
+        :ticket-saving="ticketSaving"
+        :ticket-error="ticketError"
+        :comments="ticketComments"
+        :comment-draft="commentDraft"
+        :comment-saving="commentSaving"
+        :comment-error="commentError"
+        @update:editor="updateTicketEditor"
+        @update:commentDraft="updateCommentDraft"
+        @close="closeTicket"
+        @save="saveTicket"
+        @delete="deleteTicketSubmit"
+        @add-comment="addCommentSubmit"
+    />
+</template>

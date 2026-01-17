@@ -1,0 +1,87 @@
+{
+  "name": "Ticketing \u2192 MCP Gateway",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "ticketing",
+        "httpMethod": "POST",
+        "responseMode": "onReceived"
+      },
+      "name": "Ticketing Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const data = $json.data || $json;\nconst ticket = data.ticket || data;\nreturn [{\n  issueKey: ticket.number || ticket.id,\n  summary: ticket.header || data.header,\n  body: ticket.description || data.description,\n  type: (ticket.type && ticket.type.name) || ticket.type,\n  priority: (ticket.priority && ticket.priority.name) || ticket.priority\n}];"
+      },
+      "name": "Normalize Payload",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-gateway:8080/mcp/ticketing",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "name": "Call MCP Gateway",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "sshCommand": "cd /home/gandalfalex/projects/coding-agent-workflow\n\nmkdir -p /home/gandalfalex/projects/coding-agent-workflow-workspaces\n\ngit worktree add /home/gandalfalex/projects/coding-agent-workflow-workspaces/new-idea -b new-idea\n\ncd /home/gandalfalex/projects/coding-agent-workflow-workspaces/new-idea\n\n# TODO: apply new idea changes and overwrite ticketing-system logic\n"
+      },
+      "name": "SSH Create Workspace",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [880, 300],
+      "credentials": {
+        "ssh": {
+          "name": "orangepi"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Ticketing Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Payload": {
+      "main": [
+        [
+          {
+            "node": "Call MCP Gateway",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call MCP Gateway": {
+      "main": [
+        [
+          {
+            "node": "SSH Create Workspace",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
