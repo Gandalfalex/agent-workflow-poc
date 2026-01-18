@@ -56,6 +56,52 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	return projects, nil
 }
 
+func (s *Store) ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]Project, error) {
+	query := mustSQL("projects_list_for_user.sql", nil)
+	rows, err := s.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	projects := []Project{}
+	for rows.Next() {
+		project, err := scanProject(rows)
+		if err != nil {
+			return nil, err
+		}
+		projects = append(projects, project)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return projects, nil
+}
+
+func (s *Store) ListProjectIDsForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	query := mustSQL("project_ids_for_user.sql", nil)
+	rows, err := s.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ids, nil
+}
+
 func (s *Store) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
 	query := mustSQL("projects_get.sql", nil)
 	row := s.db.QueryRow(ctx, query, id)

@@ -57,6 +57,23 @@ services:
     container_name: codex-agent
     ports:
       - "9000:9000"
+    environment:
+      - KEYCLOAK_BASE_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=ticketing
+      - KEYCLOAK_CLIENT_ID=myclient
+      - KEYCLOAK_USERNAME=Codex/Claude
+      - KEYCLOAK_PASSWORD=nichtWeiterWichtig
+      - TICKETING_API_BASE_URL=http://ticketing-api:8080
+      - WORKSPACE_ROOT=/workspaces
+      - REPO_PATH=/repo
+      - SUBAGENT_TIMEOUT=1800000
+      - AUTO_UPDATE_STATE=true
+    volumes:
+      - ./ticketing-system:/repo:ro
+      - ./worktrees:/workspaces
+    depends_on:
+      - keycloak
+      - ticketing-api
     networks: [mcpnet]
 
   ticketing-postgres:

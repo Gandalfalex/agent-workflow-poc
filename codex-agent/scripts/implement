@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Simple bash wrapper for implementing tickets
+# Usage: ./implement PROJ-001
+# Usage: ./implement PROJ-001 /path/to/repo
+
+TICKET_ID="${1:-}"
+REPO_PATH="${2:-.}"
+
+if [ -z "$TICKET_ID" ]; then
+  echo "Usage: $0 <ticket-id> [repo-path]"
+  echo "Example: $0 PROJ-001"
+  echo "Example: $0 PROJ-001 /path/to/repo"
+  exit 1
+fi
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Run the skill
+node "$SCRIPT_DIR/run-skill.js" implement_ticket "$TICKET_ID" --repo "$REPO_PATH"

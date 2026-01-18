@@ -288,15 +288,16 @@ const removeGroupFromProject = async (groupId: string) => {
     }
 };
 
-const addMemberToGroup = async () => {
-    if (!canAddGroupMember.value || groupMemberLoading.value) return;
+const addMemberToGroup = async (userId?: string) => {
     if (!selectedGroupId.value) return;
+    const id = userId || newGroupMember.value.userId;
+    if (!id || !id.trim()) return;
+    if (groupMemberLoading.value) return;
     try {
-        await adminStore.addMember(
-            selectedGroupId.value,
-            newGroupMember.value.userId.trim(),
-        );
+        await adminStore.addMember(selectedGroupId.value, id.trim());
         newGroupMember.value.userId = "";
+        adminStore.clearUserResults();
+        userSearchQuery.value = "";
     } catch (err) {
         handleAuthError(err);
     }
@@ -317,6 +318,59 @@ const searchUsersSubmit = async () => {
         return;
     }
     await adminStore.searchUsers(userSearchQuery.value.trim());
+    // Apply fuzzy sorting to results
+    sortUserResultsByRelevance(userSearchQuery.value.trim());
+};
+
+// Fuzzy match scoring for better search results
+const fuzzyScore = (query: string, text: string): number => {
+    const q = query.toLowerCase();
+    const t = text.toLowerCase();
+
+    // Exact match gets highest score
+    if (t === q) return 1000;
+    if (t.startsWith(q)) return 500;
+
+    // Consecutive characters match
+    const consecutiveIndex = t.indexOf(q);
+    if (consecutiveIndex !== -1) return 300 + (100 - consecutiveIndex);
+
+    // Fuzzy match score based on character positions
+    let score = 0;
+    let queryIdx = 0;
+    let lastFoundIndex = -1;
+
+    for (let i = 0; i < t.length && queryIdx < q.length; i++) {
+        if (t[i] === q[queryIdx]) {
+            const gap = i - lastFoundIndex - 1;
+            score += Math.max(100 - gap * 10, 10);
+            lastFoundIndex = i;
+            queryIdx++;
+        }
+    }
+
+    // If not all characters matched, return 0
+    if (queryIdx !== q.length) return 0;
+
+    return score;
+};
+
+const sortUserResultsByRelevance = (query: string) => {
+    if (adminStore.userResults.length === 0) return;
+
+    const scored = adminStore.userResults.map((user) => ({
+        user,
+        nameScore: fuzzyScore(query, user.name),
+        emailScore: fuzzyScore(query, user.email || ""),
+    }));
+
+    scored.sort((a, b) => {
+        const aScore = Math.max(a.nameScore, a.emailScore);
+        const bScore = Math.max(b.nameScore, b.emailScore);
+        return bScore - aScore;
+    });
+
+    adminStore.userResults = scored.map((s) => s.user);
 };
 
 onMounted(async () => {
@@ -496,10 +550,9 @@ watch(selectedGroupId, async () => {
                 >
                     Access
                 </p>
-                <h3 class="text-xl font-semibold">Groups and membership</h3>
+                <h3 class="text-xl font-semibold">Groups and members</h3>
                 <p class="mt-2 text-sm text-muted-foreground">
-                    Manage who can access this project and keep group membership
-                    up to date.
+                    Create groups, manage membership, and assign to projects.
                 </p>
             </div>
             <Button
@@ -518,18 +571,19 @@ watch(selectedGroupId, async () => {
                 }}
             </Button>
         </div>
-        <div class="mt-6 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+        <div class="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <!-- Left: Group Selection & User Management -->
             <div class="grid gap-4">
                 <div class="grid gap-3">
-                    <label class="text-xs font-semibold text-muted-foreground"
-                        >Active group</label
-                    >
+                    <p class="text-xs font-semibold text-muted-foreground">
+                        Groups
+                    </p>
                     <select
                         v-model="selectedGroupId"
                         class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         :disabled="groupLoading || groups.length === 0"
                     >
-                        <option value="" disabled>Select group</option>
+                        <option value="" disabled>Select a group</option>
                         <option
                             v-for="group in groups"
                             :key="group.id"
@@ -542,300 +596,15 @@ watch(selectedGroupId, async () => {
                         {{ groupError }}
                     </p>
                 </div>
-                <div class="grid gap-3">
-                    <p class="text-xs font-semibold text-muted-foreground">
-                        Find users
-                    </p>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <input
-                            v-model="userSearchQuery"
-                            type="text"
-                            placeholder="Search by name or email"
-                            class="flex-1 rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            :disabled="userSearchLoading"
-                            @click="searchUsersSubmit"
-                        >
-                            {{ userSearchLoading ? "Searching..." : "Search" }}
-                        </Button>
-                    </div>
-                    <p v-if="userSearchError" class="text-xs text-destructive">
-                        {{ userSearchError }}
-                    </p>
-                    <div
-                        v-if="userResults.length > 0"
-                        class="max-h-40 overflow-auto rounded-2xl border border-border bg-background"
-                    >
-                        <div
-                            v-for="user in userResults"
-                            :key="user.id"
-                            class="flex items-center justify-between border-b border-border px-3 py-2 text-xs last:border-b-0"
-                        >
-                            <div>
-                                <p class="font-semibold">{{ user.name }}</p>
-                                <p class="text-[11px] text-muted-foreground">
-                                    {{ user.email || user.id }}
-                                </p>
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                :disabled="!selectedGroupId"
-                                @click="newGroupMember.userId = user.id"
-                            >
-                                Use
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-                <div class="grid gap-3">
-                    <label class="text-xs font-semibold text-muted-foreground"
-                        >Add user by ID</label
-                    >
-                    <input
-                        v-model="newGroupMember.userId"
-                        type="text"
-                        placeholder="User ID"
-                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        :disabled="!selectedGroupId"
-                    />
-                    <Button
-                        size="sm"
-                        :disabled="!canAddGroupMember || !selectedGroupId"
-                        @click="addMemberToGroup"
-                    >
-                        Add to group
-                    </Button>
-                    <p v-if="groupMemberError" class="text-xs text-destructive">
-                        {{ groupMemberError }}
-                    </p>
-                </div>
-                <div class="grid gap-3">
-                    <p class="text-xs font-semibold text-muted-foreground">
-                        Group members
-                    </p>
-                    <div
-                        v-if="groupMemberLoading"
-                        class="text-xs text-muted-foreground"
-                    >
-                        Loading members...
-                    </div>
-                    <div
-                        v-else-if="
-                            !selectedGroupId || groupMembers.length === 0
-                        "
-                        class="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground"
-                    >
-                        No members assigned yet.
-                    </div>
-                    <div
-                        v-else
-                        class="overflow-hidden rounded-xl border border-border bg-background"
-                    >
-                        <table class="w-full text-xs">
-                            <thead
-                                class="bg-muted text-[11px] uppercase tracking-[0.2em] text-muted-foreground"
-                            >
-                                <tr>
-                                    <th class="px-3 py-2 text-left">User</th>
-                                    <th class="px-3 py-2 text-right">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="member in groupMembers"
-                                    :key="member.userId"
-                                    class="border-t border-border"
-                                >
-                                    <td class="px-3 py-2">
-                                        <div class="font-semibold">
-                                            {{
-                                                member.user?.name ||
-                                                member.userId
-                                            }}
-                                        </div>
-                                        <div
-                                            class="text-[11px] text-muted-foreground"
-                                        >
-                                            {{
-                                                member.user?.email ||
-                                                member.userId
-                                            }}
-                                        </div>
-                                    </td>
-                                    <td class="px-3 py-2 text-right">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            @click="
-                                                removeMemberFromGroup(
-                                                    member.userId,
-                                                )
-                                            "
-                                        >
-                                            Remove
-                                        </Button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <p class="text-[11px] text-muted-foreground">
-                        Use a Keycloak user ID until the user directory is wired
-                        in.
-                    </p>
-                </div>
-            </div>
-            <div class="grid gap-4">
-                <div class="grid gap-3">
-                    <p class="text-xs font-semibold text-muted-foreground">
-                        Project access
-                    </p>
-                    <div
-                        v-if="projectGroupLoading"
-                        class="text-xs text-muted-foreground"
-                    >
-                        Loading project groups...
-                    </div>
-                    <div
-                        v-else-if="projectGroups.length === 0"
-                        class="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground"
-                    >
-                        No groups assigned yet.
-                    </div>
-                    <div
-                        v-else
-                        class="overflow-hidden rounded-xl border border-border bg-background"
-                    >
-                        <table class="w-full text-xs">
-                            <thead
-                                class="bg-muted text-[11px] uppercase tracking-[0.2em] text-muted-foreground"
-                            >
-                                <tr>
-                                    <th class="px-3 py-2 text-left">Group</th>
-                                    <th class="px-3 py-2 text-left">Role</th>
-                                    <th class="px-3 py-2 text-right">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="projectGroup in projectGroups"
-                                    :key="projectGroup.groupId"
-                                    class="border-t border-border"
-                                >
-                                    <td class="px-3 py-2">
-                                        <div class="font-semibold">
-                                            {{
-                                                groupLookup[
-                                                    projectGroup.groupId
-                                                ]?.name || projectGroup.groupId
-                                            }}
-                                        </div>
-                                        <div
-                                            class="text-[11px] text-muted-foreground"
-                                        >
-                                            {{
-                                                groupLookup[
-                                                    projectGroup.groupId
-                                                ]?.description ||
-                                                "No description"
-                                            }}
-                                        </div>
-                                    </td>
-                                    <td class="px-3 py-2">
-                                        <select
-                                            class="rounded-md border border-input bg-background px-2 py-1 text-xs"
-                                            :value="projectGroup.role"
-                                            @change="
-                                                updateProjectGroupRole(
-                                                    projectGroup.groupId,
-                                                    (
-                                                        $event.target as HTMLSelectElement
-                                                    ).value as ProjectRole,
-                                                )
-                                            "
-                                        >
-                                            <option value="admin">Admin</option>
-                                            <option value="contributor">
-                                                Contributor
-                                            </option>
-                                            <option value="viewer">
-                                                Viewer
-                                            </option>
-                                        </select>
-                                    </td>
-                                    <td class="px-3 py-2 text-right">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            @click="
-                                                removeGroupFromProject(
-                                                    projectGroup.groupId,
-                                                )
-                                            "
-                                        >
-                                            Remove
-                                        </Button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div class="grid gap-3">
-                    <label class="text-xs font-semibold text-muted-foreground"
-                        >Assign group to project</label
-                    >
-                    <select
-                        v-model="newProjectGroup.groupId"
-                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        :disabled="groupLoading || groups.length === 0"
-                    >
-                        <option value="" disabled>Choose group</option>
-                        <option
-                            v-for="group in groups"
-                            :key="group.id"
-                            :value="group.id"
-                        >
-                            {{ group.name }}
-                        </option>
-                    </select>
-                    <select
-                        v-model="newProjectGroup.role"
-                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                        <option value="admin">Admin</option>
-                        <option value="contributor">Contributor</option>
-                        <option value="viewer">Viewer</option>
-                    </select>
-                    <Button
-                        size="sm"
-                        :disabled="!canAssignGroup || projectGroupLoading"
-                        @click="assignGroupToProject"
-                    >
-                        Add to project
-                    </Button>
-                    <p
-                        v-if="projectGroupError"
-                        class="text-xs text-destructive"
-                    >
-                        {{ projectGroupError }}
-                    </p>
-                </div>
+
+                <!-- Create Group Details Submenu -->
                 <details
                     class="rounded-xl border border-border bg-background px-3 py-2 text-xs"
                 >
                     <summary
-                        class="cursor-pointer text-xs font-semibold text-muted-foreground"
+                        class="cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground"
                     >
-                        Create new group
+                        ➕ Create new group
                     </summary>
                     <div class="mt-3 grid gap-2">
                         <input
@@ -859,6 +628,298 @@ watch(selectedGroupId, async () => {
                         </Button>
                     </div>
                 </details>
+
+                <!-- User Search & Add -->
+                <div class="rounded-xl border border-border bg-background p-4">
+                    <p class="mb-3 text-xs font-semibold text-muted-foreground">
+                        Add members
+                    </p>
+
+                    <div
+                        v-if="!selectedGroupId"
+                        class="text-xs text-muted-foreground"
+                    >
+                        Select a group to add members
+                    </div>
+
+                    <div v-else class="grid gap-3">
+                        <!-- Search input -->
+                        <div>
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="userSearchQuery"
+                                    type="text"
+                                    placeholder="Fuzzy search: name, email (e.g., 'ich', 'admin', 'ich@ich')"
+                                    class="flex-1 rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                    @keyup.enter="searchUsersSubmit"
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    :disabled="userSearchLoading"
+                                    @click="searchUsersSubmit"
+                                >
+                                    {{ userSearchLoading ? "..." : "Search" }}
+                                </Button>
+                            </div>
+                            <p class="mt-1 text-[10px] text-muted-foreground">
+                                Press Enter or click Search. Supports fuzzy
+                                matching (e.g., 'ich' matches 'ich@ich.ich')
+                            </p>
+                        </div>
+
+                        <!-- Search Results or Manual Entry -->
+                        <div
+                            v-if="userResults.length > 0"
+                            class="max-h-48 overflow-auto space-y-1"
+                        >
+                            <div
+                                v-for="user in userResults"
+                                :key="user.id"
+                                class="flex items-center justify-between rounded-lg border border-border bg-muted/50 px-2 py-1.5 text-xs hover:bg-muted"
+                            >
+                                <div>
+                                    <p class="font-semibold">{{ user.name }}</p>
+                                    <p
+                                        class="text-[11px] text-muted-foreground"
+                                    >
+                                        {{ user.email || user.id }}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="addMemberToGroup(user.id)"
+                                >
+                                    Add
+                                </Button>
+                            </div>
+                        </div>
+
+                        <!-- Manual ID Entry -->
+                        <div class="space-y-2 border-t border-border pt-3">
+                            <label
+                                class="text-[11px] font-semibold text-muted-foreground"
+                            >
+                                Or add by User ID
+                            </label>
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="newGroupMember.userId"
+                                    type="text"
+                                    placeholder="User ID"
+                                    class="flex-1 rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                                <Button
+                                    size="sm"
+                                    :disabled="!canAddGroupMember"
+                                    @click="
+                                        addMemberToGroup(newGroupMember.userId)
+                                    "
+                                >
+                                    Add
+                                </Button>
+                            </div>
+                        </div>
+
+                        <p
+                            v-if="userSearchError"
+                            class="text-xs text-destructive"
+                        >
+                            {{ userSearchError }}
+                        </p>
+                        <p
+                            v-if="groupMemberError"
+                            class="text-xs text-destructive"
+                        >
+                            {{ groupMemberError }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Group Members Table -->
+                <div
+                    v-if="selectedGroupId"
+                    class="rounded-xl border border-border bg-background overflow-hidden"
+                >
+                    <div class="bg-muted px-3 py-2">
+                        <p class="text-xs font-semibold text-muted-foreground">
+                            Members ({{ groupMembers.length }})
+                        </p>
+                    </div>
+                    <div
+                        v-if="groupMemberLoading"
+                        class="px-3 py-2 text-xs text-muted-foreground"
+                    >
+                        Loading...
+                    </div>
+                    <div
+                        v-else-if="groupMembers.length === 0"
+                        class="px-3 py-2 text-xs text-muted-foreground"
+                    >
+                        No members yet
+                    </div>
+                    <table v-else class="w-full text-xs">
+                        <tbody>
+                            <tr
+                                v-for="member in groupMembers"
+                                :key="member.userId"
+                                class="border-t border-border hover:bg-muted/50"
+                            >
+                                <td class="px-3 py-2">
+                                    <div class="font-semibold">
+                                        {{ member.user?.name || member.userId }}
+                                    </div>
+                                    <div
+                                        class="text-[11px] text-muted-foreground"
+                                    >
+                                        {{
+                                            member.user?.email || member.userId
+                                        }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2 text-right">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        @click="
+                                            removeMemberFromGroup(member.userId)
+                                        "
+                                    >
+                                        Remove
+                                    </Button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Right: Project Assignment -->
+            <div class="grid gap-4">
+                <div
+                    class="rounded-xl border border-border bg-background overflow-hidden"
+                >
+                    <div class="bg-muted px-3 py-2">
+                        <p class="text-xs font-semibold text-muted-foreground">
+                            Project access
+                        </p>
+                    </div>
+                    <div
+                        v-if="projectGroupLoading"
+                        class="px-3 py-2 text-xs text-muted-foreground"
+                    >
+                        Loading...
+                    </div>
+                    <div
+                        v-else-if="projectGroups.length === 0"
+                        class="px-3 py-2 text-xs text-muted-foreground"
+                    >
+                        No groups assigned yet
+                    </div>
+                    <table v-else class="w-full text-xs">
+                        <thead class="bg-muted/50">
+                            <tr class="text-[11px] uppercase tracking-[0.1em]">
+                                <th class="px-3 py-2 text-left">Group</th>
+                                <th class="px-3 py-2 text-left">Role</th>
+                                <th class="px-3 py-2 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="projectGroup in projectGroups"
+                                :key="projectGroup.groupId"
+                                class="border-t border-border hover:bg-muted/50"
+                            >
+                                <td class="px-3 py-2">
+                                    <div class="font-semibold">
+                                        {{
+                                            groupLookup[projectGroup.groupId]
+                                                ?.name
+                                        }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2">
+                                    <select
+                                        class="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                                        :value="projectGroup.role"
+                                        @change="
+                                            updateProjectGroupRole(
+                                                projectGroup.groupId,
+                                                (
+                                                    $event.target as HTMLSelectElement
+                                                ).value as ProjectRole,
+                                            )
+                                        "
+                                    >
+                                        <option value="admin">Admin</option>
+                                        <option value="contributor">
+                                            Contributor
+                                        </option>
+                                        <option value="viewer">Viewer</option>
+                                    </select>
+                                </td>
+                                <td class="px-3 py-2 text-right">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        @click="
+                                            removeGroupFromProject(
+                                                projectGroup.groupId,
+                                            )
+                                        "
+                                    >
+                                        Remove
+                                    </Button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Assign Group to Project -->
+                <div class="rounded-xl border border-border bg-background p-4">
+                    <p class="mb-3 text-xs font-semibold text-muted-foreground">
+                        Assign group to project
+                    </p>
+                    <div class="grid gap-2">
+                        <select
+                            v-model="newProjectGroup.groupId"
+                            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            :disabled="groupLoading || groups.length === 0"
+                        >
+                            <option value="" disabled>Choose group</option>
+                            <option
+                                v-for="group in groups"
+                                :key="group.id"
+                                :value="group.id"
+                            >
+                                {{ group.name }}
+                            </option>
+                        </select>
+                        <select
+                            v-model="newProjectGroup.role"
+                            class="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                            <option value="admin">Admin</option>
+                            <option value="contributor">Contributor</option>
+                            <option value="viewer">Viewer</option>
+                        </select>
+                        <Button
+                            size="sm"
+                            :disabled="!canAssignGroup || projectGroupLoading"
+                            @click="assignGroupToProject"
+                        >
+                            Add to project
+                        </Button>
+                        <p
+                            v-if="projectGroupError"
+                            class="text-xs text-destructive"
+                        >
+                            {{ projectGroupError }}
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>

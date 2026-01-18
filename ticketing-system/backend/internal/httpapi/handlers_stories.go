@@ -1,38 +1,35 @@
 package httpapi
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
 	"ticketing-system/backend/internal/store"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 func (h *API) ListStories(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectID) {
+		return
+	}
 	stories, err := h.store.ListStories(r.Context(), projectID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "story_list_failed", "failed to list stories")
+	if handleListError(w, r, err, "stories", "story_list") {
 		return
 	}
 
-	items := make([]storyResponse, 0, len(stories))
-	for _, story := range stories {
-		items = append(items, mapStory(story))
-	}
-	writeJSON(w, http.StatusOK, storyListResponse{Items: items})
+	writeJSON(w, http.StatusOK, storyListResponse{Items: mapSlice(stories, mapStory)})
 }
 
 func (h *API) CreateStory(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectID := uuid.UUID(projectId)
-	var req storyCreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid json body")
+	if !h.requireProjectAccess(w, r, projectID) {
+		return
+	}
+	req, ok := decodeJSON[storyCreateRequest](w, r, "story_create")
+	if !ok {
 		return
 	}
 	if strings.TrimSpace(req.Title) == "" {
@@ -44,8 +41,7 @@ func (h *API) CreateStory(w http.ResponseWriter, r *http.Request, projectId open
 		Title:       req.Title,
 		Description: req.Description,
 	})
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "story_create_failed", err.Error())
+	if handleDBErrorWithCode(w, r, err, "story", "story_create", "story_create_failed") {
 		return
 	}
 
@@ -55,12 +51,12 @@ func (h *API) CreateStory(w http.ResponseWriter, r *http.Request, projectId open
 func (h *API) GetStory(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	storyID := uuid.UUID(id)
 	story, err := h.store.GetStory(r.Context(), storyID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "not_found", "story not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "story_load_failed", "failed to load story")
+	if handleDBError(w, r, err, "story", "story_load") {
+		return
+	}
+
+	// Check project access after fetching - return same error to avoid information disclosure
+	if !h.requireProjectAccess(w, r, story.ProjectID) {
 		return
 	}
 
@@ -69,9 +65,18 @@ func (h *API) GetStory(w http.ResponseWriter, r *http.Request, id openapi_types.
 
 func (h *API) UpdateStory(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	storyID := uuid.UUID(id)
-	var req storyUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid json body")
+	req, ok := decodeJSON[storyUpdateRequest](w, r, "story_update")
+	if !ok {
+		return
+	}
+
+	existing, err := h.store.GetStory(r.Context(), storyID)
+	if handleDBError(w, r, err, "story", "story_load") {
+		return
+	}
+
+	// Check project access after fetching - return same error to avoid information disclosure
+	if !h.requireProjectAccess(w, r, existing.ProjectID) {
 		return
 	}
 
@@ -79,12 +84,7 @@ func (h *API) UpdateStory(w http.ResponseWriter, r *http.Request, id openapi_typ
 		Title:       req.Title,
 		Description: req.Description,
 	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "not_found", "story not found")
-			return
-		}
-		writeError(w, http.StatusBadRequest, "story_update_failed", err.Error())
+	if handleDBErrorWithCode(w, r, err, "story", "story_update", "story_update_failed") {
 		return
 	}
 
@@ -93,43 +93,34 @@ func (h *API) UpdateStory(w http.ResponseWriter, r *http.Request, id openapi_typ
 
 func (h *API) DeleteStory(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	storyID := uuid.UUID(id)
-	if err := h.store.DeleteStory(r.Context(), storyID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "not_found", "story not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "story_delete_failed", "failed to delete story")
+	story, err := h.store.GetStory(r.Context(), storyID)
+	if handleDBError(w, r, err, "story", "story_load") {
+		return
+	}
+
+	// Check project access after fetching - return same error to avoid information disclosure
+	if !h.requireProjectAccess(w, r, story.ProjectID) {
+		return
+	}
+
+	if err := h.store.DeleteStory(r.Context(), storyID); handleDeleteError(w, r, err, "story", "story_delete") {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *API) ListTicketComments(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	ticketID, err := parseOpenapiUUID(id)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_ticket_id", "ticket id must be a UUID")
-		return
-	}
-
+	ticketID := uuid.UUID(id)
 	comments, err := h.store.ListComments(r.Context(), ticketID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "comment_list_failed", "failed to list comments")
+	if handleListError(w, r, err, "comments", "comment_list") {
 		return
 	}
 
-	items := make([]ticketCommentResponse, 0, len(comments))
-	for _, comment := range comments {
-		items = append(items, mapComment(comment))
-	}
-	writeJSON(w, http.StatusOK, ticketCommentListResponse{Items: items})
+	writeJSON(w, http.StatusOK, ticketCommentListResponse{Items: mapSlice(comments, mapComment)})
 }
 
 func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	ticketID, err := parseOpenapiUUID(id)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_ticket_id", "ticket id must be a UUID")
-		return
-	}
+	ticketID := uuid.UUID(id)
 
 	user, ok := authUser(r.Context())
 	if !ok {
@@ -138,13 +129,13 @@ func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openap
 	}
 	authorID, err := uuid.Parse(user.ID)
 	if err != nil {
+		logRequestError(r, "comment_create_invalid_user_id", err)
 		writeError(w, http.StatusBadRequest, "invalid_user_id", "user id must be a UUID")
 		return
 	}
 
-	var req ticketCommentCreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid json body")
+	req, ok := decodeJSON[ticketCommentCreateRequest](w, r, "comment_create")
+	if !ok {
 		return
 	}
 	if strings.TrimSpace(req.Message) == "" {
@@ -157,8 +148,7 @@ func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openap
 		AuthorName: user.Name,
 		Message:    req.Message,
 	})
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "comment_create_failed", err.Error())
+	if handleDBErrorWithCode(w, r, err, "comment", "comment_create", "comment_create_failed") {
 		return
 	}
 
@@ -166,18 +156,8 @@ func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openap
 }
 
 func (h *API) DeleteTicketComment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, commentId openapi_types.UUID) {
-	commentID, err := parseOpenapiUUID(commentId)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_comment_id", "comment id must be a UUID")
-		return
-	}
-
-	if err := h.store.DeleteComment(r.Context(), commentID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "not_found", "comment not found")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "comment_delete_failed", "failed to delete comment")
+	commentID := uuid.UUID(commentId)
+	if err := h.store.DeleteComment(r.Context(), commentID); handleDeleteError(w, r, err, "comment", "comment_delete") {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -1,4 +1,8 @@
-FROM alpine:3.20
-WORKDIR /agent
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
 EXPOSE 9000
-CMD ["sh", "-c", "echo Codex agent placeholder && sleep infinity"]
+CMD ["node", "dist/index.js"]

@@ -64,9 +64,32 @@ const updateEditor = (patch: Partial<TicketEditor>) => {
                         {{ props.ticketKey }}
                     </h2>
                 </div>
-                <Button variant="ghost" size="sm" @click="emit('close')"
-                    >Close</Button
-                >
+                <div class="flex items-center gap-2">
+                    <details class="relative">
+                        <summary
+                            class="list-none rounded-full border border-border bg-background px-2 py-1 text-lg font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                            aria-label="Ticket actions"
+                        >
+                            ⋮
+                        </summary>
+                        <div
+                            class="absolute right-0 top-full mt-2 w-36 rounded-2xl border border-border bg-card/80 p-2 text-xs"
+                        >
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                class="w-full border-destructive/30 text-destructive hover:bg-destructive/5"
+                                :disabled="props.ticketSaving"
+                                @click.stop="emit('delete')"
+                            >
+                                Delete ticket
+                            </Button>
+                        </div>
+                    </details>
+                    <Button variant="ghost" size="sm" @click="emit('close')"
+                        >Close</Button
+                    >
+                </div>
             </div>
             <div class="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
                 <div class="grid gap-4">
@@ -188,16 +211,7 @@ const updateEditor = (patch: Partial<TicketEditor>) => {
                     >
                         {{ props.ticketError }}
                     </div>
-                    <div class="flex items-center justify-between gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            class="border-destructive/40 text-destructive hover:bg-destructive/10"
-                            :disabled="props.ticketSaving"
-                            @click="emit('delete')"
-                        >
-                            Delete ticket
-                        </Button>
+                    <div class="flex justify-end gap-2">
                         <Button
                             variant="ghost"
                             size="sm"

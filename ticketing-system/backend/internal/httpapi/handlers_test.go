@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -59,15 +60,16 @@ type fakeStore struct {
 	replaceResult []store.WorkflowState
 	replaceInputs []store.WorkflowStateInput
 
-	projects      []store.Project
-	projectErr    error
-	getProject    store.Project
-	getProjectErr error
-	createProject store.Project
-	createProjErr error
-	updateProject store.Project
-	updateProjErr error
-	deleteProjErr error
+	projects          []store.Project
+	projectErr        error
+	getProject        store.Project
+	getProjectErr     error
+	createProject     store.Project
+	createProjErr     error
+	updateProject     store.Project
+	updateProjErr     error
+	deleteProjErr     error
+	projectIDsForUser []uuid.UUID
 
 	projectGroups         []store.ProjectGroup
 	projectGroupErr       error
@@ -130,6 +132,27 @@ func (f *fakeStore) ListProjects(ctx context.Context) ([]store.Project, error) {
 		return nil, f.projectErr
 	}
 	return f.projects, nil
+}
+
+func (f *fakeStore) ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]store.Project, error) {
+	if f.projectErr != nil {
+		return nil, f.projectErr
+	}
+	return f.projects, nil
+}
+
+func (f *fakeStore) ListProjectIDsForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	if f.projectErr != nil {
+		return nil, f.projectErr
+	}
+	if len(f.projectIDsForUser) > 0 {
+		return f.projectIDsForUser, nil
+	}
+	ids := make([]uuid.UUID, len(f.projects))
+	for i, project := range f.projects {
+		ids[i] = project.ID
+	}
+	return ids, nil
 }
 
 func (f *fakeStore) GetProject(ctx context.Context, id uuid.UUID) (store.Project, error) {
@@ -424,10 +447,21 @@ func newHandlerWith(store Store) *API {
 	return NewHandler(store, &fakeAuth{}, &fakeWebhookDispatcher{}, HandlerOptions{})
 }
 
+func newTestRequest(method, url string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, url, body)
+	user := auth.User{
+		ID:    uuid.NewString(),
+		Email: "test@example.com",
+		Name:  "Test User",
+		Roles: []string{"admin"},
+	}
+	return req.WithContext(context.WithValue(req.Context(), authUserKey, user))
+}
+
 func TestHealth(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		h := newHandlerWith(&fakeStore{})
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req := newTestRequest(http.MethodGet, "/health", nil)
 		rec := httptest.NewRecorder()
 
 		h.HealthCheck(rec, req)
@@ -446,7 +480,7 @@ func TestHealth(t *testing.T) {
 
 	t.Run("db down", func(t *testing.T) {
 		h := newHandlerWith(&fakeStore{pingErr: errors.New("db down")})
-		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req := newTestRequest(http.MethodGet, "/health", nil)
 		rec := httptest.NewRecorder()
 
 		h.HealthCheck(rec, req)
@@ -473,7 +507,7 @@ func TestGetWorkflow(t *testing.T) {
 	}
 
 	h := newHandlerWith(&fakeStore{states: states})
-	req := httptest.NewRequest(http.MethodGet, "/workflow", nil)
+	req := newTestRequest(http.MethodGet, "/workflow", nil)
 	rec := httptest.NewRecorder()
 
 	h.GetWorkflow(rec, req, projectID)
@@ -499,7 +533,7 @@ func TestGetWorkflow(t *testing.T) {
 func TestUpdateWorkflow(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		h := newHandlerWith(&fakeStore{})
-		req := httptest.NewRequest(http.MethodPut, "/workflow", strings.NewReader("{"))
+		req := newTestRequest(http.MethodPut, "/workflow", strings.NewReader("{"))
 		rec := httptest.NewRecorder()
 
 		h.UpdateWorkflow(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))
@@ -511,7 +545,7 @@ func TestUpdateWorkflow(t *testing.T) {
 
 	t.Run("empty states", func(t *testing.T) {
 		h := newHandlerWith(&fakeStore{})
-		req := httptest.NewRequest(http.MethodPut, "/workflow", strings.NewReader(`{"states":[]}`))
+		req := newTestRequest(http.MethodPut, "/workflow", strings.NewReader(`{"states":[]}`))
 		rec := httptest.NewRecorder()
 
 		h.UpdateWorkflow(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))
@@ -535,7 +569,7 @@ func TestUpdateWorkflow(t *testing.T) {
 		fs := &fakeStore{replaceResult: []store.WorkflowState{storeState}}
 		h := newHandlerWith(fs)
 		body := `{"states":[{"id":"` + id.String() + `","name":"Done","order":3,"isDefault":false,"isClosed":true}]}`
-		req := httptest.NewRequest(http.MethodPut, "/workflow", strings.NewReader(body))
+		req := newTestRequest(http.MethodPut, "/workflow", strings.NewReader(body))
 		rec := httptest.NewRecorder()
 
 		h.UpdateWorkflow(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))
@@ -596,7 +630,7 @@ func TestGetBoard(t *testing.T) {
 	}
 
 	h := newHandlerWith(&fakeStore{states: states, boardTickets: boardTickets})
-	req := httptest.NewRequest(http.MethodGet, "/board", nil)
+	req := newTestRequest(http.MethodGet, "/board", nil)
 	rec := httptest.NewRecorder()
 
 	h.GetBoard(rec, req, projectID)
@@ -626,7 +660,7 @@ func TestGetBoard(t *testing.T) {
 func TestCreateTicket(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		h := newHandlerWith(&fakeStore{})
-		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader("{"))
+		req := newTestRequest(http.MethodPost, "/tickets", strings.NewReader("{"))
 		rec := httptest.NewRecorder()
 
 		h.CreateTicket(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))
@@ -638,7 +672,7 @@ func TestCreateTicket(t *testing.T) {
 
 	t.Run("missing title", func(t *testing.T) {
 		h := newHandlerWith(&fakeStore{})
-		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(`{"description":"x"}`))
+		req := newTestRequest(http.MethodPost, "/tickets", strings.NewReader(`{"description":"x"}`))
 		rec := httptest.NewRecorder()
 
 		h.CreateTicket(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))
@@ -653,7 +687,7 @@ func TestCreateTicket(t *testing.T) {
 		stateID := uuid.New()
 		fs := &fakeStore{createTicket: store.Ticket{ID: id, Key: "TIC-2000", Number: 2000, Title: "Hello", Description: "", StateID: stateID, StateName: "Backlog", StateOrder: 1, Priority: "medium", Position: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}}
 		h := newHandlerWith(fs)
-		req := httptest.NewRequest(http.MethodPost, "/tickets", strings.NewReader(`{"title":"Hello"}`))
+		req := newTestRequest(http.MethodPost, "/tickets", strings.NewReader(`{"title":"Hello"}`))
 		rec := httptest.NewRecorder()
 
 		h.CreateTicket(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))
@@ -679,7 +713,7 @@ func TestUpdateTicketNotFound(t *testing.T) {
 	id := uuid.New()
 	fs := &fakeStore{updateTicketErr: pgx.ErrNoRows}
 	h := newHandlerWith(fs)
-	req := httptest.NewRequest(http.MethodPatch, "/tickets/"+id.String(), strings.NewReader(`{"title":"New"}`))
+	req := newTestRequest(http.MethodPatch, "/tickets/"+id.String(), strings.NewReader(`{"title":"New"}`))
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add("id", id.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
@@ -695,7 +729,7 @@ func TestUpdateTicketNotFound(t *testing.T) {
 func TestCreateWebhook(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		h := newHandlerWith(&fakeStore{})
-		req := httptest.NewRequest(http.MethodPost, "/webhooks", strings.NewReader("{"))
+		req := newTestRequest(http.MethodPost, "/webhooks", strings.NewReader("{"))
 		rec := httptest.NewRecorder()
 
 		h.CreateWebhook(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))
@@ -710,7 +744,7 @@ func TestCreateWebhook(t *testing.T) {
 		now := time.Now().UTC()
 		fs := &fakeStore{createWebhook: store.Webhook{ID: id, URL: "https://example.com/hook", Events: []string{"ticket.created"}, Enabled: true, CreatedAt: now, UpdatedAt: now}}
 		h := newHandlerWith(fs)
-		req := httptest.NewRequest(http.MethodPost, "/webhooks", strings.NewReader(`{"url":"https://example.com/hook","events":["ticket.created"]}`))
+		req := newTestRequest(http.MethodPost, "/webhooks", strings.NewReader(`{"url":"https://example.com/hook","events":["ticket.created"]}`))
 		rec := httptest.NewRecorder()
 
 		h.CreateWebhook(rec, req, openapiUUID("11111111-1111-1111-1111-111111111111"))

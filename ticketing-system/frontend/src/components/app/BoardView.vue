@@ -40,53 +40,6 @@ const props = defineProps<{
         <p class="text-sm text-muted-foreground">Loading board...</p>
     </section>
 
-    <section v-else class="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-        <div class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm">
-            <div class="flex items-center justify-between">
-                <div>
-                    <p
-                        class="text-xs uppercase tracking-[0.3em] text-muted-foreground"
-                    >
-                        Today
-                    </p>
-                    <h1 class="text-3xl font-semibold">Release Flow</h1>
-                    <p class="text-sm text-muted-foreground">
-                        {{ ticketsCount }} tickets ·
-                        {{ webhooksCount }} webhooks
-                    </p>
-                </div>
-                <div
-                    class="rounded-full border border-border bg-background px-4 py-2 text-xs font-semibold"
-                >
-                    Sprint 04
-                </div>
-            </div>
-            <div
-                class="mt-6 flex flex-wrap gap-3 text-xs text-muted-foreground"
-            >
-                <span>Webhook: ticket.created</span>
-                <span>Auto-assign: triage</span>
-                <span>Mode: {{ apiMode }}</span>
-            </div>
-        </div>
-        <div class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm">
-            <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                Focus
-            </p>
-            <h2 class="mt-2 text-2xl font-semibold">Priority lane</h2>
-            <div class="mt-4 space-y-3">
-                <div class="rounded-2xl border border-border bg-background p-4">
-                    <p class="text-xs text-muted-foreground">High</p>
-                    <p class="text-sm font-medium">Webhook signing + retries</p>
-                </div>
-                <div class="rounded-2xl border border-border bg-background p-4">
-                    <p class="text-xs text-muted-foreground">Medium</p>
-                    <p class="text-sm font-medium">Board performance sweep</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <section
         v-if="!loading && states.length === 0"
         class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
@@ -167,13 +120,24 @@ const props = defineProps<{
                     >
                         {{ row.isUngrouped ? "Ungrouped" : "Story" }}
                     </p>
-                    <button
-                        v-if="!row.isUngrouped"
-                        class="text-[10px] uppercase tracking-[0.3em] text-destructive transition hover:text-destructive/80"
-                        @click="props.onDeleteStory(row.id)"
-                    >
-                        Delete
-                    </button>
+                    <details v-if="!row.isUngrouped" class="relative">
+                        <summary
+                            class="list-none rounded-full border border-border bg-background px-2 py-1 text-[12px] font-semibold uppercase tracking-[0.3em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                            aria-label="Story actions"
+                        >
+                            ⋮
+                        </summary>
+                        <div
+                            class="absolute right-0 top-full mt-2 w-36 rounded-2xl border border-border bg-card/80 p-2 text-xs"
+                        >
+                            <button
+                                class="w-full rounded-xl border border-destructive/40 bg-destructive/5 px-2 py-1 text-left text-[11px] font-semibold uppercase tracking-[0.2em] text-destructive transition hover:bg-destructive/10"
+                                @click.stop="props.onDeleteStory(row.id)"
+                            >
+                                Delete story
+                            </button>
+                        </div>
+                    </details>
                 </div>
                 <p class="mt-2 text-sm font-semibold">{{ row.title }}</p>
                 <p

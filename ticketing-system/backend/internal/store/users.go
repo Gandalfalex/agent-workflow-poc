@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -36,24 +35,11 @@ func (s *Store) UpsertUser(ctx context.Context, input UserUpsertInput) error {
 }
 
 func (s *Store) ListUsers(ctx context.Context, query string) ([]UserSummary, error) {
-	conditions := []string{}
-	args := []any{}
-	arg := func(value any) string {
-		args = append(args, value)
-		return fmt.Sprintf("$%d", len(args))
-	}
-
-	if strings.TrimSpace(query) != "" {
-		q := "%%" + strings.TrimSpace(query) + "%%"
-		conditions = append(conditions, fmt.Sprintf("(name ILIKE %s OR email ILIKE %s)", arg(q), arg(q)))
-	}
-
-	where := strings.Join(conditions, " AND ")
 	querySQL := mustSQL("users_list.sql", map[string]any{
-		"Where": where,
+		"Where": "",
 	})
 
-	rows, err := s.db.Query(ctx, querySQL, args...)
+	rows, err := s.db.Query(ctx, querySQL)
 	if err != nil {
 		return nil, err
 	}
@@ -71,5 +57,32 @@ func (s *Store) ListUsers(ctx context.Context, query string) ([]UserSummary, err
 		return nil, err
 	}
 
-	return users, nil
+	// If no query, return all users sorted by name
+	if strings.TrimSpace(query) == "" {
+		return users, nil
+	}
+
+	// Client-side fuzzy filtering for better matching
+	q := strings.ToLower(strings.TrimSpace(query))
+	filtered := []UserSummary{}
+	for _, user := range users {
+		if fuzzyMatch(q, user.Name) || fuzzyMatch(q, user.Email) {
+			filtered = append(filtered, user)
+		}
+	}
+
+	return filtered, nil
+}
+
+// fuzzyMatch performs a simple fuzzy match where all characters in query
+// must appear in text in order (but not necessarily consecutive)
+func fuzzyMatch(query, text string) bool {
+	text = strings.ToLower(text)
+	queryIdx := 0
+	for i := 0; i < len(text) && queryIdx < len(query); i++ {
+		if text[i] == query[queryIdx] {
+			queryIdx++
+		}
+	}
+	return queryIdx == len(query)
 }

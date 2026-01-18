@@ -1,0 +1,345 @@
+{
+  "name": "Test Feature Implementation Agent",
+  "description": "Complete workflow to test the feature implementation agent with ticket creation, group management, user search, and SSH-based feature implementation",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://ticketing-api:8080/projects"
+      },
+      "id": "list-projects",
+      "name": "1. List Existing Projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ticketing-api:8080/projects",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AGENT"
+            },
+            {
+              "name": "name",
+              "value": "Agent Test Project"
+            },
+            {
+              "name": "description",
+              "value": "Test project for autonomous feature implementation"
+            }
+          ]
+        }
+      },
+      "id": "create-project",
+      "name": "2. Create Test Project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ticketing-api:8080/projects/{{ $nodes['create-project'].json.id }}/tickets",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "Feature: Add Dark Mode Toggle"
+            },
+            {
+              "name": "description",
+              "value": "Implement a dark mode toggle in the settings page that allows users to switch between light and dark themes. The preference should be persisted in localStorage."
+            },
+            {
+              "name": "type",
+              "value": "feature"
+            },
+            {
+              "name": "priority",
+              "value": "medium"
+            }
+          ]
+        }
+      },
+      "id": "create-ticket-1",
+      "name": "3. Create Feature Ticket 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ticketing-api:8080/projects/{{ $nodes['create-project'].json.id }}/tickets",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "Feature: Add User Profile Page"
+            },
+            {
+              "name": "description",
+              "value": "Create a new user profile page displaying user information including name, email, avatar, role, and account creation date."
+            },
+            {
+              "name": "type",
+              "value": "feature"
+            },
+            {
+              "name": "priority",
+              "value": "high"
+            }
+          ]
+        }
+      },
+      "id": "create-ticket-2",
+      "name": "4. Create Feature Ticket 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ticketing-api:8080/groups",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "Agent Test Team"
+            },
+            {
+              "name": "description",
+              "value": "Team for testing autonomous feature implementation"
+            }
+          ]
+        }
+      },
+      "id": "create-group",
+      "name": "5. Create Test Group",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://ticketing-api:8080/users?q=ich"
+      },
+      "id": "search-users",
+      "name": "6. Search Users (Fuzzy: 'ich')",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ticketing-api:8080/groups/{{ $nodes['create-group'].json.id }}/members",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "userId",
+              "value": "{{ $nodes['search-users'].json.items[0].id }}"
+            }
+          ]
+        }
+      },
+      "id": "add-member",
+      "name": "7. Add User to Group",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ticketing-api:8080/projects/{{ $nodes['create-project'].json.id }}/groups",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "groupId",
+              "value": "{{ $nodes['create-group'].json.id }}"
+            },
+            {
+              "name": "role",
+              "value": "admin"
+            }
+          ]
+        }
+      },
+      "id": "assign-group",
+      "name": "8. Assign Group to Project",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://ticketing-api:8080/projects/{{ $nodes['create-project'].json.id }}/board"
+      },
+      "id": "get-board",
+      "name": "9. Get Project Board State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "resourceType": "shellCommand",
+        "command": "echo 'Feature implementation would be triggered here via SSH'\necho 'Command: bash ~/projects/coding-agent-workflow/codex-agent/scripts/skill-cli.sh \"implement {{ $nodes[\"create-ticket-1\"].json.key }}\"'\necho 'Ticket Key: {{ $nodes[\"create-ticket-1\"].json.key }}'\necho 'Status: Ready for manual testing'"
+      },
+      "id": "ssh-implement",
+      "name": "10. SSH: Feature Implementation (Manual)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1850, 500]
+    },
+    {
+      "parameters": {
+        "resource": "executionData"
+      },
+      "id": "summary",
+      "name": "Summary Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [2050, 300]
+    }
+  ],
+  "connections": {
+    "start": {
+      "main": [
+        [
+          {
+            "node": "list-projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list-projects": {
+      "main": [
+        [
+          {
+            "node": "create-project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-project": {
+      "main": [
+        [
+          {
+            "node": "create-ticket-1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "create-ticket-2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "create-group",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "search-users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-group": {
+      "main": [
+        [
+          {
+            "node": "add-member",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search-users": {
+      "main": [
+        [
+          {
+            "node": "add-member",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "add-member": {
+      "main": [
+        [
+          {
+            "node": "assign-group",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "assign-group": {
+      "main": [
+        [
+          {
+            "node": "get-board",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-board": {
+      "main": [
+        [
+          {
+            "node": "ssh-implement",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "saveManualExecution": true,
+    "executionOrder": "v1",
+    "timezone": "Europe/Berlin"
+  },
+  "versionId": "1"
+}

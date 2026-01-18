@@ -1,0 +1,103 @@
+# Dependencies
+node_modules/
+vendor/
+.vendor/
+
+# Build outputs
+dist/
+build/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.env.local
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Git worktrees
+/worktrees/
+/workspaces/
+
+# Docker
+docker-compose.override.yml
+
+# Frontend
+ticketing-system/frontend/dist/
+ticketing-system/frontend/.vite/
+ticketing-system/frontend/tsconfig.app.json.timestamp-*
+
+# Backend
+ticketing-system/backend/bin/
+ticketing-system/backend/server
+ticketing-system/backend/migrate
+
+# Codex Agent
+codex-agent/dist/
+codex-agent/.claude-prompt.txt
+codex-agent/generated/
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+
+# Test artifacts
+test-results/
+.nyc_output/
+
+# Miscellaneous
+.venv/
+venv/
+*.pyc
+__pycache__/
+
+# Project specific
+.claude/
+*.swp

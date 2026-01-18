@@ -21,6 +21,23 @@
       "requiredActions": []
     },
     {
+      "username": "Codex/Claude",
+      "enabled": true,
+      "firstName": "LLM",
+      "lastName": "Agent",
+      "email": "llm@agent-workflow.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "nichtWeiterWichtig",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"],
+      "requiredActions": []
+    },
+    {
       "username": "NormalUser",
       "enabled": true,
       "firstName": "Normal",
