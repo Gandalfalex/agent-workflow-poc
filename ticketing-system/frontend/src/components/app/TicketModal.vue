@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
+import { marked } from "marked";
 import type {
     TicketComment,
     TicketPriority,
@@ -28,6 +29,7 @@ const props = defineProps<{
     commentDraft: string;
     commentSaving: boolean;
     commentError: string;
+    currentUserId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -42,6 +44,10 @@ const emit = defineEmits<{
 const updateEditor = (patch: Partial<TicketEditor>) => {
     emit("update:editor", { ...props.editor, ...patch });
 };
+
+const isCurrentUser = (userId: string) => {
+    return props.currentUserId === userId;
+};
 </script>
 
 <template>
@@ -51,7 +57,7 @@ const updateEditor = (patch: Partial<TicketEditor>) => {
         @click.self="emit('close')"
     >
         <div
-            class="w-full max-w-2xl rounded-3xl border border-border bg-card p-6 shadow-xl"
+            class="w-full max-h-[90vh] max-w-4xl overflow-y-auto rounded-3xl border border-border bg-card p-6 shadow-xl"
         >
             <div class="flex items-center justify-between">
                 <div>
@@ -64,32 +70,36 @@ const updateEditor = (patch: Partial<TicketEditor>) => {
                         {{ props.ticketKey }}
                     </h2>
                 </div>
-                <div class="flex items-center gap-2">
-                    <details class="relative">
-                        <summary
-                            class="list-none rounded-full border border-border bg-background px-2 py-1 text-lg font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
-                            aria-label="Ticket actions"
-                        >
-                            ⋮
-                        </summary>
-                        <div
-                            class="absolute right-0 top-full mt-2 w-36 rounded-2xl border border-border bg-card/80 p-2 text-xs"
-                        >
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                class="w-full border-destructive/30 text-destructive hover:bg-destructive/5"
-                                :disabled="props.ticketSaving"
-                                @click.stop="emit('delete')"
-                            >
-                                Delete ticket
-                            </Button>
-                        </div>
-                    </details>
-                    <Button variant="ghost" size="sm" @click="emit('close')"
-                        >Close</Button
+                <details class="relative">
+                    <summary
+                        class="list-none rounded-full border border-border bg-background px-2 py-1 text-lg font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground cursor-pointer"
+                        aria-label="Ticket actions"
                     >
-                </div>
+                        ⋮
+                    </summary>
+                    <div
+                        class="absolute right-0 top-full mt-2 w-40 rounded-2xl border border-border bg-card/95 backdrop-blur p-2 text-xs z-50 shadow-lg"
+                    >
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="w-full border-destructive/30 text-destructive hover:bg-destructive/5"
+                            :disabled="props.ticketSaving"
+                            @click.stop="emit('delete')"
+                        >
+                            Delete ticket
+                        </Button>
+                        <div class="border-t border-border my-2"></div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            class="w-full justify-start text-muted-foreground hover:text-foreground"
+                            @click.stop="emit('close')"
+                        >
+                            Close
+                        </Button>
+                    </div>
+                </details>
             </div>
             <div class="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
                 <div class="grid gap-4">
@@ -233,31 +243,40 @@ const updateEditor = (patch: Partial<TicketEditor>) => {
                     </div>
                 </div>
                 <div
-                    class="rounded-2xl border border-border bg-background px-4 py-4 text-xs text-muted-foreground"
+                    class="lg:col-span-2 rounded-2xl border border-border bg-background px-6 py-6 text-xs text-muted-foreground flex flex-col"
                 >
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-foreground"
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-semibold text-foreground"
                             >Comments</span
                         >
-                        <span v-if="props.commentSaving">Saving...</span>
+                        <span
+                            v-if="props.commentSaving"
+                            class="text-xs text-muted-foreground"
+                            >Saving...</span
+                        >
                     </div>
+
                     <div
                         v-if="props.comments.length"
-                        class="mt-4 space-y-4 border-l border-border pl-4"
+                        class="flex-1 space-y-3 overflow-y-auto mb-6 pr-2"
                     >
                         <div
                             v-for="comment in props.comments"
                             :key="comment.id"
-                            class="relative rounded-xl border border-border bg-card px-3 py-2"
+                            :class="[
+                                'rounded-xl px-4 py-3 max-w-[80%]',
+                                isCurrentUser(comment.authorId)
+                                    ? 'ml-auto bg-primary/10 border border-primary/30'
+                                    : 'bg-card border border-border',
+                            ]"
                         >
-                            <span
-                                class="absolute -left-6 top-4 h-2 w-2 rounded-full bg-primary/60"
-                            ></span>
-                            <div class="flex items-center justify-between">
-                                <span class="text-[11px] font-semibold">{{
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold">{{
                                     comment.authorName
                                 }}</span>
-                                <span class="text-[11px] text-muted-foreground">
+                                <span
+                                    class="text-xs text-muted-foreground ml-2"
+                                >
                                     {{
                                         new Date(
                                             comment.createdAt,
@@ -265,24 +284,29 @@ const updateEditor = (patch: Partial<TicketEditor>) => {
                                     }}
                                 </span>
                             </div>
-                            <p class="mt-2 text-xs text-muted-foreground">
-                                {{ comment.message }}
-                            </p>
+                            <div
+                                class="text-xs text-foreground prose prose-sm dark:prose-invert max-w-none"
+                                v-html="marked(comment.message)"
+                            ></div>
                         </div>
                     </div>
-                    <div v-else class="mt-3 text-xs text-muted-foreground">
+                    <div
+                        v-else
+                        class="flex-1 flex items-center justify-center text-xs text-muted-foreground mb-6"
+                    >
                         No comments yet.
                     </div>
-                    <div class="mt-4">
+
+                    <div class="border-t border-border pt-4">
                         <label
-                            class="text-[11px] font-semibold text-muted-foreground"
-                            >Add comment</label
+                            class="text-xs font-semibold text-muted-foreground block mb-2"
+                            >Add comment (Markdown supported)</label
                         >
                         <textarea
                             :value="props.commentDraft"
-                            rows="3"
-                            placeholder="Share progress or blockers"
-                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                            rows="4"
+                            placeholder="Share progress or blockers... (supports **bold**, *italic*, `code`, etc.)"
+                            class="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                             @input="
                                 emit(
                                     'update:commentDraft',
@@ -300,11 +324,17 @@ const updateEditor = (patch: Partial<TicketEditor>) => {
                                 "
                                 @click="emit('add-comment')"
                             >
-                                Add comment
+                                {{
+                                    props.commentSaving
+                                        ? "Posting..."
+                                        : "Add comment"
+                                }}
                             </Button>
-                            <span v-if="props.commentError">{{
-                                props.commentError
-                            }}</span>
+                            <span
+                                v-if="props.commentError"
+                                class="text-xs text-destructive"
+                                >{{ props.commentError }}</span
+                            >
                         </div>
                     </div>
                 </div>

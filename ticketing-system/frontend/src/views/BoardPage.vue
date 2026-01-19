@@ -499,6 +499,7 @@ watch(
         :comment-draft="commentDraft"
         :comment-saving="commentSaving"
         :comment-error="commentError"
+        :current-user-id="sessionStore.user?.id"
         @update:editor="updateTicketEditor"
         @update:commentDraft="updateCommentDraft"
         @close="closeTicket"
