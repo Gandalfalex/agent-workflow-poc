@@ -101,7 +101,9 @@ const isCurrentUser = (userId: string) => {
                     </div>
                 </details>
             </div>
-            <div class="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
+            <div
+                class="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr] max-h-[calc(90vh-200px)]"
+            >
                 <div class="grid gap-4">
                     <div>
                         <label
@@ -243,9 +245,11 @@ const isCurrentUser = (userId: string) => {
                     </div>
                 </div>
                 <div
-                    class="lg:col-span-2 rounded-2xl border border-border bg-background px-6 py-6 text-xs text-muted-foreground flex flex-col"
+                    class="rounded-2xl border border-border bg-background px-6 py-6 text-xs text-muted-foreground flex flex-col h-full"
                 >
-                    <div class="flex items-center justify-between mb-4">
+                    <div
+                        class="flex items-center justify-between mb-4 flex-shrink-0"
+                    >
                         <span class="text-sm font-semibold text-foreground"
                             >Comments</span
                         >
@@ -258,7 +262,7 @@ const isCurrentUser = (userId: string) => {
 
                     <div
                         v-if="props.comments.length"
-                        class="flex-1 space-y-3 overflow-y-auto mb-6 pr-2"
+                        class="flex-1 space-y-3 overflow-y-auto mb-4 pr-2 min-h-0"
                     >
                         <div
                             v-for="comment in props.comments"
@@ -292,19 +296,19 @@ const isCurrentUser = (userId: string) => {
                     </div>
                     <div
                         v-else
-                        class="flex-1 flex items-center justify-center text-xs text-muted-foreground mb-6"
+                        class="flex-1 flex items-center justify-center text-xs text-muted-foreground mb-4 min-h-0"
                     >
                         No comments yet.
                     </div>
 
-                    <div class="border-t border-border pt-4">
+                    <div class="border-t border-border pt-4 flex-shrink-0">
                         <label
                             class="text-xs font-semibold text-muted-foreground block mb-2"
                             >Add comment (Markdown supported)</label
                         >
                         <textarea
                             :value="props.commentDraft"
-                            rows="4"
+                            rows="3"
                             placeholder="Share progress or blockers... (supports **bold**, *italic*, `code`, etc.)"
                             class="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                             @input="
