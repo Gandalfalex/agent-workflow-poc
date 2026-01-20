@@ -66,6 +66,7 @@ services:
       - TICKETING_API_BASE_URL=http://ticketing-api:8080
       - WORKSPACE_ROOT=/workspaces
       - REPO_PATH=/repo
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - SUBAGENT_TIMEOUT=1800000
       - AUTO_UPDATE_STATE=true
     volumes:
