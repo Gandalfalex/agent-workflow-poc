@@ -1,21 +1,30 @@
 ---
 name: managing-tickets
 description: Retrieves ticket information, updates ticket states, adds comments, and searches tickets. Use when you need to interact with the ticketing system to get details, search for tickets, add updates, or change ticket status.
+mcp_server: codex-agent
+mcp_tools:
+  - get_ticket
+  - list_tickets
+  - search_tickets
+  - add_comment
+  - update_ticket_state
+  - get_project_workflow
 ---
 
 # Managing Tickets
 
-This skill provides access to the ticketing system for retrieving, searching, and updating ticket information.
+This skill provides access to the ticketing system for retrieving, searching, and updating ticket information using the **Codex Agent MCP Server**.
 
 ## Overview
 
 This skill enables you to:
 
-1. **Get ticket details** - Retrieve full ticket information including comments
-2. **List tickets** - View all tickets in a project with filtering
-3. **Search tickets** - Find tickets across projects by keyword
-4. **Add comments** - Add notes and updates to tickets
-5. **Update state** - Change ticket status through workflow states
+1. **Get ticket details** - Retrieve full ticket information including comments (`get_ticket`)
+2. **List tickets** - View all tickets in a project with filtering (`list_tickets`)
+3. **Search tickets** - Find tickets across projects by keyword (`search_tickets`)
+4. **Add comments** - Add notes and updates to tickets (`add_comment`)
+5. **Update state** - Change ticket status through workflow states (`update_ticket_state`)
+6. **Get workflow states** - View available states for a project (`get_project_workflow`)
 
 ## When to Use
 
@@ -26,14 +35,27 @@ Use this skill when you need to:
 - Move tickets through workflow states
 - Get project information and available states
 
+## MCP Server Connection
+
+This skill uses the **Codex Agent MCP Server** (`ticketing-mcp`) which provides authenticated access to the ticketing system API via Keycloak OAuth2.
+
+**Server:** `codex-agent` (TypeScript/Node.js)  
+**Location:** `/codex-agent/`  
+**Tools:** 7 MCP tools for ticket management
+
 ## Usage
 
 ### Get Ticket Details
 
-Retrieve full information about a specific ticket:
+Retrieve full information about a specific ticket using the `get_ticket` tool:
 
-```
-Get ticket PROJ-001
+**MCP Tool:** `get_ticket`
+
+**Input:**
+```json
+{
+  "ticketId": "550e8400-e29b-41d4-a716-446655440000"
+}
 ```
 
 Returns:
@@ -44,53 +66,94 @@ Returns:
 
 ### List Tickets in Project
 
-View all tickets in a specific project:
+View all tickets in a specific project using the `list_tickets` tool:
 
-```
-List tickets in project [project-id]
+**MCP Tool:** `list_tickets`
+
+**Input:**
+```json
+{
+  "projectId": "550e8400-e29b-41d4-a716-446655440000",
+  "stateId": "optional-state-id",
+  "assigneeId": "optional-assignee-id",
+  "query": "optional search query",
+  "limit": 50,
+  "offset": 0
+}
 ```
 
-Optional filters:
-```
-List tickets in project [id] assigned to [user]
-List high-priority tickets in project [id]
-Search for authentication in project [id]
+**Output:**
+```json
+{
+  "items": [/* array of tickets */],
+  "total": 42
+}
 ```
 
 ### Search Tickets
 
-Find tickets across projects:
+Find tickets across projects using the `search_tickets` tool:
 
+**MCP Tool:** `search_tickets`
+
+**Input:**
+```json
+{
+  "query": "authentication",
+  "projectId": "optional-project-id-to-limit-search"
+}
 ```
-Search tickets for authentication
-Search for bug reports
-Find all tickets about API integration
+
+**Output:**
+```json
+{
+  "items": [/* array of matching tickets */],
+  "total": 15
+}
 ```
 
 ### Add Comment
 
-Add a note or update to a ticket:
+Add a note or update to a ticket using the `add_comment` tool:
 
-```
-Add comment to PROJ-001: Implementation complete, ready for review
+**MCP Tool:** `add_comment`
+
+**Input:**
+```json
+{
+  "ticketId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Implementation complete, ready for review"
+}
 ```
 
 ### Update Ticket State
 
-Move a ticket to a different state in the workflow:
+Move a ticket to a different state in the workflow using the `update_ticket_state` tool:
 
-```
-Update PROJ-001 state to In Review
-Change PROJ-001 status to Done
-Move PROJ-001 to Review
+**MCP Tool:** `update_ticket_state`
+
+**Input (by state ID):**
+```json
+{
+  "ticketId": "550e8400-e29b-41d4-a716-446655440000",
+  "stateId": "state-uuid-here"
+}
 ```
 
-Supported state names:
+**Input (by state name - friendly):**
+```json
+{
+  "ticketId": "550e8400-e29b-41d4-a716-446655440000",
+  "stateName": "In Review"
+}
+```
+
+Supported state names (project-specific):
 - Todo
 - In Progress
 - In Review
 - Done
-- Blocked (project-specific)
+- Blocked
 
 ## Examples
 
@@ -151,33 +214,55 @@ Each ticket contains:
 }
 ```
 
-## Project Information
-
-Get available projects:
-
-```
-List projects
-```
-
-Returns all accessible projects with:
-- Project ID and key
-- Project name and description
-- Available workflow states
-
 ## Workflow States
 
-Each project has custom workflow states. View available states:
+Each project has custom workflow states. View available states using the `get_project_workflow` tool:
 
-```
-Get workflow states for project [id]
+**MCP Tool:** `get_project_workflow`
+
+**Input:**
+```json
+{
+  "projectId": "550e8400-e29b-41d4-a716-446655440000"
+}
 ```
 
-Typical states:
-- Todo - Newly created tickets
-- In Progress - Being worked on
-- In Review - Waiting for code review
-- Done - Completed and merged
-- Blocked - Waiting for dependencies
+**Output:**
+```json
+{
+  "states": [
+    {
+      "id": "state-uuid",
+      "projectId": "project-uuid",
+      "name": "Todo",
+      "order": 0,
+      "isDefault": true,
+      "isClosed": false
+    },
+    {
+      "id": "state-uuid-2",
+      "name": "In Progress",
+      "order": 1,
+      "isDefault": false,
+      "isClosed": false
+    },
+    {
+      "id": "state-uuid-3",
+      "name": "Done",
+      "order": 2,
+      "isDefault": false,
+      "isClosed": true
+    }
+  ]
+}
+```
+
+Typical workflow states:
+- **Todo** - Newly created tickets
+- **In Progress** - Being worked on
+- **In Review** - Waiting for code review
+- **Done** - Completed and merged
+- **Blocked** - Waiting for dependencies (project-specific)
 
 ## Search Operators
 
@@ -191,10 +276,10 @@ Search queries support:
 
 ### With Implementing Features
 
-1. Get ticket details to understand requirements
-2. Run implementing-features skill to auto-implement
-3. Add comment with status update
-4. Update state to "In Review"
+1. Use `get_ticket` to retrieve full ticket details and requirements
+2. Use `implement_ticket` MCP tool (from implementing-features skill) to auto-implement
+3. Use `add_comment` to add status updates
+4. Use `update_ticket_state` to move to "In Review"
 
 ### With n8n Workflows
 
@@ -297,7 +382,19 @@ Add comment: Verified complete
 
 ## Configuration
 
-No configuration needed - uses existing ticketing system connection.
+The Codex Agent MCP Server requires the following environment variables:
+
+**Required:**
+- `KEYCLOAK_USERNAME` - Keycloak username
+- `KEYCLOAK_PASSWORD` - Keycloak password
+
+**Optional:**
+- `KEYCLOAK_BASE_URL` - Keycloak server URL (default: `http://localhost:8081`)
+- `KEYCLOAK_REALM` - Keycloak realm (default: `ticketing`)
+- `KEYCLOAK_CLIENT_ID` - Keycloak client ID (default: `myclient`)
+- `TICKETING_API_BASE_URL` - Ticketing API URL (default: `http://localhost:8080`)
+
+The server handles automatic Keycloak OAuth2 authentication with token refresh.
 
 ## References
 

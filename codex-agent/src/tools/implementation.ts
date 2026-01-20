@@ -9,6 +9,42 @@ import * as util from "util";
 
 const exec = util.promisify(child_process.exec);
 
+/**
+ * Parse timeout value - supports both milliseconds (number/string) and duration strings (30m, 1h, etc.)
+ */
+function parseTimeout(value: string): number {
+  // If it's a pure number (milliseconds), use it directly
+  const asNumber = parseInt(value, 10);
+  if (!isNaN(asNumber) && value === asNumber.toString()) {
+    return asNumber;
+  }
+
+  // Parse duration string (e.g., "30m", "1h", "90s")
+  const match = value.match(/^(\d+(?:\.\d+)?)(ms|s|m|h)$/);
+  if (!match) {
+    console.error(
+      `[Implement] Invalid timeout format: ${value}, using default 30m`,
+    );
+    return 30 * 60 * 1000; // 30 minutes default
+  }
+
+  const amount = parseFloat(match[1]);
+  const unit = match[2];
+
+  switch (unit) {
+    case "ms":
+      return amount;
+    case "s":
+      return amount * 1000;
+    case "m":
+      return amount * 60 * 1000;
+    case "h":
+      return amount * 60 * 60 * 1000;
+    default:
+      return 30 * 60 * 1000;
+  }
+}
+
 export const implementTicketSchema = z.object({
   ticketId: z.string().describe("Ticket UUID or key (e.g., 'PROJ-001')"),
   workspaceRoot: z
@@ -50,9 +86,11 @@ export interface ImplementationOutput {
  */
 export async function implementTicket(
   client: TicketingAPIClient,
-  params: z.infer<typeof implementTicketSchema>
+  params: z.infer<typeof implementTicketSchema>,
 ): Promise<ImplementationOutput> {
-  console.error(`[Implement] Starting implementation for ticket: ${params.ticketId}`);
+  console.error(
+    `[Implement] Starting implementation for ticket: ${params.ticketId}`,
+  );
 
   try {
     // Step 1: Resolve and fetch ticket
@@ -79,13 +117,14 @@ export async function implementTicket(
     // Step 4: Create worktree
     console.error("[Implement] Step 3: Creating git worktree...");
     const worktreeRoot =
-      params.workspaceRoot || path.join(process.env.HOME || "/tmp", "worktrees");
+      params.workspaceRoot ||
+      path.join(process.env.HOME || "/tmp", "worktrees");
     const repoPath = params.repoPath || process.env.REPO_PATH || ".";
 
     const worktreeInfo = await createWorktree(
       ticket.key,
       repoPath,
-      worktreeRoot
+      worktreeRoot,
     );
 
     if (!worktreeInfo.success) {
@@ -101,7 +140,7 @@ export async function implementTicket(
 
     const { workspacePath, branch } = worktreeInfo;
     console.error(
-      `[Implement] Created worktree at: ${workspacePath} (branch: ${branch})`
+      `[Implement] Created worktree at: ${workspacePath} (branch: ${branch})`,
     );
 
     // Step 5: Generate prompt
@@ -114,10 +153,7 @@ export async function implementTicket(
 
     // Step 6: Spawn subagent
     console.error("[Implement] Step 5: Spawning subagent...");
-    const subagentTimeout = parseInt(
-      process.env.SUBAGENT_TIMEOUT || "1800000",
-      10
-    ); // 30 min default
+    const subagentTimeout = parseTimeout(process.env.SUBAGENT_TIMEOUT || "30m"); // 30 min default
     const subagentResult = await spawnSubagent({
       workspacePath,
       prompt,
@@ -130,11 +166,13 @@ export async function implementTicket(
       client,
       ticket,
       subagentResult,
-      { workspacePath, branch }
+      { workspacePath, branch },
     );
 
     if (!updateSuccess) {
-      console.error("[Implement] Warning: Failed to update ticket state/comment");
+      console.error(
+        "[Implement] Warning: Failed to update ticket state/comment",
+      );
     }
 
     // Step 8: Return result
@@ -153,12 +191,11 @@ export async function implementTicket(
     };
 
     console.error(
-      `[Implement] Completed: ${output.success ? "SUCCESS" : "FAILED"}`
+      `[Implement] Completed: ${output.success ? "SUCCESS" : "FAILED"}`,
     );
     return output;
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[Implement] Error: ${errorMessage}`);
 
     return {
@@ -177,12 +214,16 @@ export async function implementTicket(
  */
 async function resolveTicket(
   client: TicketingAPIClient,
-  ticketId: string
+  ticketId: string,
 ): Promise<Ticket> {
   // Try as UUID first
   try {
     // Check if it looks like a UUID
-    if (ticketId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    if (
+      ticketId.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
       return await client.getTicket(ticketId);
     }
   } catch (error) {
@@ -205,9 +246,7 @@ async function resolveTicket(
     }
   }
 
-  throw new Error(
-    `Ticket not found: ${ticketId} (tried UUID and key formats)`
-  );
+  throw new Error(`Ticket not found: ${ticketId} (tried UUID and key formats)`);
 }
 
 /**
@@ -216,7 +255,7 @@ async function resolveTicket(
 async function createWorktree(
   ticketKey: string,
   repoPath: string,
-  worktreeRoot: string
+  worktreeRoot: string,
 ): Promise<{
   success: boolean;
   workspacePath: string;
@@ -237,7 +276,12 @@ async function createWorktree(
     }
 
     // Get the scripts directory
-    const scriptDir = path.join(import.meta.url.replace("file://", ""), "..", "..", "scripts");
+    const scriptDir = path.join(
+      import.meta.url.replace("file://", ""),
+      "..",
+      "..",
+      "scripts",
+    );
     const scriptPath = path.join(scriptDir, "create-worktree.sh");
 
     if (!fs.existsSync(scriptPath)) {
@@ -253,7 +297,7 @@ async function createWorktree(
     // Run the worktree creation script
     const { stdout, stderr } = await exec(
       `bash "${scriptPath}" "${ticketKey}" "${repoPath}" "${worktreeRoot}"`,
-      { maxBuffer: 10 * 1024 * 1024 }
+      { maxBuffer: 10 * 1024 * 1024 },
     );
 
     if (stderr) {
@@ -280,8 +324,7 @@ async function createWorktree(
       repoRoot: result.repoRoot,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       success: false,
       workspacePath: "",
@@ -298,18 +341,24 @@ async function createWorktree(
 function generatePrompt(
   ticket: Ticket,
   comments: any[],
-  context: { workspacePath: string; branch: string; repoRoot: string }
+  context: { workspacePath: string; branch: string; repoRoot: string },
 ): string {
   const commentsList = comments
     .map(
       (c) =>
-        `**${c.authorName}** (${new Date(c.createdAt).toLocaleString()}):\n> ${c.message}`
+        `**${c.authorName}** (${new Date(c.createdAt).toLocaleString()}):\n> ${c.message}`,
     )
     .join("\n\n");
 
   const template = fs.readFileSync(
-    path.join(import.meta.url.replace("file://", ""), "..", "..", "prompts", "implement-feature.md"),
-    "utf-8"
+    path.join(
+      import.meta.url.replace("file://", ""),
+      "..",
+      "..",
+      "prompts",
+      "implement-feature.md",
+    ),
+    "utf-8",
   );
 
   return renderTemplate(template, {
@@ -339,7 +388,7 @@ async function updateTicketAfterImplementation(
   client: TicketingAPIClient,
   ticket: Ticket,
   result: SubagentResult,
-  context: { workspacePath: string; branch: string }
+  context: { workspacePath: string; branch: string },
 ): Promise<boolean> {
   try {
     // Get available states to find "In Review" state
@@ -348,7 +397,7 @@ async function updateTicketAfterImplementation(
       (s) =>
         s.name.toLowerCase() === "in review" ||
         s.name.toLowerCase() === "review" ||
-        s.name.toLowerCase() === "in_review"
+        s.name.toLowerCase() === "in_review",
     );
 
     if (reviewState && process.env.AUTO_UPDATE_STATE !== "false") {
@@ -364,11 +413,8 @@ async function updateTicketAfterImplementation(
 
     return true;
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
-    console.error(
-      `[Implement] Failed to update ticket: ${errorMessage}`
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[Implement] Failed to update ticket: ${errorMessage}`);
     return false;
   }
 }
@@ -378,9 +424,11 @@ async function updateTicketAfterImplementation(
  */
 function buildCompletionComment(
   result: SubagentResult,
-  context: { workspacePath: string; branch: string }
+  context: { workspacePath: string; branch: string },
 ): string {
-  const status = result.success ? "✅ Implementation Complete" : "⚠️ Implementation Incomplete";
+  const status = result.success
+    ? "✅ Implementation Complete"
+    : "⚠️ Implementation Incomplete";
 
   let filesSection = "";
   if (result.filesChanged && result.filesChanged.length > 0) {

@@ -58,16 +58,18 @@ services:
     ports:
       - "9000:9000"
     environment:
+      # Keycloak Authentication
       - KEYCLOAK_BASE_URL=http://keycloak:8080
       - KEYCLOAK_REALM=ticketing
       - KEYCLOAK_CLIENT_ID=myclient
       - KEYCLOAK_USERNAME=Codex/Claude
       - KEYCLOAK_PASSWORD=nichtWeiterWichtig
+      # Ticketing API
       - TICKETING_API_BASE_URL=http://ticketing-api:8080
+      # Workspace Configuration
       - WORKSPACE_ROOT=/workspaces
       - REPO_PATH=/repo
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - SUBAGENT_TIMEOUT=1800000
+      - SUBAGENT_TIMEOUT=30m
       - AUTO_UPDATE_STATE=true
     volumes:
       - ./ticketing-system:/repo:ro

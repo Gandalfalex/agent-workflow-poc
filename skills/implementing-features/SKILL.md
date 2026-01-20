@@ -1,22 +1,34 @@
 ---
 name: implementing-features
 description: Autonomously implements features from tickets by creating isolated workspaces, running subagents, and updating ticket state. Use when you need to automatically implement a feature described in a ticket with full code generation, testing, and integration.
+mcp_server: codex-agent
+mcp_tool: implement_ticket
 ---
 
 # Implementing Features
 
-This skill automates the entire feature implementation process from ticket creation through code review readiness.
+This skill automates the entire feature implementation process from ticket creation through code review readiness using the **Codex Agent MCP Server**.
 
 ## Overview
 
-When you provide a ticket ID or key, this skill will:
+This skill uses the `implement_ticket` MCP tool from the Codex Agent server. When you provide a ticket ID or key, the tool will:
 
-1. **Fetch ticket details** from the ticketing system
+1. **Fetch ticket details** from the ticketing system (including comments for full context)
 2. **Create an isolated git workspace** (worktree) for the feature
 3. **Spawn a Claude subagent** to implement the feature
 4. **Run tests** to verify implementation
 5. **Update ticket state** to "In Review"
 6. **Add implementation summary** as a ticket comment
+
+## MCP Server Connection
+
+**Server:** `codex-agent` (TypeScript/Node.js or Go CLI)  
+**MCP Tool:** `implement_ticket`  
+**Location:** `/codex-agent/`
+
+The tool is available in two implementations:
+- **TypeScript/Node.js:** Full MCP server with 7 tools (`src/tools/implementation.ts`)
+- **Go CLI:** Standalone binary (`cmd/implement-ticket/main.go`)
 
 ## When to Use
 
@@ -28,62 +40,93 @@ Use this skill when you have:
 
 ## Usage
 
-### Basic Implementation
+### Using the MCP Tool
 
-Provide the ticket ID or key:
+**MCP Tool:** `implement_ticket`
 
+**Input:**
+```json
+{
+  "ticketId": "PROJ-001",
+  "workspaceRoot": "/Users/you/worktrees",
+  "autoCommit": true,
+  "autoPush": false,
+  "repoPath": "/path/to/repo"
+}
 ```
-Implement ticket PROJ-001
-```
 
-or
+**Parameters:**
+- `ticketId` (required): Ticket UUID or key (e.g., "PROJ-001")
+- `workspaceRoot` (optional): Root directory for worktrees (default: `~/worktrees`)
+- `autoCommit` (optional): Auto-commit changes (default: `true`)
+- `autoPush` (optional): Auto-push to remote (default: `false`)
+- `repoPath` (optional): Path to repository for worktree creation
 
-```
-Run the implementing-features skill on ticket: PROJ-001
-```
+### Using the Go CLI
 
-### With Custom Repository
+```bash
+# Using ticket key
+./bin/implement-ticket --ticket PROJ-001
 
-If your code is in a different repository:
+# Using ticket UUID
+./bin/implement-ticket --ticket 550e8400-e29b-41d4-a716-446655440000
 
-```
-Implement ticket PROJ-001 using /path/to/custom/repo
+# With custom paths
+./bin/implement-ticket --ticket PROJ-001 \
+  --repo /path/to/repo \
+  --workspace /path/to/worktrees
 ```
 
 ## How It Works
 
+The `implement_ticket` MCP tool orchestrates an 8-step workflow:
+
 ### Step 1: Ticket Resolution
-The skill resolves the ticket by:
-- Accepting both ticket keys (PROJ-001) and UUIDs
-- Fetching full ticket details including title, description, priority
-- Retrieving all comments for context
-- Validating the ticket is a "feature" type
+- Accepts both ticket keys (PROJ-001) and UUIDs
+- If ticket key provided, searches all projects to resolve to UUID
+- Fetches full ticket details including title, description, priority
+- Validates the ticket is a "feature" type (not a bug)
 
-### Step 2: Workspace Creation
-- Creates isolated git worktree: `feature/PROJ-001`
-- Locations: `~/worktrees/PROJ-001` (configurable)
-- Branch is isolated from main branch
-- Safe for parallel implementations
+### Step 2: Fetch Comments
+- Retrieves all ticket comments for discussion context
+- Includes comment author, timestamp, and message
+- Provides full context to the subagent
 
-### Step 3: Context Generation
-- Generates implementation prompt with ticket details
-- Includes all comments and discussion
-- Provides project patterns and conventions
-- Defines success criteria
+### Step 3: Workspace Creation
+- Creates isolated git worktree using `scripts/create-worktree.sh`
+- Branch format: `feature/PROJ-001`
+- Location: `~/worktrees/PROJ-001` (configurable)
+- Branch is isolated from main - safe for parallel implementations
 
-### Step 4: Subagent Implementation
-A Claude subagent then:
+### Step 4: Generate Prompt
+- Uses template: `prompts/implement-feature.md`
+- Injects ticket context (title, description, comments, story)
+- Provides clear implementation guidelines
+- Defines success criteria and output format
+
+### Step 5: Spawn Subagent
+- Calls `claude` CLI command (uses existing authenticated session)
+- Passes workspace path and comprehensive prompt
+- Timeout: 30 minutes (configurable via `SUBAGENT_TIMEOUT`)
+
+### Step 6: Subagent Implementation
+The Claude subagent autonomously:
 - Reads existing code to understand patterns
 - Implements feature according to specification
 - Writes tests for new functionality
 - Runs test suite to verify
-- Commits changes with clear commit messages
+- Commits changes with message: `PROJ-001: Feature description`
+- Outputs JSON summary
 
-### Step 5: Ticket Update
-- Changes ticket state to "In Review"
-- Adds comment with implementation summary
-- Includes files changed, test results, commit SHA
-- Provides next steps for code review
+### Step 7: Update Ticket State
+- Fetches available workflow states for the project
+- Finds "In Review" state (or similar: "review", "in_review")
+- Updates ticket state via API (if `AUTO_UPDATE_STATE` not false)
+
+### Step 8: Add Comment
+- Formats implementation summary with files changed, test results, commit SHA
+- Adds comment to ticket for team visibility
+- Includes next steps for code review
 
 ## Output
 
@@ -106,12 +149,39 @@ The skill returns detailed information:
 
 ## Configuration
 
-The skill uses environment variables (can be set before running):
+### Environment Variables
 
+**Keycloak Authentication (Required):**
+```bash
+export KEYCLOAK_USERNAME=AdminUser
+export KEYCLOAK_PASSWORD=admin123
+```
+
+**Keycloak Configuration (Optional):**
+```bash
+export KEYCLOAK_BASE_URL=http://localhost:8081    # Default shown
+export KEYCLOAK_REALM=ticketing                   # Default shown
+export KEYCLOAK_CLIENT_ID=myclient                # Default shown
+```
+
+**API Configuration:**
+```bash
+export TICKETING_API_BASE_URL=http://localhost:8080  # Default shown
+```
+
+**Workspace Configuration:**
 ```bash
 export REPO_PATH=/path/to/repo              # Default: current directory
-export WORKSPACE_ROOT=/path/to/workspaces   # Default: ~/worktrees
-export SUBAGENT_TIMEOUT=1800000             # Timeout in ms (30 min default)
+export WORKSPACE_ROOT=/path/to/worktrees    # Default: ~/worktrees
+export SUBAGENT_TIMEOUT=30m                 # Default: 30 minutes
+export AUTO_UPDATE_STATE=true               # Default: true
+```
+
+**Claude CLI:**
+```bash
+# The implementation uses the 'claude' CLI command
+# Ensure it's installed and authenticated:
+claude auth
 ```
 
 ## Example Workflow
@@ -166,22 +236,39 @@ All errors include detailed messages with suggested next steps.
 
 ## Advanced Usage
 
-### Batch Implementation
+### Batch Implementation (Go CLI)
 
 Implement multiple tickets:
 
 ```bash
 for ticket in PROJ-001 PROJ-002 PROJ-003; do
-  implement-features $ticket
+  ./bin/implement-ticket --ticket $ticket
 done
 ```
 
-### Custom Prompting
+### Using Both Implementations
 
-Modify implementation behavior by providing additional context:
-
+**TypeScript MCP Server:**
+```bash
+cd codex-agent
+npm install && npm run build
+KEYCLOAK_USERNAME=AdminUser npm start
+# Use with MCP client (Claude Code, etc.)
 ```
-Implement ticket PROJ-001 using React hooks only, skip database changes
+
+**Go Standalone CLI:**
+```bash
+# Build
+cd /path/to/project
+go build -o bin/implement-ticket ./codex-agent/cmd/implement-ticket/
+
+# Authenticate Claude CLI first
+claude auth
+
+# Run
+KEYCLOAK_USERNAME=AdminUser \
+KEYCLOAK_PASSWORD=admin123 \
+./bin/implement-ticket --ticket PROJ-001
 ```
 
 ### Monitoring
@@ -231,33 +318,66 @@ ssh user@host "cd ~/codex-agent && bash scripts/skill-cli.sh \"implement PROJ-00
 
 ## Troubleshooting
 
-### Build Failed
+### TypeScript Build Failed
 ```bash
-cd ~/codex-agent && npm run build
+cd codex-agent
+npm install
+npm run build
 ```
 
-### TypeScript Not Compiled
+### Go Build Failed
 ```bash
-ls -la dist/
-npm run build  # if dist doesn't exist
+cd /path/to/project
+go mod tidy
+go build -o bin/implement-ticket ./codex-agent/cmd/implement-ticket/
 ```
 
-### SSH Connection Issues
+### Authentication Errors
 ```bash
-ssh -v user@host "echo 'Connected'"
+# Verify Keycloak is accessible
+curl http://localhost:8081/realms/ticketing/.well-known/openid-configuration
+
+# Check credentials
+echo $KEYCLOAK_USERNAME
+echo $KEYCLOAK_PASSWORD  # Will show if set
 ```
 
-### Check Logs
+### Subagent Failures
 ```bash
-tail -f /tmp/skill-cli.log
+# Verify Claude CLI is installed
+claude --version
+
+# Check authentication status
+claude auth status
+
+# Re-authenticate if needed
+claude auth
+
+# Test manual subagent spawn
+cd ~/worktrees/PROJ-001
+claude --print "Implement a simple test"
+```
+
+### Worktree Issues
+```bash
+# List existing worktrees
+git worktree list
+
+# Remove stale worktree
+git worktree remove ~/worktrees/PROJ-001
+
+# Cleanup
+git worktree prune
 ```
 
 ## References
 
-- [Ticketing System API](/codex-agent/README.md) - Available API endpoints
-- [MCP Tools](/codex-agent/IMPLEMENTATION_SKILL.md) - Underlying tools
-- [SSH Integration](/SSH_SKILL_INVOCATION.md) - SSH command details
-- [n8n Integration](/N8N_SKILL_INTEGRATION.md) - n8n workflow setup
+- [Codex Agent MCP Server](/codex-agent/README.md) - MCP server documentation
+- [Ticketing System API](/codex-agent/src/api-client.ts) - API client implementation
+- [Implementation Tool Source (TS)](/codex-agent/src/tools/implementation.ts) - TypeScript implementation
+- [Implementation CLI Source (Go)](/codex-agent/cmd/implement-ticket/main.go) - Go implementation
+- [Subagent Spawning](/codex-agent/src/utils/subagent.ts) - Subagent utility
+- [Prompt Template](/codex-agent/prompts/implement-feature.md) - Feature implementation prompt
 
 ## Related Skills
 

@@ -18,7 +18,7 @@ The `implement_ticket` MCP tool spawns Claude subagents to automatically impleme
 
 - Running ticketing system (http://ticketing-api:8080)
 - Running Keycloak (for authentication)
-- `ANTHROPIC_API_KEY` environment variable set
+- `claude` CLI installed and authenticated (`claude auth`)
 - Git repository available at the configured `REPO_PATH`
 
 ### Basic Usage
@@ -186,7 +186,7 @@ codex-agent/
 ### Required Variables
 
 ```bash
-ANTHROPIC_API_KEY=sk-...          # Anthropic API key for Claude
+# Note: Uses 'claude' CLI - ensure it's authenticated with 'claude auth'
 KEYCLOAK_USERNAME=AdminUser       # Keycloak user
 KEYCLOAK_PASSWORD=admin123        # Keycloak password
 ```
@@ -209,7 +209,7 @@ TICKETING_API_BASE_URL=http://ticketing-api:8080
 ```yaml
 codex-agent:
   environment:
-    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    # Note: Requires 'claude' CLI installed and authenticated in container
     - WORKSPACE_ROOT=/workspaces
     - REPO_PATH=/repo
     - SUBAGENT_TIMEOUT=1800000
@@ -291,7 +291,7 @@ codex-agent:
 | "Ticket not found" | Invalid ticket ID | Verify ticket exists and use correct format |
 | "Ticket is a bug, not a feature" | Wrong ticket type | Only features are implemented autonomously |
 | "Repository path does not exist" | REPO_PATH not configured | Set REPO_PATH env var or pass repoPath param |
-| "ANTHROPIC_API_KEY not set" | Missing API key | Set ANTHROPIC_API_KEY environment variable |
+| "claude: command not found" | Claude CLI not installed | Install Claude CLI and authenticate with `claude auth` |
 | "Worktree creation failed" | Git error | Check git repository is valid and accessible |
 | "Subagent failed" | Claude execution error | Check prompt template and workspace permissions |
 
@@ -406,8 +406,8 @@ npm run dev
 ### Subagent Not Starting
 
 ```bash
-# Check ANTHROPIC_API_KEY
-echo $ANTHROPIC_API_KEY
+# Check Claude CLI authentication
+claude auth status
 
 # Check logs
 docker-compose logs codex-agent
