@@ -113,7 +113,9 @@ const props = defineProps<{
             :key="row.id"
             class="grid gap-3 [grid-template-columns:220px_repeat(var(--cols),minmax(0,1fr))]"
         >
-            <div class="rounded-3xl border border-border bg-card/70 p-3">
+            <div
+                class="flex flex-col rounded-3xl border border-border bg-card/70 p-3"
+            >
                 <div class="flex items-center justify-between">
                     <p
                         class="text-xs uppercase tracking-[0.3em] text-muted-foreground"
@@ -157,6 +159,17 @@ const props = defineProps<{
                     }}
                     tickets
                 </p>
+                <button
+                    class="mt-auto rounded-2xl border border-dashed border-border px-3 py-3 text-left text-xs text-muted-foreground transition hover:border-primary hover:text-primary"
+                    @click="
+                        props.onOpenNewTicket(
+                            states[0]?.id,
+                            row.isUngrouped ? undefined : row.id,
+                        )
+                    "
+                >
+                    + Add ticket
+                </button>
             </div>
 
             <div
@@ -222,17 +235,6 @@ const props = defineProps<{
                             </span>
                         </div>
                     </div>
-                    <button
-                        class="mt-auto rounded-2xl border border-dashed border-border px-3 py-3 text-left text-xs text-muted-foreground transition hover:border-primary hover:text-primary"
-                        @click="
-                            props.onOpenNewTicket(
-                                state.id,
-                                row.isUngrouped ? undefined : row.id,
-                            )
-                        "
-                    >
-                        + Add ticket
-                    </button>
                 </div>
             </div>
         </div>

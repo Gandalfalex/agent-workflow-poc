@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
 import { marked } from "marked";
+import { ref } from "vue";
 import type {
     TicketComment,
     TicketPriority,
@@ -41,6 +42,8 @@ const emit = defineEmits<{
     (e: "add-comment"): void;
 }>();
 
+const showDescriptionPreview = ref(false);
+
 const updateEditor = (patch: Partial<TicketEditor>) => {
     emit("update:editor", { ...props.editor, ...patch });
 };
@@ -57,7 +60,7 @@ const isCurrentUser = (userId: string) => {
         @click.self="emit('close')"
     >
         <div
-            class="w-full max-h-[90vh] max-w-4xl overflow-y-auto rounded-3xl border border-border bg-card p-6 shadow-xl"
+            class="w-full max-h-[95vh] max-w-6xl overflow-y-auto rounded-3xl border border-border bg-card p-6 shadow-xl"
         >
             <div class="flex items-center justify-between">
                 <div>
@@ -102,7 +105,7 @@ const isCurrentUser = (userId: string) => {
                 </details>
             </div>
             <div
-                class="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr] max-h-[calc(90vh-200px)]"
+                class="mt-6 grid gap-6 lg:grid-cols-[0.8fr_1.2fr] max-h-[calc(90vh-200px)]"
             >
                 <div class="grid gap-4">
                     <div>
@@ -123,14 +126,35 @@ const isCurrentUser = (userId: string) => {
                         />
                     </div>
                     <div>
-                        <label
-                            class="text-xs font-semibold text-muted-foreground"
-                            >Description</label
-                        >
+                        <div class="flex items-center justify-between">
+                            <label
+                                class="text-xs font-semibold text-muted-foreground"
+                                >Description</label
+                            >
+                            <button
+                                type="button"
+                                class="text-xs text-muted-foreground hover:text-foreground transition"
+                                @click="
+                                    showDescriptionPreview =
+                                        !showDescriptionPreview
+                                "
+                            >
+                                {{
+                                    showDescriptionPreview ? "Edit" : "Preview"
+                                }}
+                            </button>
+                        </div>
+                        <div
+                            v-if="showDescriptionPreview"
+                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none min-h-[200px]"
+                            v-html="marked(props.editor.description || '')"
+                        ></div>
                         <textarea
+                            v-else
                             :value="props.editor.description"
-                            rows="4"
-                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            rows="8"
+                            placeholder="Describe the ticket in detail... (supports **bold**, *italic*, `code`, etc.)"
+                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                             @input="
                                 updateEditor({
                                     description: (
@@ -223,29 +247,9 @@ const isCurrentUser = (userId: string) => {
                     >
                         {{ props.ticketError }}
                     </div>
-                    <div class="flex justify-end gap-2">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            @click="emit('close')"
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            size="sm"
-                            :disabled="props.ticketSaving"
-                            @click="emit('save')"
-                        >
-                            {{
-                                props.ticketSaving
-                                    ? "Saving..."
-                                    : "Save changes"
-                            }}
-                        </Button>
-                    </div>
                 </div>
                 <div
-                    class="rounded-2xl border border-border bg-background px-6 py-6 text-xs text-muted-foreground flex flex-col h-full"
+                    class="rounded-2xl border border-border bg-background px-4 py-3 text-xs text-muted-foreground flex flex-col h-[420px]"
                 >
                     <div
                         class="flex items-center justify-between mb-4 flex-shrink-0"
@@ -262,7 +266,7 @@ const isCurrentUser = (userId: string) => {
 
                     <div
                         v-if="props.comments.length"
-                        class="flex-1 space-y-3 overflow-y-auto mb-4 pr-2 min-h-0"
+                        class="flex-1 space-y-2 overflow-y-auto mb-3 pr-2 min-h-0"
                     >
                         <div
                             v-for="comment in props.comments"
@@ -308,7 +312,7 @@ const isCurrentUser = (userId: string) => {
                         >
                         <textarea
                             :value="props.commentDraft"
-                            rows="3"
+                            rows="2"
                             placeholder="Share progress or blockers... (supports **bold**, *italic*, `code`, etc.)"
                             class="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                             @input="
@@ -342,6 +346,18 @@ const isCurrentUser = (userId: string) => {
                         </div>
                     </div>
                 </div>
+            </div>
+            <div class="mt-6 flex items-center justify-center gap-2">
+                <Button variant="ghost" size="sm" @click="emit('close')">
+                    Cancel
+                </Button>
+                <Button
+                    size="sm"
+                    :disabled="props.ticketSaving"
+                    @click="emit('save')"
+                >
+                    {{ props.ticketSaving ? "Saving..." : "Save changes" }}
+                </Button>
             </div>
         </div>
     </div>

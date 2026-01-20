@@ -6,6 +6,7 @@ import StoryModal from "@/components/app/StoryModal.vue";
 import TicketModal from "@/components/app/TicketModal.vue";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
+import { useAdminStore } from "@/stores/admin";
 import type { StoryRow } from "@/lib/types";
 import type { TicketResponse, TicketPriority, TicketType } from "@/lib/api";
 
@@ -13,6 +14,7 @@ const props = defineProps<{ projectId: string }>();
 
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
+const adminStore = useAdminStore();
 
 const showNewTicket = ref(false);
 const showStoryModal = ref(false);
@@ -55,6 +57,7 @@ const ticketComments = computed(() => boardStore.ticketComments);
 const commentSaving = computed(() => boardStore.commentSaving);
 const commentError = computed(() => boardStore.commentError);
 const storiesCount = computed(() => boardStore.stories.length);
+const groupMembers = computed(() => adminStore.groupMembers);
 
 const priorities: TicketPriority[] = ["low", "medium", "high", "urgent"];
 const ticketTypes: TicketType[] = ["feature", "bug"];
@@ -297,6 +300,30 @@ const openNewTicket = async (stateId?: string, storyId?: string) => {
     showNewTicket.value = true;
     if (apiMode.value !== "demo" && props.projectId) {
         await boardStore.loadStories(props.projectId);
+        // Load all groups and their members for assignee selection
+        try {
+            await adminStore.loadGroups();
+            // Load members for each group and collect them
+            if (adminStore.groups.length > 0) {
+                adminStore.clearGroupMembers();
+                const allMembers: Record<string, any> = {};
+                for (const group of adminStore.groups) {
+                    await adminStore.loadGroupMembers(group.id);
+                    adminStore.groupMembers.forEach((member) => {
+                        allMembers[member.userId] = member;
+                    });
+                }
+                // Update groupMembers with all unique members by reloading all
+                if (Object.keys(allMembers).length > 0) {
+                    // Force a reactive update by creating a new array
+                    adminStore.$patch({
+                        groupMembers: Object.values(allMembers),
+                    });
+                }
+            }
+        } catch (err) {
+            // Silently fail group loading, it's not critical
+        }
     }
 };
 
@@ -470,6 +497,7 @@ watch(
         :priorities="priorities"
         :ticket-types="ticketTypes"
         :can-submit="canSubmit"
+        :group-members="groupMembers"
         @update:ticket="updateNewTicket"
         @close="closeNewTicket"
         @create="createTicketSubmit"
