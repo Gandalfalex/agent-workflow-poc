@@ -226,6 +226,15 @@ type StoryUpdateRequest struct {
 	Title       *string `json:"title,omitempty"`
 }
 
+// SyncUsersResponse defines model for SyncUsersResponse.
+type SyncUsersResponse struct {
+	// Synced Number of users synced
+	Synced int `json:"synced"`
+
+	// Total Total users in Keycloak
+	Total int `json:"total"`
+}
+
 // Ticket defines model for Ticket.
 type Ticket struct {
 	Assignee    *UserSummary        `json:"assignee,omitempty"`
@@ -477,6 +486,9 @@ type AddTicketCommentJSONRequestBody = TicketCommentCreateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Sync all Keycloak users to database
+	// (POST /admin/sync-users)
+	SyncUsers(w http.ResponseWriter, r *http.Request)
 	// Login
 	// (POST /auth/login)
 	Login(w http.ResponseWriter, r *http.Request)
@@ -614,6 +626,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// Sync all Keycloak users to database
+// (POST /admin/sync-users)
+func (_ Unimplemented) SyncUsers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // Login
 // (POST /auth/login)
@@ -887,6 +905,26 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// SyncUsers operation middleware
+func (siw *ServerInterfaceWrapper) SyncUsers(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SyncUsers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // Login operation middleware
 func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
@@ -2382,6 +2420,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/sync-users", wrapper.SyncUsers)
+	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/login", wrapper.Login)
 	})

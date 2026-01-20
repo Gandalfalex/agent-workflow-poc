@@ -138,6 +138,8 @@ services:
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_REALM: ticketing
       KEYCLOAK_CLIENT_ID: myclient
+      KEYCLOAK_ADMIN_USER: AdminUser
+      KEYCLOAK_ADMIN_PASSWORD: admin123
       COOKIE_SECURE: "false"
       CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
     ports:

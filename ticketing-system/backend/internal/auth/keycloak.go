@@ -20,6 +20,8 @@ type Config struct {
 	BaseURL  string
 	Realm    string
 	ClientID string
+	Username string // Admin username for Keycloak admin API
+	Password string // Admin password for Keycloak admin API
 	Timeout  time.Duration
 }
 
@@ -144,6 +146,75 @@ func (c *Client) passwordGrant(ctx context.Context, username, password string) (
 		RefreshToken: payload.RefreshToken,
 		ExpiresIn:    payload.ExpiresIn,
 	}, nil
+}
+
+// ListUsers retrieves all users from Keycloak admin API
+func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
+	// Get admin token using configured credentials
+	tokenSet, err := c.passwordGrant(ctx, c.cfg.Username, c.cfg.Password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get admin token: %w", err)
+	}
+
+	// Construct admin API URL
+	usersURL := strings.TrimRight(c.cfg.BaseURL, "/") + "/admin/realms/" + c.cfg.Realm + "/users"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, usersURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tokenSet.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("keycloak admin API error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	var keycloakUsers []struct {
+		ID            string `json:"id"`
+		Username      string `json:"username"`
+		Email         string `json:"email"`
+		FirstName     string `json:"firstName"`
+		LastName      string `json:"lastName"`
+		Enabled       bool   `json:"enabled"`
+		EmailVerified bool   `json:"emailVerified"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&keycloakUsers); err != nil {
+		return nil, err
+	}
+
+	users := make([]User, 0, len(keycloakUsers))
+	for _, ku := range keycloakUsers {
+		if !ku.Enabled {
+			continue // Skip disabled users
+		}
+
+		name := strings.TrimSpace(ku.FirstName + " " + ku.LastName)
+		if name == "" {
+			name = ku.Username
+		}
+
+		email := ku.Email
+		if email == "" {
+			email = ku.Username + "@local"
+		}
+
+		users = append(users, User{
+			ID:    ku.ID,
+			Name:  name,
+			Email: email,
+		})
+	}
+
+	return users, nil
 }
 
 func (c *Client) initJWKS() error {

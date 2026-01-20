@@ -11,6 +11,8 @@ type Config struct {
 	KeycloakBaseURL    string
 	KeycloakRealm      string
 	KeycloakClientID   string
+	KeycloakAdminUser  string
+	KeycloakAdminPass  string
 	CookieSecure       bool
 	CORSAllowedOrigins []string
 	FrontendDir        string
@@ -42,6 +44,16 @@ func Load() Config {
 		keycloakClient = "myclient"
 	}
 
+	keycloakAdminUser := os.Getenv("KEYCLOAK_ADMIN_USER")
+	if keycloakAdminUser == "" {
+		keycloakAdminUser = "admin"
+	}
+
+	keycloakAdminPass := os.Getenv("KEYCLOAK_ADMIN_PASSWORD")
+	if keycloakAdminPass == "" {
+		keycloakAdminPass = "admin"
+	}
+
 	cookieSecure := os.Getenv("COOKIE_SECURE") == "true"
 	allowedOrigins := parseCSV(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	if len(allowedOrigins) == 0 {
@@ -55,6 +67,8 @@ func Load() Config {
 		KeycloakBaseURL:    keycloakBase,
 		KeycloakRealm:      keycloakRealm,
 		KeycloakClientID:   keycloakClient,
+		KeycloakAdminUser:  keycloakAdminUser,
+		KeycloakAdminPass:  keycloakAdminPass,
 		CookieSecure:       cookieSecure,
 		CORSAllowedOrigins: allowedOrigins,
 		FrontendDir:        frontendDir,

@@ -15,17 +15,15 @@ func Router(h *API) http.Handler {
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 
-	handler := HandlerWithOptions(h, ChiServerOptions{
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		writeError(w, http.StatusNotFound, "not_found", "route not found")
+	})
+
+	return HandlerWithOptions(h, ChiServerOptions{
 		BaseRouter:  r,
 		Middlewares: []MiddlewareFunc{requireAuth(h)},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		},
 	})
-
-	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "not_found", "route not found")
-	})
-
-	return handler
 }

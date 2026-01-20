@@ -37,6 +37,8 @@ func main() {
 		BaseURL:  cfg.KeycloakBaseURL,
 		Realm:    cfg.KeycloakRealm,
 		ClientID: cfg.KeycloakClientID,
+		Username: cfg.KeycloakAdminUser,
+		Password: cfg.KeycloakAdminPass,
 	})
 
 	dispatcher := webhook.New(st)

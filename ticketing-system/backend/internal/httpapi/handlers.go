@@ -65,6 +65,7 @@ type Store interface {
 type Authenticator interface {
 	Login(ctx context.Context, username, password string) (auth.User, auth.TokenSet, error)
 	Verify(ctx context.Context, token string) (auth.User, error)
+	ListUsers(ctx context.Context) ([]auth.User, error)
 }
 
 type WebhookDispatcher interface {
@@ -1110,4 +1111,47 @@ func (h *API) syncUser(r *http.Request, user auth.User) {
 	}); err != nil {
 		logRequestError(r, "sync_user_failed", err)
 	}
+}
+
+// SyncUsers syncs all users from Keycloak to the local database
+// POST /admin/sync-users
+func (h *API) SyncUsers(w http.ResponseWriter, r *http.Request) {
+	// Get all users from Keycloak
+	keycloakUsers, err := h.auth.ListUsers(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "sync_failed", "failed to fetch users from Keycloak: "+err.Error())
+		return
+	}
+
+	synced := 0
+
+	// Upsert each user into the database
+	for _, user := range keycloakUsers {
+		id, err := uuid.Parse(user.ID)
+		if err != nil {
+			continue
+		}
+
+		email := strings.TrimSpace(user.Email)
+		name := strings.TrimSpace(user.Name)
+		if email == "" {
+			email = user.ID + "@local"
+		}
+		if name == "" {
+			name = email
+		}
+
+		if err := h.store.UpsertUser(r.Context(), store.UserUpsertInput{
+			ID:    id,
+			Name:  name,
+			Email: email,
+		}); err == nil {
+			synced++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, SyncUsersResponse{
+		Synced: synced,
+		Total:  len(keycloakUsers),
+	})
 }
