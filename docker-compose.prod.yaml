@@ -1,25 +1,4 @@
 services:
-  # Traefik reverse proxy - main entry point
-  traefik:
-    image: traefik:v3.0
-    command:
-      - "--api.insecure=true"
-      - "--api.dashboard=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=prod-network"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-    ports:
-      - "80:80" # HTTP
-      - "443:443" # HTTPS
-      - "8080:8080" # Traefik Dashboard
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - prod-network
-    restart: unless-stopped
-
   # Keycloak - Authentication
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.1
@@ -41,12 +20,6 @@ services:
       - prod-network
     depends_on:
       - keycloak-postgres
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.keycloak.rule=PathPrefix(`/auth`) || PathPrefix(`/realms`) || PathPrefix(`/resources`)"
-      - "traefik.http.routers.keycloak.entrypoints=web"
-      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
-      - "traefik.http.routers.keycloak.priority=100"
     restart: unless-stopped
 
   keycloak-postgres:
@@ -81,22 +54,6 @@ services:
       - keycloak
     networks:
       - prod-network
-    labels:
-      - "traefik.enable=true"
-      # Route /ticketing/* to ticketing system (with prefix strip)
-      - "traefik.http.routers.ticketing-prefixed.rule=PathPrefix(`/ticketing`)"
-      - "traefik.http.routers.ticketing-prefixed.entrypoints=web"
-      - "traefik.http.routers.ticketing-prefixed.service=ticketing-service"
-      - "traefik.http.routers.ticketing-prefixed.priority=90"
-      - "traefik.http.middlewares.ticketing-strip.stripprefix.prefixes=/ticketing"
-      - "traefik.http.routers.ticketing-prefixed.middlewares=ticketing-strip"
-      # Also route root / to ticketing (lower priority so /n8n and /auth take precedence)
-      - "traefik.http.routers.ticketing-root.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.ticketing-root.entrypoints=web"
-      - "traefik.http.routers.ticketing-root.service=ticketing-service"
-      - "traefik.http.routers.ticketing-root.priority=1"
-      # Service definition
-      - "traefik.http.services.ticketing-service.loadbalancer.server.port=8080"
     restart: unless-stopped
 
   ticketing-postgres:
@@ -133,12 +90,6 @@ services:
       - n8n-postgres
     networks:
       - prod-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.n8n.rule=PathPrefix(`/n8n`)"
-      - "traefik.http.routers.n8n.entrypoints=web"
-      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
-      - "traefik.http.routers.n8n.priority=95"
     restart: unless-stopped
 
   n8n-postgres:
