@@ -1,0 +1,173 @@
+version: "3.9"
+
+# Production setup with Traefik reverse proxy
+# All services accessible through port 80 with path-based routing
+# - Ticketing System: http://localhost/ or http://localhost/ticketing/
+# - n8n: http://localhost/n8n/
+# - Keycloak: http://localhost/auth/ or http://localhost/realms/
+# - Traefik Dashboard: http://localhost:8080/dashboard/
+
+services:
+  # Traefik reverse proxy - main entry point
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=prod-network"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "80:80"       # HTTP
+      - "443:443"     # HTTPS
+      - "8080:8080"   # Traefik Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - prod-network
+    restart: unless-stopped
+
+  # Keycloak - Authentication
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY: edge
+    volumes:
+      - ./ticketing-system/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+    networks:
+      - prod-network
+    depends_on:
+      - keycloak-postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=PathPrefix(`/auth`) || PathPrefix(`/realms`) || PathPrefix(`/resources`)"
+      - "traefik.http.routers.keycloak.entrypoints=web"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+      - "traefik.http.routers.keycloak.priority=100"
+    restart: unless-stopped
+
+  keycloak-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak-prod-data:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    restart: unless-stopped
+
+  # Ticketing System API + Frontend
+  ticketing-api:
+    build:
+      context: ./ticketing-system
+      dockerfile: backend/Dockerfile
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres:5432/ticketing?sslmode=disable
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ticketing
+      KEYCLOAK_CLIENT_ID: myclient
+      KEYCLOAK_ADMIN_USER: AdminUser
+      KEYCLOAK_ADMIN_PASSWORD: admin123
+      COOKIE_SECURE: "false"
+      CORS_ALLOWED_ORIGINS: "*"
+    depends_on:
+      - ticketing-postgres
+      - keycloak
+    networks:
+      - prod-network
+    labels:
+      - "traefik.enable=true"
+      # Route /ticketing/* to ticketing system (with prefix strip)
+      - "traefik.http.routers.ticketing-prefixed.rule=PathPrefix(`/ticketing`)"
+      - "traefik.http.routers.ticketing-prefixed.entrypoints=web"
+      - "traefik.http.routers.ticketing-prefixed.service=ticketing-service"
+      - "traefik.http.routers.ticketing-prefixed.priority=90"
+      - "traefik.http.middlewares.ticketing-strip.stripprefix.prefixes=/ticketing"
+      - "traefik.http.routers.ticketing-prefixed.middlewares=ticketing-strip"
+      # Also route root / to ticketing (lower priority so /n8n and /auth take precedence)
+      - "traefik.http.routers.ticketing-root.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.ticketing-root.entrypoints=web"
+      - "traefik.http.routers.ticketing-root.service=ticketing-service"
+      - "traefik.http.routers.ticketing-root.priority=1"
+      # Service definition
+      - "traefik.http.services.ticketing-service.loadbalancer.server.port=8080"
+    restart: unless-stopped
+
+  ticketing-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ticketing
+      POSTGRES_PASSWORD: ticketing
+      POSTGRES_DB: ticketing
+    volumes:
+      - ticketing-prod-data:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    restart: unless-stopped
+
+  # n8n Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_PATH=/n8n/
+      - WEBHOOK_URL=http://localhost/n8n/
+      - GENERIC_TIMEZONE=Europe/Berlin
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=n8n-postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=n8n
+    volumes:
+      - n8n-prod-data:/home/node/.n8n
+    depends_on:
+      - n8n-postgres
+    networks:
+      - prod-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=PathPrefix(`/n8n`)"
+      - "traefik.http.routers.n8n.entrypoints=web"
+      - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n.priority=95"
+    restart: unless-stopped
+
+  n8n-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: n8n
+      POSTGRES_DB: n8n
+    volumes:
+      - n8n-prod-postgres-data:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    restart: unless-stopped
+
+networks:
+  prod-network:
+    driver: bridge
+
+volumes:
+  keycloak-prod-data:
+  ticketing-prod-data:
+  n8n-prod-data:
+  n8n-prod-postgres-data:
