@@ -1,28 +1,18 @@
 services:
   # Shadowing reverse proxy - main entry point with traffic mirroring
   shadowing:
-    build:
-      context: ../shadowing
-      dockerfile: Dockerfile
+    image: shadowprox:latest
+    environment:
+      - SHADOWPROX_LISTEN=:8080
+      - SHADOWPROX_ADMIN_LISTEN=:8081
+      - SHADOWPROX_DOCKER_ENDPOINT=unix:///var/run/docker.sock
+      - SHADOWPROX_DOCKER_NETWORK=prod-network
+      - SHADOWPROX_STORE_DSN=postgres://shadowing:shadowing@shadowing-db:5432/shadowing?sslmode=disable
     ports:
       - "80:8080" # Main proxy port (HTTP)
       - "8081:8081" # Admin/UI port
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      SHADOWING_STORE_DSN: postgres://shadowing:shadowing@shadowing-db:5432/shadowing?sslmode=disable
-      SHADOWING_DOCKER_NETWORK: prod-network
-    command:
-      - "-listen"
-      - ":8080"
-      - "-admin-listen"
-      - ":8081"
-      - "-ui-dir"
-      - "/app/ui"
-      - "-store-dsn"
-      - "postgres://shadowing:shadowing@shadowing-db:5432/shadowing?sslmode=disable"
-      - "-docker-network"
-      - "prod-network"
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - shadowing-db
       - keycloak
