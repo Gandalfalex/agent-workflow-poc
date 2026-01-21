@@ -1,4 +1,50 @@
 services:
+  # Shadowing reverse proxy - main entry point with traffic mirroring
+  shadowing:
+    build:
+      context: ../shadowing
+      dockerfile: Dockerfile
+    ports:
+      - "80:8080" # Main proxy port (HTTP)
+      - "8081:8081" # Admin/UI port
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      SHADOWING_STORE_DSN: postgres://shadowing:shadowing@shadowing-db:5432/shadowing?sslmode=disable
+      SHADOWING_DOCKER_NETWORK: prod-network
+    command:
+      - "-listen"
+      - ":8080"
+      - "-admin-listen"
+      - ":8081"
+      - "-ui-dir"
+      - "/app/ui"
+      - "-store-dsn"
+      - "postgres://shadowing:shadowing@shadowing-db:5432/shadowing?sslmode=disable"
+      - "-docker-network"
+      - "prod-network"
+    depends_on:
+      - shadowing-db
+      - keycloak
+      - ticketing-api-prod
+      - n8n
+    networks:
+      - prod-network
+    restart: unless-stopped
+
+  # Shadowing database - stores comparison results and routing config
+  shadowing-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shadowing
+      POSTGRES_PASSWORD: shadowing
+      POSTGRES_DB: shadowing
+    volumes:
+      - shadowing-prod-data:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    restart: unless-stopped
+
   # Keycloak - Authentication
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.1
@@ -34,14 +80,14 @@ services:
       - prod-network
     restart: unless-stopped
 
-  # Ticketing System API + Frontend
-  ticketing-api:
+  # Ticketing System API + Frontend (Production)
+  ticketing-api-prod:
     build:
       context: ./ticketing-system
       dockerfile: backend/Dockerfile
     environment:
       PORT: "8080"
-      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres:5432/ticketing?sslmode=disable
+      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres-prod:5432/ticketing?sslmode=disable
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_REALM: ticketing
       KEYCLOAK_CLIENT_ID: myclient
@@ -50,13 +96,13 @@ services:
       COOKIE_SECURE: "false"
       CORS_ALLOWED_ORIGINS: "*"
     depends_on:
-      - ticketing-postgres
+      - ticketing-postgres-prod
       - keycloak
     networks:
       - prod-network
     restart: unless-stopped
 
-  ticketing-postgres:
+  ticketing-postgres-prod:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: ticketing
