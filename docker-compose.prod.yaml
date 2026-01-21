@@ -1,67 +1,26 @@
-version: "3.9"
-
-# Production setup with Shadowing proxy for traffic mirroring
-# The shadowing proxy acts as the main reverse proxy that can:
-# 1. Route traffic to production services (primary)
-# 2. Mirror traffic to new workspace deployments (shadow)
-# 3. Compare responses and help with safe deployments
-#
-# Services accessible through:
-# - http://localhost/ - Shadowing proxy (port 80)
-# - http://localhost:8081 - Shadowing admin/UI
-# - Path-based routing to ticketing and n8n
-
 services:
-  # Shadowing reverse proxy - main entry point with traffic mirroring
-  shadowing:
-    build:
-      context: ../shadowing
-      dockerfile: Dockerfile
+  # Traefik reverse proxy - main entry point
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=prod-network"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
     ports:
-      - "80:8080"      # Main proxy port (HTTP)
-      - "8081:8081"    # Admin/UI port
+      - "80:80" # HTTP
+      - "443:443" # HTTPS
+      - "8080:8080" # Traefik Dashboard
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      SHADOWING_STORE_DSN: postgres://shadowing:shadowing@shadowing-db:5432/shadowing?sslmode=disable
-      SHADOWING_DOCKER_NETWORK: prod-network
-    command:
-      - "-listen"
-      - ":8080"
-      - "-admin-listen"
-      - ":8081"
-      - "-ui-dir"
-      - "/app/ui"
-      - "-store-dsn"
-      - "postgres://shadowing:shadowing@shadowing-db:5432/shadowing?sslmode=disable"
-      - "-docker-network"
-      - "prod-network"
-    depends_on:
-      - shadowing-db
-      - keycloak
-      - ticketing-api-prod
-      - n8n
-    networks:
-      - prod-network
-    labels:
-      # Enable Docker-based service discovery
-      - "shadowing.enable=true"
-    restart: unless-stopped
-
-  # Shadowing database - stores comparison results and routing config
-  shadowing-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: shadowing
-      POSTGRES_PASSWORD: shadowing
-      POSTGRES_DB: shadowing
-    volumes:
-      - shadowing-prod-data:/var/lib/postgresql/data
     networks:
       - prod-network
     restart: unless-stopped
 
-  # Keycloak - Authentication for both ticketing and n8n
+  # Keycloak - Authentication
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.1
     command: ["start-dev", "--import-realm"]
@@ -83,9 +42,11 @@ services:
     depends_on:
       - keycloak-postgres
     labels:
-      # Route /auth/* to Keycloak
-      - "traefik.http.routers.keycloak.rule=PathPrefix(`/auth`) || PathPrefix(`/realms`)"
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=PathPrefix(`/auth`) || PathPrefix(`/realms`) || PathPrefix(`/resources`)"
+      - "traefik.http.routers.keycloak.entrypoints=web"
       - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+      - "traefik.http.routers.keycloak.priority=100"
     restart: unless-stopped
 
   keycloak-postgres:
@@ -100,14 +61,14 @@ services:
       - prod-network
     restart: unless-stopped
 
-  # Production Ticketing System (Primary)
-  ticketing-api-prod:
+  # Ticketing System API + Frontend
+  ticketing-api:
     build:
       context: ./ticketing-system
       dockerfile: backend/Dockerfile
     environment:
       PORT: "8080"
-      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres-prod:5432/ticketing?sslmode=disable
+      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres:5432/ticketing?sslmode=disable
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_REALM: ticketing
       KEYCLOAK_CLIENT_ID: myclient
@@ -116,17 +77,29 @@ services:
       COOKIE_SECURE: "false"
       CORS_ALLOWED_ORIGINS: "*"
     depends_on:
-      - ticketing-postgres-prod
+      - ticketing-postgres
       - keycloak
     networks:
       - prod-network
     labels:
-      # Service discovery for shadowing proxy
-      - "traefik.http.routers.ticketing.rule=PathPrefix(`/api/ticketing`) || PathPrefix(`/health`) || PathPrefix(`/users`) || PathPrefix(`/projects`) || PathPrefix(`/tickets`)"
-      - "traefik.http.services.ticketing.loadbalancer.server.port=8080"
+      - "traefik.enable=true"
+      # Route /ticketing/* to ticketing system (with prefix strip)
+      - "traefik.http.routers.ticketing-prefixed.rule=PathPrefix(`/ticketing`)"
+      - "traefik.http.routers.ticketing-prefixed.entrypoints=web"
+      - "traefik.http.routers.ticketing-prefixed.service=ticketing-service"
+      - "traefik.http.routers.ticketing-prefixed.priority=90"
+      - "traefik.http.middlewares.ticketing-strip.stripprefix.prefixes=/ticketing"
+      - "traefik.http.routers.ticketing-prefixed.middlewares=ticketing-strip"
+      # Also route root / to ticketing (lower priority so /n8n and /auth take precedence)
+      - "traefik.http.routers.ticketing-root.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.ticketing-root.entrypoints=web"
+      - "traefik.http.routers.ticketing-root.service=ticketing-service"
+      - "traefik.http.routers.ticketing-root.priority=1"
+      # Service definition
+      - "traefik.http.services.ticketing-service.loadbalancer.server.port=8080"
     restart: unless-stopped
 
-  ticketing-postgres-prod:
+  ticketing-postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: ticketing
@@ -138,7 +111,7 @@ services:
       - prod-network
     restart: unless-stopped
 
-  # n8n Workflow Automation (Primary)
+  # n8n Workflow Automation
   n8n:
     image: n8nio/n8n:latest
     environment:
@@ -161,9 +134,11 @@ services:
     networks:
       - prod-network
     labels:
-      # Service discovery for shadowing proxy
-      - "traefik.http.routers.n8n.rule=PathPrefix(`/n8n`) || PathPrefix(`/webhook`)"
+      - "traefik.enable=true"
+      - "traefik.http.routers.n8n.rule=PathPrefix(`/n8n`)"
+      - "traefik.http.routers.n8n.entrypoints=web"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
+      - "traefik.http.routers.n8n.priority=95"
     restart: unless-stopped
 
   n8n-postgres:
@@ -178,51 +153,6 @@ services:
       - prod-network
     restart: unless-stopped
 
-  # ============================================
-  # WORKSPACE/SHADOW DEPLOYMENTS
-  # These are deployed from worktrees (feature branches)
-  # and can be shadowed/compared against production
-  # ============================================
-
-  # Example: Ticketing API from workspace/branch
-  # This would be built from a git worktree (e.g., feature/new-dashboard)
-  # Uncomment and configure to test a new version alongside production
-  #
-  # ticketing-api-shadow:
-  #   build:
-  #     context: ./worktrees/feature-name/ticketing-system
-  #     dockerfile: backend/Dockerfile
-  #   environment:
-  #     PORT: "8080"
-  #     DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres-shadow:5432/ticketing?sslmode=disable
-  #     KEYCLOAK_BASE_URL: http://keycloak:8080
-  #     KEYCLOAK_REALM: ticketing
-  #     KEYCLOAK_CLIENT_ID: myclient
-  #     KEYCLOAK_ADMIN_USER: AdminUser
-  #     KEYCLOAK_ADMIN_PASSWORD: admin123
-  #     COOKIE_SECURE: "false"
-  #     CORS_ALLOWED_ORIGINS: "*"
-  #   depends_on:
-  #     - ticketing-postgres-shadow
-  #     - keycloak
-  #   networks:
-  #     - prod-network
-  #   labels:
-  #     - "traefik.http.services.ticketing-shadow.loadbalancer.server.port=8080"
-  #   restart: unless-stopped
-  #
-  # ticketing-postgres-shadow:
-  #   image: postgres:17-alpine
-  #   environment:
-  #     POSTGRES_USER: ticketing
-  #     POSTGRES_PASSWORD: ticketing
-  #     POSTGRES_DB: ticketing
-  #   volumes:
-  #     - ticketing-shadow-data:/var/lib/postgresql/data
-  #   networks:
-  #     - prod-network
-  #   restart: unless-stopped
-
 networks:
   prod-network:
     driver: bridge
@@ -231,6 +161,5 @@ volumes:
   shadowing-prod-data:
   keycloak-prod-data:
   ticketing-prod-data:
+  n8n-prod-data:
   n8n-prod-postgres-data:
-  # Uncomment for shadow deployments
-  # ticketing-shadow-data:
