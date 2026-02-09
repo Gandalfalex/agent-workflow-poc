@@ -69,6 +69,8 @@ services:
     build:
       context: ./ticketing-system
       dockerfile: backend/Dockerfile
+      args:
+        BASE_PATH: /ticketing
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres-prod:5432/ticketing?sslmode=disable
@@ -79,7 +81,6 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin123
       COOKIE_SECURE: "false"
       CORS_ALLOWED_ORIGINS: "*"
-      BASE_PATH: "/ticketing"
     depends_on:
       - ticketing-postgres-prod
       - keycloak

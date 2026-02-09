@@ -12,11 +12,19 @@ http:
       service: keycloak
       priority: 100
 
-    # Ticketing - /ticketing/* (now behind prefix)
+    # Ticketing - /ticketing/* (with prefix stripping)
     ticketing:
       rule: "PathPrefix(`/ticketing`)"
       service: ticketing
+      middlewares:
+        - ticketing-stripprefix
       priority: 50
+
+  middlewares:
+    ticketing-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/ticketing"
 
   services:
     n8n:
