@@ -525,8 +525,17 @@ func (h *API) AddGroupMember(w http.ResponseWriter, r *http.Request, groupId ope
 
 	userID := uuid.UUID(req.UserId)
 	member, err := h.store.AddGroupMember(r.Context(), groupID, userID)
-	if handleDBErrorWithCode(w, r, err, "group member", "group_member_create", "group_member_create_failed") {
-		return
+	if err != nil {
+		// Check for user not found error
+		if err.Error() == "user not found" {
+			logRequestError(r, "group_member_create_user_not_found", err)
+			writeError(w, http.StatusNotFound, "user_not_found", "user not found")
+			return
+		}
+		// Handle other database errors
+		if handleDBErrorWithCode(w, r, err, "group member", "group_member_create", "group_member_create_failed") {
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusCreated, mapGroupMember(member))

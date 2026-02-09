@@ -136,6 +136,16 @@ func (s *Store) ListGroupMembers(ctx context.Context, groupID uuid.UUID) ([]Grou
 }
 
 func (s *Store) AddGroupMember(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (GroupMember, error) {
+	// Validate that the user exists before attempting to add them
+	checkQuery := mustSQL("users_exists.sql", nil)
+	var exists bool
+	if err := s.db.QueryRow(ctx, checkQuery, userID).Scan(&exists); err != nil {
+		return GroupMember{}, err
+	}
+	if !exists {
+		return GroupMember{}, errors.New("user not found")
+	}
+
 	query := mustSQL("group_members_insert.sql", nil)
 	var member GroupMember
 	if err := s.db.QueryRow(ctx, query, groupID, userID).Scan(&member.GroupID, &member.UserID, &member.UserName); err != nil {
