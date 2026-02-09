@@ -15,9 +15,7 @@ func Router(h *API) http.Handler {
 	r.Use(requestLogger)
 	r.Use(middleware.Recoverer)
 
-	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, http.StatusNotFound, "not_found", "route not found")
-	})
+	// Don't set NotFound handler here - let WithFrontend handle it
 
 	return HandlerWithOptions(h, ChiServerOptions{
 		BaseRouter:  r,

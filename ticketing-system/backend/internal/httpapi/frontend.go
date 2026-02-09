@@ -16,13 +16,15 @@ func WithBasePath(handler http.Handler, basePath string) http.Handler {
 	}
 
 	r := chi.NewRouter()
-	r.Mount(basePath, http.StripPrefix(basePath, handler))
 
 	// Health check at root
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
+
+	// Mount at base path with prefix stripping
+	r.Mount(basePath, http.StripPrefix(basePath, handler))
 
 	return r
 }
