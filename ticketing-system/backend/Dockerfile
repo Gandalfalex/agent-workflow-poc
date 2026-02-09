@@ -14,6 +14,8 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend ./
+ARG BASE_PATH=/ticketing
+ENV BASE_PATH=${BASE_PATH}
 RUN npm run build
 
 FROM alpine:3.20

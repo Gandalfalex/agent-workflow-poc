@@ -79,6 +79,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin123
       COOKIE_SECURE: "false"
       CORS_ALLOWED_ORIGINS: "*"
+      BASE_PATH: "/ticketing"
     depends_on:
       - ticketing-postgres-prod
       - keycloak

@@ -5,9 +5,30 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
-func WithFrontend(api http.Handler, dir string) http.Handler {
+// WithBasePath mounts a handler at a specific base path
+func WithBasePath(handler http.Handler, basePath string) http.Handler {
+	if basePath == "" || basePath == "/" {
+		return handler
+	}
+
+	r := chi.NewRouter()
+	r.Mount(basePath, http.StripPrefix(basePath, handler))
+
+	// Health check at root
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	return r
+}
+
+// WithFrontend serves static frontend files with SPA fallback support
+func WithFrontend(api http.Handler, dir string, basePath string) http.Handler {
 	if dir == "" {
 		return api
 	}
@@ -34,6 +55,14 @@ func WithFrontend(api http.Handler, dir string) http.Handler {
 					fileServer.ServeHTTP(w, r)
 					return
 				}
+			}
+
+			// SPA fallback - serve index.html for non-API routes
+			if !strings.HasPrefix(r.URL.Path, "/api/") &&
+				!strings.HasPrefix(r.URL.Path, "/auth/") &&
+				!strings.HasPrefix(r.URL.Path, "/health") {
+				http.ServeFile(w, r, indexPath)
+				return
 			}
 		}
 

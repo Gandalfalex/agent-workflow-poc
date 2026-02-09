@@ -16,6 +16,7 @@ type Config struct {
 	CookieSecure       bool
 	CORSAllowedOrigins []string
 	FrontendDir        string
+	BasePath           string
 }
 
 func Load() Config {
@@ -61,6 +62,18 @@ func Load() Config {
 	}
 	frontendDir := os.Getenv("FRONTEND_DIR")
 
+	basePath := os.Getenv("BASE_PATH")
+	if basePath == "" {
+		basePath = "/"
+	}
+	// Ensure base path starts with / and doesn't end with /
+	if !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	if basePath != "/" && strings.HasSuffix(basePath, "/") {
+		basePath = strings.TrimSuffix(basePath, "/")
+	}
+
 	return Config{
 		Port:               port,
 		DatabaseURL:        dbURL,
@@ -72,6 +85,7 @@ func Load() Config {
 		CookieSecure:       cookieSecure,
 		CORSAllowedOrigins: allowedOrigins,
 		FrontendDir:        frontendDir,
+		BasePath:           basePath,
 	}
 }
 

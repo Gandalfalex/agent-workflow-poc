@@ -56,12 +56,15 @@ func main() {
 		frontendDir = findFrontendDir([]string{"frontend/dist", "../frontend/dist"})
 	}
 	if frontendDir != "" {
-		apiHandler = httpapi.WithFrontend(apiHandler, frontendDir)
+		apiHandler = httpapi.WithFrontend(apiHandler, frontendDir, cfg.BasePath)
 	}
 
+	// Mount the API at the base path
+	finalHandler := httpapi.WithBasePath(apiHandler, cfg.BasePath)
+
 	addr := ":" + cfg.Port
-	log.Printf("ticketing-system api listening on %s", addr)
-	if err := http.ListenAndServe(addr, apiHandler); err != nil {
+	log.Printf("ticketing-system api listening on %s (base path: %s)", addr, cfg.BasePath)
+	if err := http.ListenAndServe(addr, finalHandler); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }

@@ -1,6 +1,6 @@
 http:
   routers:
-    # n8n - /n8n/* (highest priority after keycloak)
+    # n8n - /n8n/* (highest priority)
     n8n:
       rule: "PathPrefix(`/n8n`)"
       service: n8n
@@ -12,12 +12,11 @@ http:
       service: keycloak
       priority: 100
 
-    # Ticketing - everything else (including /auth/login, /auth/logout, /auth/me)
-    # This catches all other paths including root /
+    # Ticketing - /ticketing/* (now behind prefix)
     ticketing:
-      rule: "PathPrefix(`/`)"
+      rule: "PathPrefix(`/ticketing`)"
       service: ticketing
-      priority: 1
+      priority: 50
 
   services:
     n8n:
