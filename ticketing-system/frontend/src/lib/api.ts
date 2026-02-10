@@ -55,7 +55,12 @@ export type ProjectGroupCreateRequest =
 export type ProjectGroupUpdateRequest =
   components["schemas"]["ProjectGroupUpdateRequest"];
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = (
+  import.meta.env.VITE_API_BASE ||
+  (import.meta.env.BASE_URL === "/"
+    ? ""
+    : import.meta.env.BASE_URL.replace(/\/$/, ""))
+).replace(/\/$/, "");
 const DEFAULT_PROJECT_ID = import.meta.env.VITE_PROJECT_ID || "";
 
 function resolveProjectId(projectId?: string): string {

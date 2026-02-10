@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type UserSummary struct {
@@ -29,31 +30,18 @@ func (s *Store) UpsertUser(ctx context.Context, input UserUpsertInput) error {
 	if email == "" {
 		return errors.New("email required")
 	}
-	querySQL := mustSQL("users_upsert.sql", nil)
+	querySQL := mustSQL("users_upsert", nil)
 	_, err := s.db.Exec(ctx, querySQL, input.ID, name, email)
 	return err
 }
 
 func (s *Store) ListUsers(ctx context.Context, query string) ([]UserSummary, error) {
-	querySQL := mustSQL("users_list.sql", map[string]any{
+	querySQL := mustSQL("users_list", map[string]any{
 		"Where": "",
 	})
 
-	rows, err := s.db.Query(ctx, querySQL)
+	users, err := queryMany(ctx, s.db, querySQL, scanUserSummary)
 	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	users := []UserSummary{}
-	for rows.Next() {
-		var user UserSummary
-		if err := rows.Scan(&user.ID, &user.Name, &user.Email); err != nil {
-			return nil, err
-		}
-		users = append(users, user)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -85,4 +73,10 @@ func fuzzyMatch(query, text string) bool {
 		}
 	}
 	return queryIdx == len(query)
+}
+
+func scanUserSummary(row pgx.Row) (UserSummary, error) {
+	var user UserSummary
+	err := row.Scan(&user.ID, &user.Name, &user.Email)
+	return user, err
 }

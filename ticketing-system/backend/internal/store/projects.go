@@ -34,78 +34,23 @@ type ProjectUpdateInput struct {
 }
 
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
-	query := mustSQL("projects_list.sql", nil)
-	rows, err := s.db.Query(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	projects := []Project{}
-	for rows.Next() {
-		project, err := scanProject(rows)
-		if err != nil {
-			return nil, err
-		}
-		projects = append(projects, project)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return projects, nil
+	query := mustSQL("projects_list", nil)
+	return queryMany(ctx, s.db, query, scanProject)
 }
 
 func (s *Store) ListProjectsForUser(ctx context.Context, userID uuid.UUID) ([]Project, error) {
-	query := mustSQL("projects_list_for_user.sql", nil)
-	rows, err := s.db.Query(ctx, query, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	projects := []Project{}
-	for rows.Next() {
-		project, err := scanProject(rows)
-		if err != nil {
-			return nil, err
-		}
-		projects = append(projects, project)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return projects, nil
+	query := mustSQL("projects_list_for_user", nil)
+	return queryMany(ctx, s.db, query, scanProject, userID)
 }
 
 func (s *Store) ListProjectIDsForUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
-	query := mustSQL("project_ids_for_user.sql", nil)
-	rows, err := s.db.Query(ctx, query, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	ids := []uuid.UUID{}
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return ids, nil
+	query := mustSQL("project_ids_for_user", nil)
+	return queryMany(ctx, s.db, query, scanProjectID, userID)
 }
 
 func (s *Store) GetProject(ctx context.Context, id uuid.UUID) (Project, error) {
-	query := mustSQL("projects_get.sql", nil)
-	row := s.db.QueryRow(ctx, query, id)
-	return scanProject(row)
+	query := mustSQL("projects_get", nil)
+	return queryOne(ctx, s.db, query, scanProject, id)
 }
 
 func (s *Store) CreateProject(ctx context.Context, input ProjectCreateInput) (Project, error) {
@@ -119,7 +64,7 @@ func (s *Store) CreateProject(ctx context.Context, input ProjectCreateInput) (Pr
 		return Project{}, errors.New("name required")
 	}
 
-	query := mustSQL("projects_insert.sql", nil)
+	query := mustSQL("projects_insert", nil)
 	var id uuid.UUID
 	if err := s.db.QueryRow(ctx, query, key, name, input.Description).Scan(&id); err != nil {
 		return Project{}, err
@@ -136,7 +81,7 @@ func (s *Store) UpdateProject(ctx context.Context, id uuid.UUID, input ProjectUp
 		input.Name = &name
 	}
 
-	query := mustSQL("projects_update.sql", nil)
+	query := mustSQL("projects_update", nil)
 	var updatedID uuid.UUID
 	if err := s.db.QueryRow(ctx, query, id, input.Name, input.Description).Scan(&updatedID); err != nil {
 		return Project{}, err
@@ -145,15 +90,8 @@ func (s *Store) UpdateProject(ctx context.Context, id uuid.UUID, input ProjectUp
 }
 
 func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) error {
-	query := mustSQL("projects_delete.sql", nil)
-	tag, err := s.db.Exec(ctx, query, id)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	query := mustSQL("projects_delete", nil)
+	return execOne(ctx, s.db, query, pgx.ErrNoRows, id)
 }
 
 func normalizeProjectKey(value string) (string, error) {
@@ -175,4 +113,10 @@ func scanProject(row pgx.Row) (Project, error) {
 		&project.UpdatedAt,
 	)
 	return project, err
+}
+
+func scanProjectID(row pgx.Row) (uuid.UUID, error) {
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

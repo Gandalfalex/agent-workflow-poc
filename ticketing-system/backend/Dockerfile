@@ -16,6 +16,8 @@ RUN npm ci
 COPY frontend ./
 ARG BASE_PATH=/ticketing
 ENV BASE_PATH=${BASE_PATH}
+ARG VITE_API_BASE=
+ENV VITE_API_BASE=${VITE_API_BASE}
 RUN npm run build
 
 FROM alpine:3.20

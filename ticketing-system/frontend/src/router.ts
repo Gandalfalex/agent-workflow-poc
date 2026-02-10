@@ -4,7 +4,7 @@ import SettingsPage from "@/views/SettingsPage.vue";
 import RedirectPage from "@/views/RedirectPage.vue";
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: "/", name: "home", component: RedirectPage },
     {

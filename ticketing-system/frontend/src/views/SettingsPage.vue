@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { useAdminStore } from "@/stores/admin";
@@ -22,6 +22,9 @@ const sessionStore = useSessionStore();
 const settingsTab = ref<"projects" | "webhooks">("projects");
 const selectedProjectId = ref(props.projectId || "");
 const selectedGroupId = ref("");
+const actionNotice = ref<{ tone: "success" | "error"; message: string } | null>(
+    null,
+);
 const newProject = ref({
     key: "",
     name: "",
@@ -86,6 +89,19 @@ const groupLookup = computed<Record<string, Group>>(() => {
     });
     return map;
 });
+const selectedProjectLabel = computed(() => {
+    const project = projects.value.find(
+        (item) => item.id === selectedProjectId.value,
+    );
+    if (!project) return "No project selected";
+    return `${project.key} · ${project.name}`;
+});
+const selectedGroupLabel = computed(() => {
+    const group = groups.value.find(
+        (item) => item.id === selectedGroupId.value,
+    );
+    return group?.name || "No group selected";
+});
 
 const canCreateProject = computed(
     () =>
@@ -114,6 +130,43 @@ const handleAuthError = (err: unknown) => {
         return true;
     }
     return false;
+};
+
+const setNotice = (tone: "success" | "error", message: string) => {
+    actionNotice.value = { tone, message };
+};
+
+const isSubmitShortcut = (event: KeyboardEvent) =>
+    event.key === "Enter" && (event.metaKey || event.ctrlKey);
+
+const submitWithShortcut = (
+    event: KeyboardEvent,
+    submit: () => void | Promise<void>,
+) => {
+    if (!isSubmitShortcut(event)) return;
+    event.preventDefault();
+    void submit();
+};
+
+const clearSearchState = () => {
+    userSearchQuery.value = "";
+    adminStore.clearUserResults();
+};
+
+const onGlobalKeydown = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    let changed = false;
+    if (actionNotice.value) {
+        actionNotice.value = null;
+        changed = true;
+    }
+    if (userSearchQuery.value || userResults.value.length > 0) {
+        clearSearchState();
+        changed = true;
+    }
+    if (changed) {
+        event.preventDefault();
+    }
 };
 
 const loadProjects = async () => {
@@ -182,8 +235,11 @@ const createWebhookSubmit = async () => {
             secret: newWebhook.value.secret.trim() || undefined,
         });
         resetNewWebhook();
+        setNotice("success", "Webhook created.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to create webhook.");
+        }
     }
 };
 
@@ -194,18 +250,30 @@ const toggleWebhook = async (hook: WebhookResponse) => {
         await boardStore.updateWebhook(id, hook.id, {
             enabled: !hook.enabled,
         });
+        setNotice(
+            "success",
+            hook.enabled ? "Webhook disabled." : "Webhook enabled.",
+        );
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to update webhook.");
+        }
     }
 };
 
 const removeWebhook = async (hook: WebhookResponse) => {
     const id = selectedProjectId.value;
     if (!id) return;
+    if (!window.confirm(`Remove webhook for ${hook.url}?`)) {
+        return;
+    }
     try {
         await boardStore.deleteWebhook(id, hook.id);
+        setNotice("success", "Webhook removed.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to remove webhook.");
+        }
     }
 };
 
@@ -216,8 +284,11 @@ const sendTestWebhook = async (hook: WebhookResponse) => {
         await boardStore.testWebhook(id, hook.id, {
             event: hook.events[0] || "ticket.updated",
         });
+        setNotice("success", "Test webhook sent.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to send test webhook.");
+        }
     }
 };
 
@@ -231,8 +302,11 @@ const createProjectSubmit = async () => {
         });
         newProject.value = { key: "", name: "", description: "" };
         selectedProjectId.value = created.id;
+        setNotice("success", "Project created.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to create project.");
+        }
     }
 };
 
@@ -247,8 +321,11 @@ const createGroupSubmit = async () => {
         if (!selectedGroupId.value) {
             selectedGroupId.value = created.id;
         }
+        setNotice("success", "Group created.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to create group.");
+        }
     }
 };
 
@@ -261,8 +338,11 @@ const assignGroupToProject = async () => {
             newProjectGroup.value.groupId,
             newProjectGroup.value.role,
         );
+        setNotice("success", "Group assigned to project.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to assign group to project.");
+        }
     }
 };
 
@@ -274,17 +354,27 @@ const updateProjectGroupRole = async (groupId: string, role: ProjectRole) => {
             groupId,
             role,
         );
+        setNotice("success", "Project role updated.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to update project role.");
+        }
     }
 };
 
 const removeGroupFromProject = async (groupId: string) => {
     if (!selectedProjectId.value) return;
+    const label = groupLookup.value[groupId]?.name || "this group";
+    if (!window.confirm(`Remove ${label} from project access?`)) {
+        return;
+    }
     try {
         await adminStore.removeGroup(selectedProjectId.value, groupId);
+        setNotice("success", "Group removed from project.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to remove group from project.");
+        }
     }
 };
 
@@ -298,17 +388,26 @@ const addMemberToGroup = async (userId?: string) => {
         newGroupMember.value.userId = "";
         adminStore.clearUserResults();
         userSearchQuery.value = "";
+        setNotice("success", "Member added to group.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to add member to group.");
+        }
     }
 };
 
 const removeMemberFromGroup = async (userId: string) => {
     if (!selectedGroupId.value) return;
+    if (!window.confirm("Remove this member from the group?")) {
+        return;
+    }
     try {
         await adminStore.removeMember(selectedGroupId.value, userId);
+        setNotice("success", "Member removed from group.");
     } catch (err) {
-        handleAuthError(err);
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to remove member from group.");
+        }
     }
 };
 
@@ -374,6 +473,7 @@ const sortUserResultsByRelevance = (query: string) => {
 };
 
 onMounted(async () => {
+    window.addEventListener("keydown", onGlobalKeydown);
     await loadProjects();
     if (props.projectId && props.projectId !== selectedProjectId.value) {
         selectedProjectId.value = props.projectId;
@@ -386,6 +486,10 @@ onMounted(async () => {
     if (selectedGroupId.value) {
         await loadGroupMembers();
     }
+});
+
+onUnmounted(() => {
+    window.removeEventListener("keydown", onGlobalKeydown);
 });
 
 watch(
@@ -434,6 +538,23 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'webhooks'"
             >
                 Webhooks
+            </Button>
+        </div>
+    </section>
+
+    <section
+        v-if="actionNotice"
+        class="rounded-2xl border px-4 py-3 text-sm"
+        :class="
+            actionNotice.tone === 'success'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                : 'border-destructive/40 bg-destructive/10 text-destructive'
+        "
+    >
+        <div class="flex items-center justify-between gap-4">
+            <p>{{ actionNotice.message }}</p>
+            <Button variant="ghost" size="sm" @click="actionNotice = null">
+                Dismiss
             </Button>
         </div>
     </section>
@@ -488,6 +609,9 @@ watch(selectedGroupId, async () => {
                 >
                     No projects yet. Create the first one.
                 </p>
+                <p v-else class="text-xs text-muted-foreground">
+                    Active: {{ selectedProjectLabel }}
+                </p>
             </div>
         </div>
         <div class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm">
@@ -509,6 +633,12 @@ watch(selectedGroupId, async () => {
                     maxlength="4"
                     placeholder="PROJ"
                     class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-ring"
+                    @keydown="
+                        submitWithShortcut(
+                            $event as KeyboardEvent,
+                            createProjectSubmit,
+                        )
+                    "
                 />
                 <label class="text-xs font-semibold text-muted-foreground"
                     >Name</label
@@ -518,6 +648,12 @@ watch(selectedGroupId, async () => {
                     type="text"
                     placeholder="Payments platform"
                     class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    @keydown="
+                        submitWithShortcut(
+                            $event as KeyboardEvent,
+                            createProjectSubmit,
+                        )
+                    "
                 />
                 <label class="text-xs font-semibold text-muted-foreground"
                     >Description</label
@@ -527,6 +663,12 @@ watch(selectedGroupId, async () => {
                     type="text"
                     placeholder="Optional summary"
                     class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    @keydown="
+                        submitWithShortcut(
+                            $event as KeyboardEvent,
+                            createProjectSubmit,
+                        )
+                    "
                 />
                 <Button
                     size="sm"
@@ -595,6 +737,9 @@ watch(selectedGroupId, async () => {
                     <p v-if="groupError" class="text-xs text-destructive">
                         {{ groupError }}
                     </p>
+                    <p class="text-xs text-muted-foreground">
+                        Active group: {{ selectedGroupLabel }}
+                    </p>
                 </div>
 
                 <!-- Create Group Details Submenu -->
@@ -612,12 +757,24 @@ watch(selectedGroupId, async () => {
                             type="text"
                             placeholder="Support team"
                             class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            @keydown="
+                                submitWithShortcut(
+                                    $event as KeyboardEvent,
+                                    createGroupSubmit,
+                                )
+                            "
                         />
                         <input
                             v-model="newGroup.description"
                             type="text"
                             placeholder="Optional description"
                             class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            @keydown="
+                                submitWithShortcut(
+                                    $event as KeyboardEvent,
+                                    createGroupSubmit,
+                                )
+                            "
                         />
                         <Button
                             size="sm"
@@ -652,6 +809,7 @@ watch(selectedGroupId, async () => {
                                     placeholder="Fuzzy search: name, email (e.g., 'ich', 'admin', 'ich@ich')"
                                     class="flex-1 rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
                                     @keyup.enter="searchUsersSubmit"
+                                    @keydown.esc.prevent="clearSearchState"
                                 />
                                 <Button
                                     variant="outline"
@@ -709,6 +867,15 @@ watch(selectedGroupId, async () => {
                                     type="text"
                                     placeholder="User ID"
                                     class="flex-1 rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                                    @keydown="
+                                        submitWithShortcut(
+                                            $event as KeyboardEvent,
+                                            () =>
+                                                addMemberToGroup(
+                                                    newGroupMember.userId,
+                                                ),
+                                        )
+                                    "
                                 />
                                 <Button
                                     size="sm"
@@ -782,6 +949,7 @@ watch(selectedGroupId, async () => {
                                     <Button
                                         variant="ghost"
                                         size="sm"
+                                        :disabled="groupMemberLoading"
                                         @click="
                                             removeMemberFromGroup(member.userId)
                                         "
@@ -863,6 +1031,7 @@ watch(selectedGroupId, async () => {
                                     <Button
                                         variant="ghost"
                                         size="sm"
+                                        :disabled="projectGroupLoading"
                                         @click="
                                             removeGroupFromProject(
                                                 projectGroup.groupId,
@@ -907,7 +1076,11 @@ watch(selectedGroupId, async () => {
                         </select>
                         <Button
                             size="sm"
-                            :disabled="!canAssignGroup || projectGroupLoading"
+                            :disabled="
+                                !selectedProjectId ||
+                                !canAssignGroup ||
+                                projectGroupLoading
+                            "
                             @click="assignGroupToProject"
                         >
                             Add to project
@@ -938,6 +1111,9 @@ watch(selectedGroupId, async () => {
             <p class="mt-2 text-sm text-muted-foreground">
                 Add endpoints to push ticket updates to your automation flows.
             </p>
+            <p class="mt-2 text-xs text-muted-foreground">
+                Target project: {{ selectedProjectLabel }}
+            </p>
             <div class="mt-6 space-y-4">
                 <div>
                     <label class="text-xs font-semibold text-muted-foreground"
@@ -948,6 +1124,12 @@ watch(selectedGroupId, async () => {
                         type="url"
                         placeholder="https://your-n8n-webhook"
                         class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        @keydown="
+                            submitWithShortcut(
+                                $event as KeyboardEvent,
+                                createWebhookSubmit,
+                            )
+                        "
                     />
                 </div>
                 <div>
@@ -979,6 +1161,12 @@ watch(selectedGroupId, async () => {
                         type="text"
                         placeholder="Shared secret"
                         class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        @keydown="
+                            submitWithShortcut(
+                                $event as KeyboardEvent,
+                                createWebhookSubmit,
+                            )
+                        "
                     />
                 </div>
                 <label
@@ -998,10 +1186,14 @@ watch(selectedGroupId, async () => {
                     {{ webhookError }}
                 </div>
                 <Button
-                    :disabled="!canCreateWebhook"
+                    :disabled="
+                        !selectedProjectId ||
+                        !canCreateWebhook ||
+                        webhookLoading
+                    "
                     @click="createWebhookSubmit"
                 >
-                    Create webhook
+                    {{ webhookLoading ? "Saving..." : "Create webhook" }}
                 </Button>
             </div>
         </div>
@@ -1059,6 +1251,7 @@ watch(selectedGroupId, async () => {
                             <Button
                                 variant="outline"
                                 size="sm"
+                                :disabled="webhookLoading"
                                 @click="toggleWebhook(hook)"
                             >
                                 {{ hook.enabled ? "Disable" : "Enable" }}
@@ -1066,6 +1259,7 @@ watch(selectedGroupId, async () => {
                             <Button
                                 variant="outline"
                                 size="sm"
+                                :disabled="webhookLoading"
                                 @click="sendTestWebhook(hook)"
                             >
                                 Send test
@@ -1073,6 +1267,7 @@ watch(selectedGroupId, async () => {
                             <Button
                                 variant="ghost"
                                 size="sm"
+                                :disabled="webhookLoading"
                                 @click="removeWebhook(hook)"
                             >
                                 Remove

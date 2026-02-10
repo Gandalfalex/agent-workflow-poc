@@ -8,7 +8,7 @@ import (
 	"text/template"
 )
 
-//go:embed sql/*.sql
+//go:embed sql/*.go.templ
 var sqlFiles embed.FS
 
 var (
@@ -20,11 +20,15 @@ func mustSQL(name string, data any) string {
 	sqlOnce.Do(func() {
 		sqlTemplates = template.Must(template.New("sql").Funcs(template.FuncMap{
 			"trim": strings.TrimSpace,
-		}).ParseFS(sqlFiles, "sql/*.sql"))
+		}).ParseFS(sqlFiles, "sql/*.go.templ"))
 	})
 
 	var buf bytes.Buffer
-	if err := sqlTemplates.ExecuteTemplate(&buf, name, data); err != nil {
+	templateName := strings.TrimSpace(name)
+	if !strings.HasSuffix(templateName, ".sql") {
+		templateName += ".sql"
+	}
+	if err := sqlTemplates.ExecuteTemplate(&buf, templateName, data); err != nil {
 		panic(err)
 	}
 	return strings.TrimSpace(buf.String())

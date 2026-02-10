@@ -41,32 +41,13 @@ type ProjectGroup struct {
 }
 
 func (s *Store) ListGroups(ctx context.Context) ([]Group, error) {
-	query := mustSQL("groups_list.sql", nil)
-	rows, err := s.db.Query(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	groups := []Group{}
-	for rows.Next() {
-		group, err := scanGroup(rows)
-		if err != nil {
-			return nil, err
-		}
-		groups = append(groups, group)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return groups, nil
+	query := mustSQL("groups_list", nil)
+	return queryMany(ctx, s.db, query, scanGroup)
 }
 
 func (s *Store) GetGroup(ctx context.Context, id uuid.UUID) (Group, error) {
-	query := mustSQL("groups_get.sql", nil)
-	row := s.db.QueryRow(ctx, query, id)
-	return scanGroup(row)
+	query := mustSQL("groups_get", nil)
+	return queryOne(ctx, s.db, query, scanGroup, id)
 }
 
 func (s *Store) CreateGroup(ctx context.Context, input GroupCreateInput) (Group, error) {
@@ -75,7 +56,7 @@ func (s *Store) CreateGroup(ctx context.Context, input GroupCreateInput) (Group,
 		return Group{}, errors.New("name required")
 	}
 
-	query := mustSQL("groups_insert.sql", nil)
+	query := mustSQL("groups_insert", nil)
 	var id uuid.UUID
 	if err := s.db.QueryRow(ctx, query, name, input.Description).Scan(&id); err != nil {
 		return Group{}, err
@@ -92,7 +73,7 @@ func (s *Store) UpdateGroup(ctx context.Context, id uuid.UUID, input GroupUpdate
 		input.Name = &name
 	}
 
-	query := mustSQL("groups_update.sql", nil)
+	query := mustSQL("groups_update", nil)
 	var updatedID uuid.UUID
 	if err := s.db.QueryRow(ctx, query, id, input.Name, input.Description).Scan(&updatedID); err != nil {
 		return Group{}, err
@@ -101,43 +82,18 @@ func (s *Store) UpdateGroup(ctx context.Context, id uuid.UUID, input GroupUpdate
 }
 
 func (s *Store) DeleteGroup(ctx context.Context, id uuid.UUID) error {
-	query := mustSQL("groups_delete.sql", nil)
-	tag, err := s.db.Exec(ctx, query, id)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	query := mustSQL("groups_delete", nil)
+	return execOne(ctx, s.db, query, pgx.ErrNoRows, id)
 }
 
 func (s *Store) ListGroupMembers(ctx context.Context, groupID uuid.UUID) ([]GroupMember, error) {
-	query := mustSQL("group_members_list.sql", nil)
-	rows, err := s.db.Query(ctx, query, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	members := []GroupMember{}
-	for rows.Next() {
-		var member GroupMember
-		if err := rows.Scan(&member.GroupID, &member.UserID, &member.UserName); err != nil {
-			return nil, err
-		}
-		members = append(members, member)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return members, nil
+	query := mustSQL("group_members_list", nil)
+	return queryMany(ctx, s.db, query, scanGroupMember, groupID)
 }
 
 func (s *Store) AddGroupMember(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (GroupMember, error) {
 	// Validate that the user exists before attempting to add them
-	checkQuery := mustSQL("users_exists.sql", nil)
+	checkQuery := mustSQL("users_exists", nil)
 	var exists bool
 	if err := s.db.QueryRow(ctx, checkQuery, userID).Scan(&exists); err != nil {
 		return GroupMember{}, err
@@ -146,7 +102,7 @@ func (s *Store) AddGroupMember(ctx context.Context, groupID uuid.UUID, userID uu
 		return GroupMember{}, errors.New("user not found")
 	}
 
-	query := mustSQL("group_members_insert.sql", nil)
+	query := mustSQL("group_members_insert", nil)
 	var member GroupMember
 	if err := s.db.QueryRow(ctx, query, groupID, userID).Scan(&member.GroupID, &member.UserID, &member.UserName); err != nil {
 		return GroupMember{}, err
@@ -155,38 +111,13 @@ func (s *Store) AddGroupMember(ctx context.Context, groupID uuid.UUID, userID uu
 }
 
 func (s *Store) DeleteGroupMember(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) error {
-	query := mustSQL("group_members_delete.sql", nil)
-	tag, err := s.db.Exec(ctx, query, groupID, userID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	query := mustSQL("group_members_delete", nil)
+	return execOne(ctx, s.db, query, pgx.ErrNoRows, groupID, userID)
 }
 
 func (s *Store) ListProjectGroups(ctx context.Context, projectID uuid.UUID) ([]ProjectGroup, error) {
-	query := mustSQL("project_groups_list.sql", nil)
-	rows, err := s.db.Query(ctx, query, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	items := []ProjectGroup{}
-	for rows.Next() {
-		var item ProjectGroup
-		if err := rows.Scan(&item.ProjectID, &item.GroupID, &item.Role); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return items, nil
+	query := mustSQL("project_groups_list", nil)
+	return queryMany(ctx, s.db, query, scanProjectGroup, projectID)
 }
 
 func (s *Store) AddProjectGroup(ctx context.Context, projectID uuid.UUID, groupID uuid.UUID, role string) (ProjectGroup, error) {
@@ -194,7 +125,7 @@ func (s *Store) AddProjectGroup(ctx context.Context, projectID uuid.UUID, groupI
 	if err != nil {
 		return ProjectGroup{}, err
 	}
-	query := mustSQL("project_groups_insert.sql", nil)
+	query := mustSQL("project_groups_insert", nil)
 	var item ProjectGroup
 	if err := s.db.QueryRow(ctx, query, projectID, groupID, role).Scan(&item.ProjectID, &item.GroupID, &item.Role); err != nil {
 		return ProjectGroup{}, err
@@ -207,7 +138,7 @@ func (s *Store) UpdateProjectGroup(ctx context.Context, projectID uuid.UUID, gro
 	if err != nil {
 		return ProjectGroup{}, err
 	}
-	query := mustSQL("project_groups_update.sql", nil)
+	query := mustSQL("project_groups_update", nil)
 	var item ProjectGroup
 	if err := s.db.QueryRow(ctx, query, projectID, groupID, role).Scan(&item.ProjectID, &item.GroupID, &item.Role); err != nil {
 		return ProjectGroup{}, err
@@ -216,15 +147,8 @@ func (s *Store) UpdateProjectGroup(ctx context.Context, projectID uuid.UUID, gro
 }
 
 func (s *Store) DeleteProjectGroup(ctx context.Context, projectID uuid.UUID, groupID uuid.UUID) error {
-	query := mustSQL("project_groups_delete.sql", nil)
-	tag, err := s.db.Exec(ctx, query, projectID, groupID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	query := mustSQL("project_groups_delete", nil)
+	return execOne(ctx, s.db, query, pgx.ErrNoRows, projectID, groupID)
 }
 
 func normalizeProjectRole(value string) (string, error) {
@@ -247,4 +171,16 @@ func scanGroup(row pgx.Row) (Group, error) {
 		&group.UpdatedAt,
 	)
 	return group, err
+}
+
+func scanGroupMember(row pgx.Row) (GroupMember, error) {
+	var member GroupMember
+	err := row.Scan(&member.GroupID, &member.UserID, &member.UserName)
+	return member, err
+}
+
+func scanProjectGroup(row pgx.Row) (ProjectGroup, error) {
+	var item ProjectGroup
+	err := row.Scan(&item.ProjectID, &item.GroupID, &item.Role)
+	return item, err
 }

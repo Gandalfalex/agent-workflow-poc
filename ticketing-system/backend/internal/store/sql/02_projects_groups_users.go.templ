@@ -1,0 +1,159 @@
+{{define "project_fields"}}
+id, key, name, description, created_at, updated_at
+{{end}}
+
+{{define "project_fields_p"}}
+p.id, p.key, p.name, p.description, p.created_at, p.updated_at
+{{end}}
+
+{{define "group_fields"}}
+id, name, description, created_at, updated_at
+{{end}}
+
+{{define "projects_delete.sql"}}
+DELETE FROM projects WHERE id = $1
+{{end}}
+
+{{define "projects_get.sql"}}
+SELECT {{template "project_fields" .}}
+FROM projects
+WHERE id = $1
+{{end}}
+
+{{define "projects_insert.sql"}}
+INSERT INTO projects (key, name, description)
+VALUES ($1, $2, $3)
+RETURNING id
+{{end}}
+
+{{define "projects_list.sql"}}
+SELECT {{template "project_fields" .}}
+FROM projects
+ORDER BY name ASC
+{{end}}
+
+{{define "projects_list_for_user.sql"}}
+SELECT DISTINCT {{template "project_fields_p" .}}
+FROM projects p
+JOIN project_groups pg ON pg.project_id = p.id
+JOIN group_memberships gm ON gm.group_id = pg.group_id
+WHERE gm.user_id = $1
+ORDER BY p.name ASC
+{{end}}
+
+{{define "projects_update.sql"}}
+UPDATE projects
+SET {{ .Updates }}
+WHERE id = ${{ .IDArg }}
+{{end}}
+
+{{define "project_groups_delete.sql"}}
+DELETE FROM project_groups
+WHERE project_id = $1 AND group_id = $2
+{{end}}
+
+{{define "project_groups_insert.sql"}}
+INSERT INTO project_groups (project_id, group_id, role)
+VALUES ($1, $2, $3)
+ON CONFLICT (project_id, group_id) DO UPDATE SET role = EXCLUDED.role
+RETURNING project_id, group_id, role
+{{end}}
+
+{{define "project_groups_list.sql"}}
+SELECT project_id, group_id, role
+FROM project_groups
+WHERE project_id = $1
+ORDER BY group_id ASC
+{{end}}
+
+{{define "project_groups_update.sql"}}
+UPDATE project_groups
+SET role = $3
+WHERE project_id = $1 AND group_id = $2
+RETURNING project_id, group_id, role
+{{end}}
+
+{{define "project_ids_for_user.sql"}}
+SELECT DISTINCT pg.project_id
+FROM project_groups pg
+JOIN group_memberships gm ON gm.group_id = pg.group_id
+WHERE gm.user_id = $1
+{{end}}
+
+{{define "groups_delete.sql"}}
+DELETE FROM groups
+WHERE id = $1
+{{end}}
+
+{{define "groups_get.sql"}}
+SELECT {{template "group_fields" .}}
+FROM groups
+WHERE id = $1
+{{end}}
+
+{{define "groups_insert.sql"}}
+INSERT INTO groups (name, description)
+VALUES ($1, $2)
+RETURNING id
+{{end}}
+
+{{define "groups_list.sql"}}
+SELECT {{template "group_fields" .}}
+FROM groups
+ORDER BY name ASC
+{{end}}
+
+{{define "groups_update.sql"}}
+UPDATE groups
+SET name = COALESCE($2, name),
+    description = COALESCE($3, description),
+    updated_at = now()
+WHERE id = $1
+RETURNING id
+{{end}}
+
+{{define "group_members_delete.sql"}}
+DELETE FROM group_memberships
+WHERE group_id = $1 AND user_id = $2
+{{end}}
+
+{{define "group_members_insert.sql"}}
+WITH upserted AS (
+  INSERT INTO group_memberships (group_id, user_id)
+  VALUES ($1, $2)
+  ON CONFLICT (group_id, user_id) DO UPDATE SET user_id = EXCLUDED.user_id
+  RETURNING group_id, user_id
+)
+SELECT upserted.group_id, upserted.user_id, u.name
+FROM upserted
+LEFT JOIN users u ON u.id = upserted.user_id
+{{end}}
+
+{{define "group_members_list.sql"}}
+SELECT gm.group_id, gm.user_id, u.name
+FROM group_memberships gm
+LEFT JOIN users u ON u.id = gm.user_id
+WHERE gm.group_id = $1
+ORDER BY u.name ASC NULLS LAST
+{{end}}
+
+{{define "users_exists.sql"}}
+SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)
+{{end}}
+
+{{define "users_list.sql"}}
+SELECT id, name, email
+FROM users
+{{- if .Where }}
+WHERE {{ .Where }}
+{{- end }}
+ORDER BY name ASC
+{{end}}
+
+{{define "users_upsert.sql"}}
+INSERT INTO users (id, name, email)
+VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE
+SET name = EXCLUDED.name,
+    email = EXCLUDED.email
+{{end}}

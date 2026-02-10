@@ -30,32 +30,13 @@ type StoryUpdateInput struct {
 }
 
 func (s *Store) ListStories(ctx context.Context, projectID uuid.UUID) ([]Story, error) {
-	query := mustSQL("stories_list.sql", nil)
-	rows, err := s.db.Query(ctx, query, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	stories := []Story{}
-	for rows.Next() {
-		story, err := scanStory(rows)
-		if err != nil {
-			return nil, err
-		}
-		stories = append(stories, story)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return stories, nil
+	query := mustSQL("stories_list", nil)
+	return queryMany(ctx, s.db, query, scanStory, projectID)
 }
 
 func (s *Store) GetStory(ctx context.Context, id uuid.UUID) (Story, error) {
-	query := mustSQL("stories_get.sql", nil)
-	row := s.db.QueryRow(ctx, query, id)
-	return scanStory(row)
+	query := mustSQL("stories_get", nil)
+	return queryOne(ctx, s.db, query, scanStory, id)
 }
 
 func (s *Store) CreateStory(ctx context.Context, projectID uuid.UUID, input StoryCreateInput) (Story, error) {
@@ -64,7 +45,7 @@ func (s *Store) CreateStory(ctx context.Context, projectID uuid.UUID, input Stor
 		return Story{}, errors.New("title required")
 	}
 
-	query := mustSQL("stories_insert.sql", nil)
+	query := mustSQL("stories_insert", nil)
 	var id uuid.UUID
 	if err := s.db.QueryRow(ctx, query, projectID, title, input.Description).Scan(&id); err != nil {
 		return Story{}, err
@@ -81,7 +62,7 @@ func (s *Store) UpdateStory(ctx context.Context, id uuid.UUID, input StoryUpdate
 		input.Title = &title
 	}
 
-	query := mustSQL("stories_update.sql", nil)
+	query := mustSQL("stories_update", nil)
 	var updatedID uuid.UUID
 	if err := s.db.QueryRow(ctx, query, id, input.Title, input.Description).Scan(&updatedID); err != nil {
 		return Story{}, err
@@ -90,15 +71,8 @@ func (s *Store) UpdateStory(ctx context.Context, id uuid.UUID, input StoryUpdate
 }
 
 func (s *Store) DeleteStory(ctx context.Context, id uuid.UUID) error {
-	query := mustSQL("stories_delete.sql", nil)
-	tag, err := s.db.Exec(ctx, query, id)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	query := mustSQL("stories_delete", nil)
+	return execOne(ctx, s.db, query, pgx.ErrNoRows, id)
 }
 
 func scanStory(row pgx.Row) (Story, error) {

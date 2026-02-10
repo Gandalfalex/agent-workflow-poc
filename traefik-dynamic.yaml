@@ -4,6 +4,8 @@ http:
     n8n:
       rule: "PathPrefix(`/n8n`)"
       service: n8n
+      middlewares:
+        - n8n-slash
       priority: 200
 
     # Keycloak - /realms and /resources
@@ -21,6 +23,12 @@ http:
       priority: 50
 
   middlewares:
+    n8n-slash:
+      redirectRegex:
+        regex: "^(https?)://([^/]+)/n8n$"
+        replacement: "${1}://${2}/n8n/"
+        permanent: true
+
     ticketing-stripprefix:
       stripPrefix:
         prefixes:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import BoardView from "@/components/app/BoardView.vue";
 import NewTicketModal from "@/components/app/NewTicketModal.vue";
 import StoryModal from "@/components/app/StoryModal.vue";
@@ -18,6 +18,8 @@ const adminStore = useAdminStore();
 
 const showNewTicket = ref(false);
 const showStoryModal = ref(false);
+const boardSearch = ref("");
+const boardSearchInput = ref<HTMLInputElement | null>(null);
 const selectedTicket = ref<TicketResponse | null>(null);
 const ticketEditor = ref({
     title: "",
@@ -182,6 +184,69 @@ const storyRows = computed<StoryRow[]>(() => {
     return ordered;
 });
 
+const hasActiveSearch = computed(() => boardSearch.value.trim().length > 0);
+const filteredStoryRows = computed<StoryRow[]>(() => {
+    const query = boardSearch.value.trim().toLowerCase();
+    if (!query) {
+        return storyRows.value;
+    }
+
+    const contains = (value?: string | null) =>
+        (value || "").toLowerCase().includes(query);
+
+    return storyRows.value
+        .map((row) => {
+            const storyMatches =
+                contains(row.title) || contains(row.description);
+            const nextBuckets: Record<string, TicketResponse[]> = {};
+            let ticketMatches = 0;
+
+            states.value.forEach((state) => {
+                const filtered = (row.ticketsByState[state.id] || []).filter(
+                    (ticket) =>
+                        contains(ticket.key) ||
+                        contains(ticket.title) ||
+                        contains(ticket.description) ||
+                        contains(ticket.assignee?.name),
+                );
+                nextBuckets[state.id] = filtered;
+                ticketMatches += filtered.length;
+            });
+
+            if (storyMatches && ticketMatches === 0) {
+                states.value.forEach((state) => {
+                    nextBuckets[state.id] = row.ticketsByState[state.id] || [];
+                });
+                ticketMatches = Object.values(nextBuckets).reduce(
+                    (sum, bucket) => sum + bucket.length,
+                    0,
+                );
+            }
+
+            if (!storyMatches && ticketMatches === 0) {
+                return null;
+            }
+
+            return {
+                ...row,
+                ticketsByState: nextBuckets,
+            };
+        })
+        .filter((row): row is StoryRow => row !== null);
+});
+const visibleTicketCount = computed(() =>
+    filteredStoryRows.value.reduce(
+        (sum, row) =>
+            sum +
+            states.value.reduce(
+                (stateSum, state) =>
+                    stateSum + (row.ticketsByState[state.id]?.length || 0),
+                0,
+            ),
+        0,
+    ),
+);
+
 const canSubmit = computed(() => newTicket.value.title.trim().length > 0);
 const canCreateStory = computed(() => newStory.value.title.trim().length > 0);
 
@@ -327,6 +392,47 @@ const openNewTicket = async (stateId?: string, storyId?: string) => {
     }
 };
 
+const clearBoardSearch = () => {
+    boardSearch.value = "";
+};
+
+const shouldHandleGlobalShortcut = (event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return true;
+    const tag = target.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") {
+        return false;
+    }
+    if (target.isContentEditable) {
+        return false;
+    }
+    return true;
+};
+
+const onGlobalKeydown = async (event: KeyboardEvent) => {
+    if (!shouldHandleGlobalShortcut(event)) {
+        return;
+    }
+    if (event.key === "/") {
+        event.preventDefault();
+        await nextTick();
+        boardSearchInput.value?.focus();
+        boardSearchInput.value?.select();
+        return;
+    }
+    if (event.key.toLowerCase() === "n") {
+        if (
+            showNewTicket.value ||
+            showStoryModal.value ||
+            selectedTicket.value
+        ) {
+            return;
+        }
+        event.preventDefault();
+        await openNewTicket();
+    }
+};
+
 const closeNewTicket = () => {
     showNewTicket.value = false;
 };
@@ -449,7 +555,14 @@ const updateNewStory = (value: typeof newStory.value) => {
     newStory.value = value;
 };
 
-onMounted(refreshBoard);
+onMounted(() => {
+    window.addEventListener("keydown", onGlobalKeydown);
+    refreshBoard();
+});
+
+onUnmounted(() => {
+    window.removeEventListener("keydown", onGlobalKeydown);
+});
 
 watch(
     () => props.projectId,
@@ -461,6 +574,39 @@ watch(
 </script>
 
 <template>
+    <section class="rounded-2xl border border-border bg-card/70 px-4 py-3">
+        <div
+            class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+        >
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                <span class="rounded-full bg-muted px-2 py-1 font-semibold"
+                    >/</span
+                >
+                <span>Focus search</span>
+                <span class="rounded-full bg-muted px-2 py-1 font-semibold"
+                    >N</span
+                >
+                <span>New ticket</span>
+            </div>
+            <div class="flex w-full items-center gap-2 md:w-auto">
+                <input
+                    ref="boardSearchInput"
+                    v-model="boardSearch"
+                    type="text"
+                    placeholder="Filter by ticket key, title, description, assignee, or story..."
+                    class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring md:w-[440px]"
+                />
+                <button
+                    v-if="hasActiveSearch"
+                    class="rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                    @click="clearBoardSearch"
+                >
+                    Clear
+                </button>
+            </div>
+        </div>
+    </section>
+
     <section
         v-if="errorMessage"
         class="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm"
@@ -471,18 +617,21 @@ watch(
     <BoardView
         :loading="loading"
         :states="states"
-        :story-rows="storyRows"
+        :story-rows="filteredStoryRows"
         :stories-count="storiesCount"
-        :tickets-count="tickets.length"
+        :tickets-count="visibleTicketCount"
         :webhooks-count="webhooks.length"
         :api-mode="apiMode"
         :workflow-setup-busy="workflowSetupBusy"
         :workflow-setup-error="workflowSetupError"
+        :has-active-filter="hasActiveSearch"
+        :search-query="boardSearch"
         :on-initialize-workflow="initializeWorkflow"
         :on-open-story-modal="openStoryModal"
         :on-delete-story="deleteStorySubmit"
         :on-open-ticket="openTicket"
         :on-open-new-ticket="openNewTicket"
+        :on-clear-filter="clearBoardSearch"
         :on-drag-start="onDragStart"
         :on-drag-end="onDragEnd"
         :on-drop-column="onDropColumn"

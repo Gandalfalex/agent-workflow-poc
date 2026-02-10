@@ -1,0 +1,88 @@
+{{define "ticket_select_fields"}}
+t.id, t.project_id, p.key, t.key, t.number, t.type, t.story_id, s2.title, s2.description, s2.created_at, s2.updated_at,
+t.title, t.description, t.state_id, t.assignee_id,
+t.priority, t.position, t.created_at, t.updated_at,
+s.name, s.sort_order, s.is_default, s.is_closed,
+u.name
+{{end}}
+
+{{define "ticket_select_joins"}}
+FROM tickets t
+JOIN projects p ON p.id = t.project_id
+JOIN workflow_states s ON s.id = t.state_id
+LEFT JOIN stories s2 ON s2.id = t.story_id
+LEFT JOIN users u ON u.id = t.assignee_id
+{{end}}
+
+{{define "tickets_board.sql"}}
+SELECT {{template "ticket_select_fields" .}}
+{{template "ticket_select_joins" .}}
+WHERE t.project_id = $1
+ORDER BY s.sort_order ASC, t.position ASC
+{{end}}
+
+{{define "tickets_count.sql"}}
+SELECT COUNT(*)
+FROM tickets t
+{{- if .Where }}
+WHERE {{ .Where }}
+{{- end }}
+{{end}}
+
+{{define "tickets_current_state.sql"}}
+SELECT state_id FROM tickets WHERE id = $1
+{{end}}
+
+{{define "tickets_delete.sql"}}
+DELETE FROM tickets WHERE id = $1
+{{end}}
+
+{{define "tickets_get.sql"}}
+SELECT {{template "ticket_select_fields" .}}
+{{template "ticket_select_joins" .}}
+WHERE t.id = $1
+{{end}}
+
+{{define "tickets_insert.sql"}}
+INSERT INTO tickets (project_id, title, description, type, story_id, state_id, assignee_id, priority, position)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id
+{{end}}
+
+{{define "tickets_list.sql"}}
+SELECT {{template "ticket_select_fields" .}}
+{{template "ticket_select_joins" .}}
+{{- if .Where }}
+WHERE {{ .Where }}
+{{- end }}
+ORDER BY s.sort_order ASC, t.position ASC
+LIMIT ${{ .LimitArg }} OFFSET ${{ .OffsetArg }}
+{{end}}
+
+{{define "tickets_next_position.sql"}}
+SELECT COALESCE(MAX(position), 0) + 1
+FROM tickets
+WHERE state_id = $1
+{{end}}
+
+{{define "tickets_state_any.sql"}}
+SELECT id
+FROM workflow_states
+WHERE project_id = $1
+ORDER BY sort_order ASC
+LIMIT 1
+{{end}}
+
+{{define "tickets_state_default.sql"}}
+SELECT id
+FROM workflow_states
+WHERE project_id = $1 AND is_default = true
+ORDER BY sort_order ASC
+LIMIT 1
+{{end}}
+
+{{define "tickets_update.sql"}}
+UPDATE tickets
+SET {{ .Updates }}
+WHERE id = ${{ .IDArg }}
+{{end}}

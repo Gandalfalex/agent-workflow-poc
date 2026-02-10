@@ -99,7 +99,7 @@ func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket,
 
 	where := strings.Join(conditions, " AND ")
 
-	countSQL := mustSQL("tickets_count.sql", map[string]any{
+	countSQL := mustSQL("tickets_count", map[string]any{
 		"Where": where,
 	})
 	var total int
@@ -108,27 +108,14 @@ func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket,
 	}
 
 	args = append(args, filter.Limit, filter.Offset)
-	listSQL := mustSQL("tickets_list.sql", map[string]any{
+	listSQL := mustSQL("tickets_list", map[string]any{
 		"Where":     where,
 		"LimitArg":  len(args) - 1,
 		"OffsetArg": len(args),
 	})
 
-	rows, err := s.db.Query(ctx, listSQL, args...)
+	tickets, err := queryMany(ctx, s.db, listSQL, scanTicket, args...)
 	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	tickets := []Ticket{}
-	for rows.Next() {
-		ticket, err := scanTicket(rows)
-		if err != nil {
-			return nil, 0, err
-		}
-		tickets = append(tickets, ticket)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
 
@@ -136,33 +123,13 @@ func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket,
 }
 
 func (s *Store) ListTicketsForBoard(ctx context.Context, projectID uuid.UUID) ([]Ticket, error) {
-	query := mustSQL("tickets_board.sql", nil)
-	rows, err := s.db.Query(ctx, query, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	tickets := []Ticket{}
-	for rows.Next() {
-		ticket, err := scanTicket(rows)
-		if err != nil {
-			return nil, err
-		}
-		tickets = append(tickets, ticket)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return tickets, nil
+	query := mustSQL("tickets_board", nil)
+	return queryMany(ctx, s.db, query, scanTicket, projectID)
 }
 
 func (s *Store) GetTicket(ctx context.Context, id uuid.UUID) (Ticket, error) {
-	query := mustSQL("tickets_get.sql", nil)
-	row := s.db.QueryRow(ctx, query, id)
-
-	return scanTicket(row)
+	query := mustSQL("tickets_get", nil)
+	return queryOne(ctx, s.db, query, scanTicket, id)
 }
 
 func (s *Store) CreateTicket(ctx context.Context, projectID uuid.UUID, input TicketCreateInput) (Ticket, error) {
@@ -188,7 +155,7 @@ func (s *Store) CreateTicket(ctx context.Context, projectID uuid.UUID, input Tic
 	}
 
 	var ticketID uuid.UUID
-	query := mustSQL("tickets_insert.sql", nil)
+	query := mustSQL("tickets_insert", nil)
 	row := s.db.QueryRow(ctx, query, projectID, title, input.Description, ticketType, input.StoryID, stateID, input.AssigneeID, priority, position)
 
 	if err := row.Scan(&ticketID); err != nil {
@@ -199,90 +166,87 @@ func (s *Store) CreateTicket(ctx context.Context, projectID uuid.UUID, input Tic
 }
 
 func (s *Store) UpdateTicket(ctx context.Context, id uuid.UUID, input TicketUpdateInput) (Ticket, error) {
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return Ticket{}, err
-	}
-	defer tx.Rollback(ctx)
-
-	var currentState uuid.UUID
-	currentStateQuery := mustSQL("tickets_current_state.sql", nil)
-	if err := tx.QueryRow(ctx, currentStateQuery, id).Scan(&currentState); err != nil {
-		return Ticket{}, err
-	}
-
-	newState := currentState
-	if input.StateID != nil {
-		newState = *input.StateID
-	}
-
-	if input.Priority != nil {
-		if *input.Priority == "" {
-			return Ticket{}, errors.New("priority cannot be empty")
+	_, err := withTx(ctx, s.db, func(tx pgx.Tx) (struct{}, error) {
+		var currentState uuid.UUID
+		currentStateQuery := mustSQL("tickets_current_state", nil)
+		if err := tx.QueryRow(ctx, currentStateQuery, id).Scan(&currentState); err != nil {
+			return struct{}{}, err
 		}
-	}
 
-	updates := []string{"updated_at = now()"}
-	args := []any{}
-	arg := func(value any) string {
-		args = append(args, value)
-		return fmt.Sprintf("$%d", len(args))
-	}
-
-	if input.Title != nil {
-		updates = append(updates, fmt.Sprintf("title = %s", arg(strings.TrimSpace(*input.Title))))
-	}
-	if input.Description != nil {
-		updates = append(updates, fmt.Sprintf("description = %s", arg(*input.Description)))
-	}
-	if input.Type != nil {
-		ticketType, err := normalizeTicketType(*input.Type)
-		if err != nil {
-			return Ticket{}, err
+		newState := currentState
+		if input.StateID != nil {
+			newState = *input.StateID
 		}
-		updates = append(updates, fmt.Sprintf("type = %s", arg(ticketType)))
-	}
-	if input.StoryID != nil {
-		updates = append(updates, fmt.Sprintf("story_id = %s", arg(*input.StoryID)))
-	}
-	if input.StateID != nil {
-		updates = append(updates, fmt.Sprintf("state_id = %s", arg(newState)))
-	}
-	if input.AssigneeID != nil {
-		updates = append(updates, fmt.Sprintf("assignee_id = %s", arg(*input.AssigneeID)))
-	}
-	if input.Priority != nil {
-		updates = append(updates, fmt.Sprintf("priority = %s", arg(normalizePriority(*input.Priority))))
-	}
 
-	position := input.Position
-	if position == nil && input.StateID != nil && newState != currentState {
-		nextPos, err := s.nextPositionTx(ctx, tx, newState)
-		if err != nil {
-			return Ticket{}, err
+		if input.Priority != nil {
+			if *input.Priority == "" {
+				return struct{}{}, errors.New("priority cannot be empty")
+			}
 		}
-		position = &nextPos
-	}
 
-	if position != nil {
-		updates = append(updates, fmt.Sprintf("position = %s", arg(*position)))
-	}
+		updates := []string{"updated_at = now()"}
+		args := []any{}
+		arg := func(value any) string {
+			args = append(args, value)
+			return fmt.Sprintf("$%d", len(args))
+		}
 
-	if len(updates) == 1 {
-		return Ticket{}, errors.New("no updates")
-	}
+		if input.Title != nil {
+			updates = append(updates, fmt.Sprintf("title = %s", arg(strings.TrimSpace(*input.Title))))
+		}
+		if input.Description != nil {
+			updates = append(updates, fmt.Sprintf("description = %s", arg(*input.Description)))
+		}
+		if input.Type != nil {
+			ticketType, err := normalizeTicketType(*input.Type)
+			if err != nil {
+				return struct{}{}, err
+			}
+			updates = append(updates, fmt.Sprintf("type = %s", arg(ticketType)))
+		}
+		if input.StoryID != nil {
+			updates = append(updates, fmt.Sprintf("story_id = %s", arg(*input.StoryID)))
+		}
+		if input.StateID != nil {
+			updates = append(updates, fmt.Sprintf("state_id = %s", arg(newState)))
+		}
+		if input.AssigneeID != nil {
+			updates = append(updates, fmt.Sprintf("assignee_id = %s", arg(*input.AssigneeID)))
+		}
+		if input.Priority != nil {
+			updates = append(updates, fmt.Sprintf("priority = %s", arg(normalizePriority(*input.Priority))))
+		}
 
-	args = append(args, id)
-	query := mustSQL("tickets_update.sql", map[string]any{
-		"Updates": strings.Join(updates, ", "),
-		"IDArg":   len(args),
+		position := input.Position
+		if position == nil && input.StateID != nil && newState != currentState {
+			nextPos, err := s.nextPositionTx(ctx, tx, newState)
+			if err != nil {
+				return struct{}{}, err
+			}
+			position = &nextPos
+		}
+
+		if position != nil {
+			updates = append(updates, fmt.Sprintf("position = %s", arg(*position)))
+		}
+
+		if len(updates) == 1 {
+			return struct{}{}, errors.New("no updates")
+		}
+
+		args = append(args, id)
+		query := mustSQL("tickets_update", map[string]any{
+			"Updates": strings.Join(updates, ", "),
+			"IDArg":   len(args),
+		})
+
+		if _, err := tx.Exec(ctx, query, args...); err != nil {
+			return struct{}{}, err
+		}
+
+		return struct{}{}, nil
 	})
-
-	if _, err := tx.Exec(ctx, query, args...); err != nil {
-		return Ticket{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
+	if err != nil {
 		return Ticket{}, err
 	}
 
@@ -290,15 +254,8 @@ func (s *Store) UpdateTicket(ctx context.Context, id uuid.UUID, input TicketUpda
 }
 
 func (s *Store) DeleteTicket(ctx context.Context, id uuid.UUID) error {
-	query := mustSQL("tickets_delete.sql", nil)
-	cmd, err := s.db.Exec(ctx, query, id)
-	if err != nil {
-		return err
-	}
-	if cmd.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	query := mustSQL("tickets_delete", nil)
+	return execOne(ctx, s.db, query, pgx.ErrNoRows, id)
 }
 
 func (s *Store) resolveState(ctx context.Context, projectID uuid.UUID, provided *uuid.UUID) (uuid.UUID, error) {
@@ -307,13 +264,13 @@ func (s *Store) resolveState(ctx context.Context, projectID uuid.UUID, provided 
 	}
 
 	var id uuid.UUID
-	query := mustSQL("tickets_state_default.sql", nil)
+	query := mustSQL("tickets_state_default", nil)
 	err := s.db.QueryRow(ctx, query, projectID).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
 
-	fallbackQuery := mustSQL("tickets_state_any.sql", nil)
+	fallbackQuery := mustSQL("tickets_state_any", nil)
 	err = s.db.QueryRow(ctx, fallbackQuery, projectID).Scan(&id)
 	if err != nil {
 		return uuid.Nil, errors.New("no workflow state available")
@@ -324,14 +281,14 @@ func (s *Store) resolveState(ctx context.Context, projectID uuid.UUID, provided 
 
 func (s *Store) nextPosition(ctx context.Context, stateID uuid.UUID) (float64, error) {
 	var position float64
-	query := mustSQL("tickets_next_position.sql", nil)
+	query := mustSQL("tickets_next_position", nil)
 	err := s.db.QueryRow(ctx, query, stateID).Scan(&position)
 	return position, err
 }
 
 func (s *Store) nextPositionTx(ctx context.Context, tx pgx.Tx, stateID uuid.UUID) (float64, error) {
 	var position float64
-	query := mustSQL("tickets_next_position.sql", nil)
+	query := mustSQL("tickets_next_position", nil)
 	err := tx.QueryRow(ctx, query, stateID).Scan(&position)
 	return position, err
 }

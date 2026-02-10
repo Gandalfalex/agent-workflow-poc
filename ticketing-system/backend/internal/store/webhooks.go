@@ -38,64 +38,18 @@ type WebhookUpdateInput struct {
 }
 
 func (s *Store) ListWebhooks(ctx context.Context, projectID uuid.UUID) ([]Webhook, error) {
-	query := mustSQL("webhooks_list.sql", nil)
-	rows, err := s.db.Query(ctx, query, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	items := []Webhook{}
-	for rows.Next() {
-		var hook Webhook
-		var eventsRaw []byte
-		if err := rows.Scan(&hook.ID, &hook.URL, &eventsRaw, &hook.Enabled, &hook.Secret, &hook.CreatedAt, &hook.UpdatedAt); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(eventsRaw, &hook.Events); err != nil {
-			return nil, err
-		}
-		items = append(items, hook)
-	}
-	return items, rows.Err()
+	query := mustSQL("webhooks_list", nil)
+	return queryMany(ctx, s.db, query, scanWebhook, projectID)
 }
 
 func (s *Store) ListWebhooksForEvent(ctx context.Context, projectID uuid.UUID, event string) ([]Webhook, error) {
-	query := mustSQL("webhooks_list_by_event.sql", nil)
-	rows, err := s.db.Query(ctx, query, projectID, event)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	items := []Webhook{}
-	for rows.Next() {
-		var hook Webhook
-		var eventsRaw []byte
-		if err := rows.Scan(&hook.ID, &hook.URL, &eventsRaw, &hook.Enabled, &hook.Secret, &hook.CreatedAt, &hook.UpdatedAt); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(eventsRaw, &hook.Events); err != nil {
-			return nil, err
-		}
-		items = append(items, hook)
-	}
-	return items, rows.Err()
+	query := mustSQL("webhooks_list_by_event", nil)
+	return queryMany(ctx, s.db, query, scanWebhook, projectID, event)
 }
 
 func (s *Store) GetWebhook(ctx context.Context, projectID uuid.UUID, id uuid.UUID) (Webhook, error) {
-	var hook Webhook
-	var eventsRaw []byte
-	query := mustSQL("webhooks_get.sql", nil)
-	row := s.db.QueryRow(ctx, query, projectID, id)
-
-	if err := row.Scan(&hook.ID, &hook.URL, &eventsRaw, &hook.Enabled, &hook.Secret, &hook.CreatedAt, &hook.UpdatedAt); err != nil {
-		return Webhook{}, err
-	}
-	if err := json.Unmarshal(eventsRaw, &hook.Events); err != nil {
-		return Webhook{}, err
-	}
-	return hook, nil
+	query := mustSQL("webhooks_get", nil)
+	return queryOne(ctx, s.db, query, scanWebhook, projectID, id)
 }
 
 func (s *Store) CreateWebhook(ctx context.Context, projectID uuid.UUID, input WebhookCreateInput) (Webhook, error) {
@@ -115,7 +69,7 @@ func (s *Store) CreateWebhook(ctx context.Context, projectID uuid.UUID, input We
 	}
 
 	var id uuid.UUID
-	query := mustSQL("webhooks_insert.sql", nil)
+	query := mustSQL("webhooks_insert", nil)
 	row := s.db.QueryRow(ctx, query, projectID, input.URL, payload, input.Enabled, input.Secret)
 
 	if err := row.Scan(&id); err != nil {
@@ -167,32 +121,21 @@ func (s *Store) UpdateWebhook(ctx context.Context, projectID uuid.UUID, id uuid.
 	}
 
 	args = append(args, projectID, id)
-	query := mustSQL("webhooks_update.sql", map[string]any{
+	query := mustSQL("webhooks_update", map[string]any{
 		"Updates":    strings.Join(updates, ", "),
 		"ProjectArg": len(args) - 1,
 		"IDArg":      len(args),
 	})
-	cmd, err := s.db.Exec(ctx, query, args...)
-	if err != nil {
+	if err := execOne(ctx, s.db, query, pgx.ErrNoRows, args...); err != nil {
 		return Webhook{}, err
-	}
-	if cmd.RowsAffected() == 0 {
-		return Webhook{}, pgx.ErrNoRows
 	}
 
 	return s.GetWebhook(ctx, projectID, id)
 }
 
 func (s *Store) DeleteWebhook(ctx context.Context, projectID uuid.UUID, id uuid.UUID) error {
-	query := mustSQL("webhooks_delete.sql", nil)
-	cmd, err := s.db.Exec(ctx, query, projectID, id)
-	if err != nil {
-		return err
-	}
-	if cmd.RowsAffected() == 0 {
-		return pgx.ErrNoRows
-	}
-	return nil
+	query := mustSQL("webhooks_delete", nil)
+	return execOne(ctx, s.db, query, pgx.ErrNoRows, projectID, id)
 }
 
 func validateWebhookURL(raw string) error {
@@ -220,4 +163,16 @@ func validateWebhookEvents(events []string) error {
 		}
 	}
 	return nil
+}
+
+func scanWebhook(row pgx.Row) (Webhook, error) {
+	var hook Webhook
+	var eventsRaw []byte
+	if err := row.Scan(&hook.ID, &hook.URL, &eventsRaw, &hook.Enabled, &hook.Secret, &hook.CreatedAt, &hook.UpdatedAt); err != nil {
+		return Webhook{}, err
+	}
+	if err := json.Unmarshal(eventsRaw, &hook.Events); err != nil {
+		return Webhook{}, err
+	}
+	return hook, nil
 }

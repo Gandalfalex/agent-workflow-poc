@@ -71,8 +71,10 @@ services:
       dockerfile: backend/Dockerfile
       args:
         BASE_PATH: /ticketing
+        VITE_API_BASE: /ticketing
     environment:
       PORT: "8080"
+      BASE_PATH: "/"
       DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres-prod:5432/ticketing?sslmode=disable
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_REALM: ticketing
@@ -107,7 +109,8 @@ services:
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - N8N_PATH=/n8n
+      - N8N_PATH=/n8n/
+      - N8N_EDITOR_BASE_URL=http://localhost/n8n/
       - WEBHOOK_URL=http://localhost/n8n/
       - GENERIC_TIMEZONE=Europe/Berlin
       - DB_TYPE=postgresdb

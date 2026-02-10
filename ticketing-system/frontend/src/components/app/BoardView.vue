@@ -20,8 +20,11 @@ const props = defineProps<{
     apiMode: "live" | "demo";
     workflowSetupBusy: boolean;
     workflowSetupError: string;
+    hasActiveFilter: boolean;
+    searchQuery: string;
     onInitializeWorkflow: () => void;
     onOpenStoryModal: () => void;
+    onClearFilter: () => void;
     onDeleteStory: DeleteStoryHandler;
     onOpenTicket: OpenTicketHandler;
     onOpenNewTicket: OpenNewTicketHandler;
@@ -91,6 +94,11 @@ const props = defineProps<{
                 >
                     {{ storiesCount }} stories
                 </span>
+                <span
+                    class="rounded-full bg-muted px-2 py-1 text-[10px] font-semibold"
+                >
+                    {{ ticketsCount }} tickets
+                </span>
                 <button
                     class="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-base font-semibold text-foreground transition hover:border-primary hover:text-primary"
                     @click="props.onOpenStoryModal"
@@ -99,6 +107,27 @@ const props = defineProps<{
                 </button>
             </div>
         </div>
+
+        <div
+            v-if="props.hasActiveFilter && props.storyRows.length === 0"
+            class="rounded-3xl border border-border bg-card/70 p-6 text-sm text-muted-foreground"
+        >
+            <p class="font-semibold text-foreground">No matching tickets</p>
+            <p class="mt-2">
+                Nothing matched
+                <span class="font-mono text-foreground">
+                    "{{ props.searchQuery }}"
+                </span>
+                .
+            </p>
+            <button
+                class="mt-4 rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition hover:border-primary hover:text-primary"
+                @click="props.onClearFilter"
+            >
+                Clear filter
+            </button>
+        </div>
+
         <div
             class="grid items-center gap-3 rounded-3xl border border-border bg-card/70 p-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground [grid-template-columns:220px_repeat(var(--cols),minmax(0,1fr))]"
         >
@@ -234,6 +263,23 @@ const props = defineProps<{
                                 {{ ticket.assignee?.name || "Unassigned" }}
                             </span>
                         </div>
+                    </div>
+                    <div
+                        v-if="(row.ticketsByState[state.id] || []).length === 0"
+                        class="flex min-h-[120px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-background/20 px-3 py-4 text-center text-xs text-muted-foreground"
+                    >
+                        <p>Drop a ticket here</p>
+                        <button
+                            class="mt-3 rounded-xl border border-border bg-background px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] transition hover:border-primary hover:text-primary"
+                            @click="
+                                props.onOpenNewTicket(
+                                    state.id,
+                                    row.isUngrouped ? undefined : row.id,
+                                )
+                            "
+                        >
+                            Add in {{ state.name }}
+                        </button>
                     </div>
                 </div>
             </div>
