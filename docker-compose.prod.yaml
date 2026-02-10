@@ -16,19 +16,6 @@ services:
       - prod-network
     restart: unless-stopped
 
-  # Shadowing database - stores comparison results and routing config
-  shadowing-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: shadowing
-      POSTGRES_PASSWORD: shadowing
-      POSTGRES_DB: shadowing
-    volumes:
-      - shadowing-prod-data:/var/lib/postgresql/data
-    networks:
-      - prod-network
-    restart: unless-stopped
-
   # Keycloak - Authentication
   keycloak:
     image: quay.io/keycloak/keycloak:26.1.1
@@ -144,7 +131,6 @@ networks:
     driver: bridge
 
 volumes:
-  shadowing-prod-data:
   keycloak-prod-data:
   ticketing-prod-data:
   n8n-prod-data:

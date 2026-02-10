@@ -60,9 +60,7 @@ func WithFrontend(api http.Handler, dir string, basePath string) http.Handler {
 			}
 
 			// SPA fallback - serve index.html for non-API routes
-			if !strings.HasPrefix(r.URL.Path, "/api/") &&
-				!strings.HasPrefix(r.URL.Path, "/auth/") &&
-				!strings.HasPrefix(r.URL.Path, "/health") {
+			if !isAPIPath(r.URL.Path) {
 				http.ServeFile(w, r, indexPath)
 				return
 			}
@@ -70,4 +68,24 @@ func WithFrontend(api http.Handler, dir string, basePath string) http.Handler {
 
 		api.ServeHTTP(w, r)
 	})
+}
+
+func isAPIPath(path string) bool {
+	apiPrefixes := []string{
+		"/api/",
+		"/auth/",
+		"/groups",
+		"/projects",
+		"/stories",
+		"/tickets",
+		"/users",
+		"/health",
+	}
+
+	for _, prefix := range apiPrefixes {
+		if path == strings.TrimSuffix(prefix, "/") || strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
