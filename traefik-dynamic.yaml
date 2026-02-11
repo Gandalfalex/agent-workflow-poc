@@ -6,6 +6,7 @@ http:
       service: n8n
       middlewares:
         - n8n-slash
+        - n8n-stripprefix
       priority: 200
 
     # Keycloak - /realms and /resources
@@ -28,6 +29,11 @@ http:
         regex: "^(https?)://([^/]+)/n8n$"
         replacement: "${1}://${2}/n8n/"
         permanent: true
+
+    n8n-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/n8n"
 
     ticketing-stripprefix:
       stripPrefix:
