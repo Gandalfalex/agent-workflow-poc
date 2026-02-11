@@ -2,26 +2,32 @@ http:
   routers:
     # n8n - /n8n/* (highest priority)
     n8n:
-      rule: "PathPrefix(`/n8n`)"
+      rule: "HostRegexp(`{host:.+}`) && PathPrefix(`/n8n`)"
       service: n8n
       middlewares:
         - n8n-slash
         - n8n-stripprefix
       priority: 200
+      tls:
+        certResolver: le
 
     # Keycloak - /realms and /resources
     keycloak:
-      rule: "PathPrefix(`/realms`) || PathPrefix(`/resources`)"
+      rule: "HostRegexp(`{host:.+}`) && (PathPrefix(`/realms`) || PathPrefix(`/resources`))"
       service: keycloak
       priority: 100
+      tls:
+        certResolver: le
 
     # Ticketing - /ticketing/* (with prefix stripping)
     ticketing:
-      rule: "PathPrefix(`/ticketing`)"
+      rule: "HostRegexp(`{host:.+}`) && PathPrefix(`/ticketing`)"
       service: ticketing
       middlewares:
         - ticketing-stripprefix
       priority: 50
+      tls:
+        certResolver: le
 
   middlewares:
     n8n-slash:

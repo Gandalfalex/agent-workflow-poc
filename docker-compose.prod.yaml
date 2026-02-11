@@ -7,11 +7,20 @@ services:
       - "--providers.file.filename=/etc/traefik/dynamic.yaml"
       - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.le.acme.email=${TRAEFIK_ACME_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
     ports:
       - "80:80"
+      - "443:443"
       - "8080:8080" # Traefik dashboard
     volumes:
       - ./traefik-dynamic.yaml:/etc/traefik/dynamic.yaml:ro
+      - ./letsencrypt:/letsencrypt
     networks:
       - prod-network
     restart: unless-stopped
@@ -21,13 +30,13 @@ services:
     image: quay.io/keycloak/keycloak:26.1.1
     command: ["start-dev", "--import-realm"]
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_DB: postgres
       KC_DB_URL_HOST: keycloak-postgres
       KC_DB_URL_DATABASE: keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY: edge
@@ -42,9 +51,9 @@ services:
   keycloak-postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak
-      POSTGRES_DB: keycloak
+      POSTGRES_USER: ${KEYCLOAK_DB_USER}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      POSTGRES_DB: ${KEYCLOAK_DB_NAME}
     volumes:
       - keycloak-prod-data:/var/lib/postgresql/data
     networks:
@@ -62,13 +71,13 @@ services:
     environment:
       PORT: "8080"
       BASE_PATH: "/"
-      DATABASE_URL: postgres://ticketing:ticketing@ticketing-postgres-prod:5432/ticketing?sslmode=disable
+      DATABASE_URL: postgres://${TICKETING_DB_USER}:${TICKETING_DB_PASSWORD}@ticketing-postgres-prod:5432/${TICKETING_DB_NAME}?sslmode=disable
       KEYCLOAK_BASE_URL: http://keycloak:8080
-      KEYCLOAK_REALM: ticketing
-      KEYCLOAK_CLIENT_ID: myclient
-      KEYCLOAK_ADMIN_USER: AdminUser
-      KEYCLOAK_ADMIN_PASSWORD: admin123
-      COOKIE_SECURE: "false"
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_API_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_API_ADMIN_PASSWORD}
+      COOKIE_SECURE: "true"
       CORS_ALLOWED_ORIGINS: "*"
     depends_on:
       - ticketing-postgres-prod
@@ -80,9 +89,9 @@ services:
   ticketing-postgres-prod:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: ticketing
-      POSTGRES_PASSWORD: ticketing
-      POSTGRES_DB: ticketing
+      POSTGRES_USER: ${TICKETING_DB_USER}
+      POSTGRES_PASSWORD: ${TICKETING_DB_PASSWORD}
+      POSTGRES_DB: ${TICKETING_DB_NAME}
     volumes:
       - ticketing-prod-data:/var/lib/postgresql/data
     networks:
@@ -97,15 +106,15 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - N8N_PATH=/n8n/
-      - N8N_EDITOR_BASE_URL=http://localhost/n8n/
-      - WEBHOOK_URL=http://localhost/n8n/
-      - GENERIC_TIMEZONE=Europe/Berlin
+      - N8N_EDITOR_BASE_URL=${PUBLIC_BASE_URL}/n8n/
+      - WEBHOOK_URL=${PUBLIC_BASE_URL}/n8n/
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=n8n-postgres
       - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=n8n
-      - DB_POSTGRESDB_USER=n8n
-      - DB_POSTGRESDB_PASSWORD=n8n
+      - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME}
+      - DB_POSTGRESDB_USER=${N8N_DB_USER}
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD}
     volumes:
       - n8n-prod-data:/home/node/.n8n
     depends_on:
@@ -117,9 +126,9 @@ services:
   n8n-postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: n8n
-      POSTGRES_PASSWORD: n8n
-      POSTGRES_DB: n8n
+      POSTGRES_USER: ${N8N_DB_USER}
+      POSTGRES_PASSWORD: ${N8N_DB_PASSWORD}
+      POSTGRES_DB: ${N8N_DB_NAME}
     volumes:
       - n8n-prod-postgres-data:/var/lib/postgresql/data
     networks:
