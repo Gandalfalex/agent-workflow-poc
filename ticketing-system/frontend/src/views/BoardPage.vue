@@ -574,36 +574,28 @@ watch(
 </script>
 
 <template>
-    <section class="rounded-2xl border border-border bg-card/70 px-4 py-3">
-        <div
-            class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
-        >
-            <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                <span class="rounded-full bg-muted px-2 py-1 font-semibold"
-                    >/</span
-                >
-                <span>Focus search</span>
-                <span class="rounded-full bg-muted px-2 py-1 font-semibold"
-                    >N</span
-                >
-                <span>New ticket</span>
-            </div>
-            <div class="flex w-full items-center gap-2 md:w-auto">
+    <section class="rounded-2xl border border-border bg-card/70 px-4 py-2.5">
+        <div class="flex items-center gap-3">
+            <div class="relative flex-1">
                 <input
                     ref="boardSearchInput"
                     v-model="boardSearch"
                     type="text"
-                    placeholder="Filter by ticket key, title, description, assignee, or story..."
-                    class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring md:w-[440px]"
+                    placeholder="Filter tickets..."
+                    class="w-full rounded-xl border border-input bg-background pl-3 pr-16 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
-                <button
-                    v-if="hasActiveSearch"
-                    class="rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
-                    @click="clearBoardSearch"
-                >
-                    Clear
-                </button>
+                <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-muted-foreground">
+                    <kbd class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold">/</kbd>
+                    <kbd class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold">N</kbd>
+                </div>
             </div>
+            <button
+                v-if="hasActiveSearch"
+                class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground transition hover:border-foreground hover:text-foreground whitespace-nowrap"
+                @click="clearBoardSearch"
+            >
+                Clear
+            </button>
         </div>
     </section>
 

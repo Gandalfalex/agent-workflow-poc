@@ -21,83 +21,94 @@ const emit = defineEmits<{
 
 <template>
     <header
-        class="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6"
+        class="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5"
     >
+        <!-- Left: Brand + project name -->
         <div class="flex items-center gap-3">
-            <div class="h-11 w-11 rounded-2xl bg-primary/90 shadow-sm"></div>
+            <div class="h-10 w-10 rounded-2xl bg-primary/90 shadow-sm"></div>
             <div>
                 <p
-                    class="text-xs uppercase tracking-[0.3em] text-muted-foreground"
+                    class="text-[10px] uppercase tracking-[0.3em] text-muted-foreground"
                 >
                     Ops Console
                 </p>
-                <p class="text-lg font-semibold">
+                <p class="text-base font-semibold">
                     {{ props.activeProjectLabel || "Ticketing Workspace" }}
                 </p>
             </div>
         </div>
-        <div class="flex items-center gap-2">
-            <div
-                class="flex items-center gap-2 rounded-xl border border-border bg-card/60 px-2 py-1.5"
+
+        <!-- Right: Nav + controls -->
+        <div class="flex items-center gap-3">
+            <!-- Navigation tabs -->
+            <nav
+                class="flex items-center rounded-xl border border-border bg-card/60 p-1"
             >
-                <span
-                    class="hidden text-[10px] uppercase tracking-[0.2em] text-muted-foreground md:inline-flex"
-                >
-                    Project
-                </span>
-                <select
-                    class="rounded-lg border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                    :value="props.activeProjectId"
-                    :disabled="
-                        props.projectLoading || props.projects.length === 0
+                <button
+                    class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                    :class="
+                        props.activePage === 'board'
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
                     "
-                    @change="
-                        emit(
-                            'select-project',
-                            ($event.target as HTMLSelectElement).value,
-                        )
-                    "
+                    @click="emit('set-page', 'board')"
                 >
-                    <option value="" disabled>Select project</option>
-                    <option
-                        v-for="project in props.projects"
-                        :key="project.id"
-                        :value="project.id"
-                    >
-                        {{ project.key }} · {{ project.name }}
-                    </option>
-                </select>
-            </div>
+                    Board
+                </button>
+                <button
+                    class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                    :class="
+                        props.activePage === 'settings'
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="emit('set-page', 'settings')"
+                >
+                    Settings
+                </button>
+            </nav>
+
+            <!-- Project selector -->
+            <select
+                class="rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                :value="props.activeProjectId"
+                :disabled="
+                    props.projectLoading || props.projects.length === 0
+                "
+                @change="
+                    emit(
+                        'select-project',
+                        ($event.target as HTMLSelectElement).value,
+                    )
+                "
+            >
+                <option value="" disabled>Select project</option>
+                <option
+                    v-for="project in props.projects"
+                    :key="project.id"
+                    :value="project.id"
+                >
+                    {{ project.key }} · {{ project.name }}
+                </option>
+            </select>
+
+            <!-- User + actions -->
             <div
                 v-if="props.currentUserName"
-                class="hidden flex-col text-right text-xs text-muted-foreground sm:flex"
+                class="hidden items-center gap-2 sm:flex"
             >
-                <span class="uppercase tracking-[0.2em]">Signed in</span>
-                <span class="text-sm font-semibold text-foreground">
-                    {{ props.currentUserName }}
-                </span>
+                <div
+                    class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary"
+                    :title="props.currentUserName"
+                >
+                    {{ props.currentUserName.slice(0, 2).toUpperCase() }}
+                </div>
             </div>
-            <Button
-                variant="ghost"
-                size="sm"
-                :disabled="props.activePage === 'board'"
-                @click="emit('set-page', 'board')"
+            <Button variant="ghost" size="sm" @click="emit('refresh')"
+                >&#x21BB;</Button
             >
-                Board
-            </Button>
-            <Button
-                variant="ghost"
-                size="sm"
-                :disabled="props.activePage === 'settings'"
-                @click="emit('set-page', 'settings')"
-            >
-                Settings
-            </Button>
             <Button variant="ghost" size="sm" @click="emit('logout')"
                 >Logout</Button
-            >
-            <Button variant="outline" size="sm" @click="emit('refresh')"
-                >Refresh</Button
             >
         </div>
     </header>

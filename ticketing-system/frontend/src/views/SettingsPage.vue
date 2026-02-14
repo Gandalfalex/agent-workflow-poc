@@ -42,6 +42,7 @@ const newGroupMember = ref({
     userId: "",
 });
 const userSearchQuery = ref("");
+const showCreateGroup = ref(false);
 
 const webhookEvents: WebhookEvent[] = [
     "ticket.created",
@@ -742,16 +743,18 @@ watch(selectedGroupId, async () => {
                     </p>
                 </div>
 
-                <!-- Create Group Details Submenu -->
-                <details
+                <!-- Create Group Collapsible -->
+                <div
                     class="rounded-xl border border-border bg-background px-3 py-2 text-xs"
                 >
-                    <summary
-                        class="cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground"
+                    <button
+                        type="button"
+                        class="w-full text-left text-xs font-semibold text-muted-foreground hover:text-foreground transition"
+                        @click="showCreateGroup = !showCreateGroup"
                     >
-                        ➕ Create new group
-                    </summary>
-                    <div class="mt-3 grid gap-2">
+                        {{ showCreateGroup ? '&minus; Create new group' : '+ Create new group' }}
+                    </button>
+                    <div v-if="showCreateGroup" class="mt-3 grid gap-2">
                         <input
                             v-model="newGroup.name"
                             type="text"
@@ -784,7 +787,7 @@ watch(selectedGroupId, async () => {
                             Create group
                         </Button>
                     </div>
-                </details>
+                </div>
 
                 <!-- User Search & Add -->
                 <div class="rounded-xl border border-border bg-background p-4">

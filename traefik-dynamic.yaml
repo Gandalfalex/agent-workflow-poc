@@ -2,7 +2,7 @@ http:
   routers:
     # n8n - /n8n/* (highest priority)
     n8n:
-      rule: "HostRegexp(`{host:.+}`) && PathPrefix(`/n8n`)"
+      rule: "Host(`t123abcdefg.mooo.com`) && PathPrefix(`/n8n`)"
       service: n8n
       middlewares:
         - n8n-slash
@@ -13,7 +13,7 @@ http:
 
     # Keycloak - /realms and /resources
     keycloak:
-      rule: "HostRegexp(`{host:.+}`) && (PathPrefix(`/realms`) || PathPrefix(`/resources`))"
+      rule: "Host(`t123abcdefg.mooo.com`) && (PathPrefix(`/realms`) || PathPrefix(`/resources`))"
       service: keycloak
       priority: 100
       tls:
@@ -21,7 +21,7 @@ http:
 
     # Ticketing - /ticketing/* (with prefix stripping)
     ticketing:
-      rule: "HostRegexp(`{host:.+}`) && PathPrefix(`/ticketing`)"
+      rule: "Host(`t123abcdefg.mooo.com`) && PathPrefix(`/ticketing`)"
       service: ticketing
       middlewares:
         - ticketing-stripprefix

@@ -131,6 +131,8 @@ services:
     build:
       context: ./ticketing-system
       dockerfile: backend/Dockerfile
+      args:
+        BASE_PATH: /
     container_name: ticketing-api
     environment:
       PORT: "8080"
