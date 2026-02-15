@@ -45,6 +45,7 @@ const emit = defineEmits<{
                 class="flex items-center rounded-xl border border-border bg-card/60 p-1"
             >
                 <button
+                    data-testid="nav.board-tab"
                     class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
                     :class="
                         props.activePage === 'board'
@@ -56,6 +57,7 @@ const emit = defineEmits<{
                     Board
                 </button>
                 <button
+                    data-testid="nav.settings-tab"
                     class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
                     :class="
                         props.activePage === 'settings'
@@ -70,11 +72,10 @@ const emit = defineEmits<{
 
             <!-- Project selector -->
             <select
+                data-testid="nav.project-select"
                 class="rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
                 :value="props.activeProjectId"
-                :disabled="
-                    props.projectLoading || props.projects.length === 0
-                "
+                :disabled="props.projectLoading || props.projects.length === 0"
                 @change="
                     emit(
                         'select-project',
@@ -104,10 +105,18 @@ const emit = defineEmits<{
                     {{ props.currentUserName.slice(0, 2).toUpperCase() }}
                 </div>
             </div>
-            <Button variant="ghost" size="sm" @click="emit('refresh')"
+            <Button
+                data-testid="nav.refresh-button"
+                variant="ghost"
+                size="sm"
+                @click="emit('refresh')"
                 >&#x21BB;</Button
             >
-            <Button variant="ghost" size="sm" @click="emit('logout')"
+            <Button
+                data-testid="nav.logout-button"
+                variant="ghost"
+                size="sm"
+                @click="emit('logout')"
                 >Logout</Button
             >
         </div>

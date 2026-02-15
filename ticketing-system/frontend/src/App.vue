@@ -169,7 +169,7 @@ onMounted(() => {
 
 <template>
     <div class="min-h-screen bg-background text-foreground">
-        <div class="relative overflow-hidden">
+        <div class="relative">
             <div
                 class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(120,160,255,0.18),_transparent_55%)]"
             ></div>

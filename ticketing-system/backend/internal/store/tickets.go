@@ -18,11 +18,11 @@ type Ticket struct {
 	Key          string
 	Number       int
 	Type         string
-	StoryID      *uuid.UUID
-	StoryTitle   *string
+	StoryID      uuid.UUID
+	StoryTitle   string
 	StorySummary *string
-	StoryCreated *time.Time
-	StoryUpdated *time.Time
+	StoryCreated time.Time
+	StoryUpdated time.Time
 	Title        string
 	Description  string
 	StateID      uuid.UUID
@@ -51,7 +51,7 @@ type TicketCreateInput struct {
 	Title       string
 	Description string
 	Type        string
-	StoryID     *uuid.UUID
+	StoryID     uuid.UUID
 	StateID     *uuid.UUID
 	AssigneeID  *uuid.UUID
 	Priority    string

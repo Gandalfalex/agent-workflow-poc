@@ -98,6 +98,7 @@ const handleAssigneeBlur = () => {
 <template>
     <div
         v-if="props.show"
+        data-testid="new-ticket.modal"
         class="fixed inset-0 z-20 flex items-center justify-center bg-black/30 px-6"
         @click.self="emit('close')"
     >
@@ -123,6 +124,7 @@ const handleAssigneeBlur = () => {
                         >Title</label
                     >
                     <input
+                        data-testid="new-ticket.title-input"
                         :value="props.ticket.title"
                         type="text"
                         placeholder="Short summary"
@@ -140,6 +142,7 @@ const handleAssigneeBlur = () => {
                         >Description</label
                     >
                     <textarea
+                        data-testid="new-ticket.description-input"
                         :value="props.ticket.description"
                         rows="3"
                         placeholder="What needs to happen?"
@@ -160,6 +163,7 @@ const handleAssigneeBlur = () => {
                             >Type</label
                         >
                         <select
+                            data-testid="new-ticket.type-select"
                             :value="props.ticket.type"
                             class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             @change="
@@ -184,6 +188,7 @@ const handleAssigneeBlur = () => {
                             >Priority</label
                         >
                         <select
+                            data-testid="new-ticket.priority-select"
                             :value="props.ticket.priority"
                             class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             @change="
@@ -211,6 +216,7 @@ const handleAssigneeBlur = () => {
                             >Story</label
                         >
                         <select
+                            data-testid="new-ticket.story-select"
                             :value="props.ticket.storyId"
                             class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             @change="
@@ -221,7 +227,7 @@ const handleAssigneeBlur = () => {
                                 })
                             "
                         >
-                            <option value="">None</option>
+                            <option value="" disabled>Select a story</option>
                             <option
                                 v-for="story in props.stories"
                                 :key="story.id"
@@ -237,6 +243,7 @@ const handleAssigneeBlur = () => {
                             >State</label
                         >
                         <select
+                            data-testid="new-ticket.state-select"
                             :value="props.ticket.stateId"
                             class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             @change="
@@ -263,6 +270,7 @@ const handleAssigneeBlur = () => {
                     >
                     <div class="relative mt-2">
                         <input
+                            data-testid="new-ticket.assignee-input"
                             v-model="assigneeSearch"
                             type="text"
                             placeholder="Search from group members..."
@@ -339,7 +347,11 @@ const handleAssigneeBlur = () => {
             </div>
             <div class="mt-6 flex items-center justify-end gap-3">
                 <Button variant="outline" @click="emit('close')">Cancel</Button>
-                <Button :disabled="!props.canSubmit" @click="emit('create')">
+                <Button
+                    data-testid="new-ticket.create-button"
+                    :disabled="!props.canSubmit"
+                    @click="emit('create')"
+                >
                     Create ticket
                 </Button>
             </div>

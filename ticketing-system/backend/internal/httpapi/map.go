@@ -54,27 +54,14 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 		IsClosed:  ticket.StateClosed,
 	}
 
-	var storyID *openapi_types.UUID
-	var story *Story
-	if ticket.StoryID != nil {
-		value := toOpenapiUUID(*ticket.StoryID)
-		storyID = &value
-		createdAt := ticket.CreatedAt
-		updatedAt := ticket.UpdatedAt
-		if ticket.StoryCreated != nil {
-			createdAt = *ticket.StoryCreated
-		}
-		if ticket.StoryUpdated != nil {
-			updatedAt = *ticket.StoryUpdated
-		}
-		story = &Story{
-			Id:          value,
-			ProjectId:   projectID,
-			Title:       derefString(ticket.StoryTitle),
-			Description: ticket.StorySummary,
-			CreatedAt:   createdAt,
-			UpdatedAt:   updatedAt,
-		}
+	storyOapiID := toOpenapiUUID(ticket.StoryID)
+	story := &Story{
+		Id:          storyOapiID,
+		ProjectId:   projectID,
+		Title:       ticket.StoryTitle,
+		Description: ticket.StorySummary,
+		CreatedAt:   ticket.StoryCreated,
+		UpdatedAt:   ticket.StoryUpdated,
 	}
 
 	return ticketResponse{
@@ -84,7 +71,7 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 		Type:        TicketType(ticket.Type),
 		ProjectId:   projectID,
 		ProjectKey:  projectKey,
-		StoryId:     storyID,
+		StoryId:     storyOapiID,
 		Story:       story,
 		Title:       ticket.Title,
 		Description: description,

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "sourceFile": "backend/e2e/contracts/frontend_contract.source.json",
+  "routerFile": "frontend/src/router.ts",
+  "routes": {
+    "board": {
+      "name": "board",
+      "path": "/projects/:projectId/board",
+      "params": [
+        "projectId"
+      ]
+    },
+    "home": {
+      "name": "home",
+      "path": "/",
+      "params": []
+    },
+    "settings": {
+      "name": "settings",
+      "path": "/projects/:projectId/settings",
+      "params": [
+        "projectId"
+      ]
+    }
+  },
+  "selectors": {
+    "board.add_ticket_button": "[data-testid=\"board.add-ticket-button\"]",
+    "board.create_story_button": "[data-testid=\"board.create-story-button\"]",
+    "login.error": "[data-testid=\"login.error\"]",
+    "login.identifier_input": "[data-testid=\"login.identifier-input\"]",
+    "login.password_input": "[data-testid=\"login.password-input\"]",
+    "login.submit_button": "[data-testid=\"login.submit-button\"]",
+    "login.view": "[data-testid=\"login.view\"]",
+    "nav.board_tab": "[data-testid=\"nav.board-tab\"]",
+    "nav.logout_button": "[data-testid=\"nav.logout-button\"]",
+    "nav.project_select": "[data-testid=\"nav.project-select\"]",
+    "nav.refresh_button": "[data-testid=\"nav.refresh-button\"]",
+    "nav.settings_tab": "[data-testid=\"nav.settings-tab\"]",
+    "new_ticket.assignee_input": "[data-testid=\"new-ticket.assignee-input\"]",
+    "new_ticket.create_button": "[data-testid=\"new-ticket.create-button\"]",
+    "new_ticket.description_input": "[data-testid=\"new-ticket.description-input\"]",
+    "new_ticket.modal": "[data-testid=\"new-ticket.modal\"]",
+    "new_ticket.priority_select": "[data-testid=\"new-ticket.priority-select\"]",
+    "new_ticket.state_select": "[data-testid=\"new-ticket.state-select\"]",
+    "new_ticket.story_select": "[data-testid=\"new-ticket.story-select\"]",
+    "new_ticket.title_input": "[data-testid=\"new-ticket.title-input\"]",
+    "new_ticket.type_select": "[data-testid=\"new-ticket.type-select\"]",
+    "story.create_button": "[data-testid=\"story.create-button\"]",
+    "story.description_input": "[data-testid=\"story.description-input\"]",
+    "story.modal": "[data-testid=\"story.modal\"]",
+    "story.title_input": "[data-testid=\"story.title-input\"]",
+    "ticket.comment_input": "[data-testid=\"ticket.comment-input\"]",
+    "ticket.delete_button": "[data-testid=\"ticket.delete-button\"]",
+    "ticket.description_input": "[data-testid=\"ticket.description-input\"]",
+    "ticket.modal": "[data-testid=\"ticket.modal\"]",
+    "ticket.post_comment_button": "[data-testid=\"ticket.post-comment-button\"]",
+    "ticket.priority_select": "[data-testid=\"ticket.priority-select\"]",
+    "ticket.save_button": "[data-testid=\"ticket.save-button\"]",
+    "ticket.state_select": "[data-testid=\"ticket.state-select\"]",
+    "ticket.title_input": "[data-testid=\"ticket.title-input\"]",
+    "ticket.type_select": "[data-testid=\"ticket.type-select\"]"
+  },
+  "flows": {
+    "smoke_login_screen": {
+      "route": "home",
+      "assertSelectors": [
+        "login.view",
+        "login.identifier_input",
+        "login.password_input",
+        "login.submit_button"
+      ]
+    }
+  }
+}

@@ -251,14 +251,14 @@ type Ticket struct {
 	ProjectId openapi_types.UUID `json:"projectId"`
 
 	// ProjectKey 4-character uppercase alphanumeric project key.
-	ProjectKey ProjectKey          `json:"projectKey"`
-	State      *WorkflowState      `json:"state,omitempty"`
-	StateId    openapi_types.UUID  `json:"stateId"`
-	Story      *Story              `json:"story,omitempty"`
-	StoryId    *openapi_types.UUID `json:"storyId"`
-	Title      string              `json:"title"`
-	Type       TicketType          `json:"type"`
-	UpdatedAt  time.Time           `json:"updatedAt"`
+	ProjectKey ProjectKey         `json:"projectKey"`
+	State      *WorkflowState     `json:"state,omitempty"`
+	StateId    openapi_types.UUID `json:"stateId"`
+	Story      *Story             `json:"story,omitempty"`
+	StoryId    openapi_types.UUID `json:"storyId"`
+	Title      string             `json:"title"`
+	Type       TicketType         `json:"type"`
+	UpdatedAt  time.Time          `json:"updatedAt"`
 }
 
 // TicketComment defines model for TicketComment.
@@ -287,7 +287,7 @@ type TicketCreateRequest struct {
 	Description *string             `json:"description,omitempty"`
 	Priority    *TicketPriority     `json:"priority,omitempty"`
 	StateId     *openapi_types.UUID `json:"stateId,omitempty"`
-	StoryId     *openapi_types.UUID `json:"storyId"`
+	StoryId     openapi_types.UUID  `json:"storyId"`
 	Title       string              `json:"title"`
 	Type        *TicketType         `json:"type,omitempty"`
 }
@@ -314,7 +314,7 @@ type TicketUpdateRequest struct {
 	Position    *float32            `json:"position,omitempty"`
 	Priority    *TicketPriority     `json:"priority,omitempty"`
 	StateId     *openapi_types.UUID `json:"stateId,omitempty"`
-	StoryId     *openapi_types.UUID `json:"storyId"`
+	StoryId     *openapi_types.UUID `json:"storyId,omitempty"`
 	Title       *string             `json:"title,omitempty"`
 	Type        *TicketType         `json:"type,omitempty"`
 }

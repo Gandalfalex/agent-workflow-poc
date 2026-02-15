@@ -5,5 +5,4 @@ export type StoryRow = {
   title: string;
   description?: string;
   ticketsByState: Record<string, TicketResponse[]>;
-  isUngrouped: boolean;
 };

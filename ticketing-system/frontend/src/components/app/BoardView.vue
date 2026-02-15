@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button";
 import { ref } from "vue";
 
 type DragHandler = (ticketId: string) => void;
-type DropHandler = (stateId: string) => void;
-type DropCardHandler = (ticketId: string, stateId: string) => void;
+type DropHandler = (stateId: string, storyId: string) => void;
+type DropCardHandler = (
+    ticketId: string,
+    stateId: string,
+    storyId: string,
+) => void;
 type OpenTicketHandler = (ticket: TicketResponse) => void;
 type OpenNewTicketHandler = (stateId?: string, storyId?: string) => void;
 type DeleteStoryHandler = (storyId: string) => void;
@@ -142,6 +146,7 @@ const assigneeInitials = (name?: string) => {
                     {{ ticketsCount }} tickets
                 </span>
                 <button
+                    data-testid="board.create-story-button"
                     class="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-base font-semibold text-foreground transition hover:border-primary hover:text-primary"
                     @click="props.onOpenStoryModal"
                 >
@@ -170,8 +175,8 @@ const assigneeInitials = (name?: string) => {
             </button>
         </div>
 
-        <!-- Board grid with horizontal scroll for many columns -->
-        <div class="overflow-x-auto -mx-1 px-1 pb-2">
+        <!-- Board grid -->
+        <div>
             <div
                 class="grid items-center gap-3 rounded-3xl border border-border bg-card/70 p-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
                 :style="{
@@ -194,12 +199,7 @@ const assigneeInitials = (name?: string) => {
             <div
                 v-for="row in storyRows"
                 :key="row.id"
-                class="mt-4 grid gap-3 rounded-2xl border-2 p-3"
-                :class="
-                    row.isUngrouped
-                        ? 'border-dashed border-border/40 bg-card/30'
-                        : 'border-border/60 bg-card/50 shadow-sm'
-                "
+                class="mt-4 grid gap-3 rounded-2xl border-2 p-3 border-border/60 bg-card/50 shadow-sm"
                 :style="{
                     'grid-template-columns':
                         '200px repeat(' +
@@ -208,25 +208,15 @@ const assigneeInitials = (name?: string) => {
                 }"
             >
                 <div
-                    class="flex flex-col rounded-2xl border border-border p-4"
-                    :class="
-                        row.isUngrouped
-                            ? 'bg-card/50'
-                            : 'bg-gradient-to-br from-card/90 to-card/70'
-                    "
+                    class="flex flex-col rounded-2xl border border-border p-4 bg-gradient-to-br from-card/90 to-card/70"
                 >
                     <div class="flex items-center justify-between mb-3">
                         <p
-                            class="text-[10px] uppercase tracking-[0.3em] font-bold"
-                            :class="
-                                row.isUngrouped
-                                    ? 'text-muted-foreground'
-                                    : 'text-primary/80'
-                            "
+                            class="text-[10px] uppercase tracking-[0.3em] font-bold text-primary/80"
                         >
-                            {{ row.isUngrouped ? "Ungrouped" : "Story" }}
+                            Story
                         </p>
-                        <div v-if="!row.isUngrouped" class="relative">
+                        <div class="relative">
                             <button
                                 class="rounded-full border border-border bg-background px-2 py-1 text-[12px] font-semibold uppercase tracking-[0.3em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
                                 aria-label="Story actions"
@@ -255,14 +245,7 @@ const assigneeInitials = (name?: string) => {
                             </div>
                         </div>
                     </div>
-                    <p
-                        class="text-sm font-bold leading-tight"
-                        :class="
-                            row.isUngrouped
-                                ? 'text-muted-foreground'
-                                : 'text-foreground'
-                        "
-                    >
+                    <p class="text-sm font-bold leading-tight text-foreground">
                         {{ row.title }}
                     </p>
                     <p
@@ -309,12 +292,10 @@ const assigneeInitials = (name?: string) => {
                             </p>
                         </div>
                         <button
+                            data-testid="board.add-ticket-button"
                             class="w-full rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-xs font-semibold text-muted-foreground transition-all hover:border-primary hover:bg-primary/5 hover:text-primary"
                             @click="
-                                props.onOpenNewTicket(
-                                    states[0]?.id,
-                                    row.isUngrouped ? undefined : row.id,
-                                )
+                                props.onOpenNewTicket(states[0]?.id, row.id)
                             "
                         >
                             + Add ticket
@@ -327,7 +308,7 @@ const assigneeInitials = (name?: string) => {
                     :key="state.id"
                     class="flex min-h-[160px] flex-col rounded-2xl border border-border bg-card/40 p-2.5"
                     @dragover.prevent
-                    @drop.prevent="props.onDropColumn(state.id)"
+                    @drop.prevent="props.onDropColumn(state.id, row.id)"
                 >
                     <div class="flex flex-1 flex-col gap-2.5">
                         <!-- Ticket card: enhanced design with better visual hierarchy -->
@@ -340,7 +321,7 @@ const assigneeInitials = (name?: string) => {
                             @dragend="props.onDragEnd"
                             @dragover.prevent
                             @drop.prevent="
-                                props.onDropCard(ticket.id, state.id)
+                                props.onDropCard(ticket.id, state.id, row.id)
                             "
                             @click="props.onOpenTicket(ticket)"
                         >

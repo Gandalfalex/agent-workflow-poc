@@ -71,6 +71,16 @@ const demoStateInProgress = demoStates[1]!;
 const demoStateReview = demoStates[2]!;
 const demoStateDone = demoStates[3]!;
 
+const demoStoryId = "bfc9e1a1-3cd9-4e1d-9f1e-000000000201";
+const demoStory: Story = {
+  id: demoStoryId,
+  projectId: demoProjectId,
+  title: "Demo Story",
+  description: "A demo story for sample tickets.",
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
 const demoTickets: TicketResponse[] = [
   {
     id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000101",
@@ -79,6 +89,8 @@ const demoTickets: TicketResponse[] = [
     type: "feature",
     projectId: demoProjectId,
     projectKey: demoProjectKey,
+    storyId: demoStoryId,
+    story: demoStory,
     title: "Webhook signing for ticket.created",
     description: "Include HMAC signature and retry policy.",
     stateId: demoStateBacklog.id,
@@ -96,6 +108,8 @@ const demoTickets: TicketResponse[] = [
     type: "feature",
     projectId: demoProjectId,
     projectKey: demoProjectKey,
+    storyId: demoStoryId,
+    story: demoStory,
     title: "Drag-and-drop keyboard support",
     description: "Add arrow move + enter to drop.",
     stateId: demoStateInProgress.id,
@@ -113,6 +127,8 @@ const demoTickets: TicketResponse[] = [
     type: "bug",
     projectId: demoProjectId,
     projectKey: demoProjectKey,
+    storyId: demoStoryId,
+    story: demoStory,
     title: "Ticket detail drawer",
     description: "Inline editing for title, description, and assignee.",
     stateId: demoStateReview.id,
@@ -130,6 +146,8 @@ const demoTickets: TicketResponse[] = [
     type: "feature",
     projectId: demoProjectId,
     projectKey: demoProjectKey,
+    storyId: demoStoryId,
+    story: demoStory,
     title: "OpenAPI schema sync",
     description: "Auto-generate clients from spec.",
     stateId: demoStateDone.id,
@@ -194,8 +212,8 @@ export const useBoardStore = defineStore("board", {
       this.apiMode = "demo";
       this.states = demoStates;
       this.tickets = demoTickets;
+      this.stories = [demoStory];
       this.loading = false;
-      this.stories = [];
     },
     clearComments() {
       this.ticketComments = [];
@@ -424,7 +442,7 @@ export const useBoardStore = defineStore("board", {
             type: payload.type || "feature",
             projectId: demoProjectId,
             projectKey: demoProjectKey,
-            storyId: payload.storyId || undefined,
+            storyId: payload.storyId,
             story,
             title: payload.title,
             description: payload.description || "",

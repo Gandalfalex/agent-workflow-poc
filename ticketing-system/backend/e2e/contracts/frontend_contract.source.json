@@ -1,0 +1,67 @@
+{
+  "routeKeys": {
+    "home": {
+      "routeName": "home"
+    },
+    "board": {
+      "routeName": "board",
+      "params": [
+        "projectId"
+      ]
+    },
+    "settings": {
+      "routeName": "settings",
+      "params": [
+        "projectId"
+      ]
+    }
+  },
+  "selectorKeys": {
+    "login.view": "login.view",
+    "login.identifier_input": "login.identifier-input",
+    "login.password_input": "login.password-input",
+    "login.submit_button": "login.submit-button",
+    "login.error": "login.error",
+    "nav.board_tab": "nav.board-tab",
+    "nav.settings_tab": "nav.settings-tab",
+    "nav.project_select": "nav.project-select",
+    "nav.refresh_button": "nav.refresh-button",
+    "nav.logout_button": "nav.logout-button",
+    "board.create_story_button": "board.create-story-button",
+    "board.add_ticket_button": "board.add-ticket-button",
+    "new_ticket.modal": "new-ticket.modal",
+    "new_ticket.title_input": "new-ticket.title-input",
+    "new_ticket.description_input": "new-ticket.description-input",
+    "new_ticket.type_select": "new-ticket.type-select",
+    "new_ticket.priority_select": "new-ticket.priority-select",
+    "new_ticket.story_select": "new-ticket.story-select",
+    "new_ticket.state_select": "new-ticket.state-select",
+    "new_ticket.assignee_input": "new-ticket.assignee-input",
+    "new_ticket.create_button": "new-ticket.create-button",
+    "story.modal": "story.modal",
+    "story.title_input": "story.title-input",
+    "story.description_input": "story.description-input",
+    "story.create_button": "story.create-button",
+    "ticket.modal": "ticket.modal",
+    "ticket.title_input": "ticket.title-input",
+    "ticket.description_input": "ticket.description-input",
+    "ticket.type_select": "ticket.type-select",
+    "ticket.priority_select": "ticket.priority-select",
+    "ticket.state_select": "ticket.state-select",
+    "ticket.save_button": "ticket.save-button",
+    "ticket.comment_input": "ticket.comment-input",
+    "ticket.post_comment_button": "ticket.post-comment-button",
+    "ticket.delete_button": "ticket.delete-button"
+  },
+  "flows": {
+    "smoke_login_screen": {
+      "route": "home",
+      "assertSelectors": [
+        "login.view",
+        "login.identifier_input",
+        "login.password_input",
+        "login.submit_button"
+      ]
+    }
+  }
+}

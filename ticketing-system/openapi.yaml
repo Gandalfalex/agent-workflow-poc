@@ -1428,10 +1428,8 @@ components:
         storyId:
           type: string
           format: uuid
-          nullable: true
         story:
           $ref: "#/components/schemas/Story"
-          nullable: true
         title:
           type: string
         description:
@@ -1465,6 +1463,7 @@ components:
         - type
         - projectId
         - projectKey
+        - storyId
         - title
         - stateId
         - priority
@@ -1484,7 +1483,6 @@ components:
         storyId:
           type: string
           format: uuid
-          nullable: true
         stateId:
           type: string
           format: uuid
@@ -1494,7 +1492,7 @@ components:
           nullable: true
         priority:
           $ref: "#/components/schemas/TicketPriority"
-      required: [title]
+      required: [title, storyId]
 
     TicketUpdateRequest:
       type: object
@@ -1508,7 +1506,6 @@ components:
         storyId:
           type: string
           format: uuid
-          nullable: true
         stateId:
           type: string
           format: uuid

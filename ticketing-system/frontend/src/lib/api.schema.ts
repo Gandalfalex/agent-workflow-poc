@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/sync-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync all Keycloak users to database */
+        post: operations["syncUsers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -475,6 +492,12 @@ export interface components {
         UserListResponse: {
             items: components["schemas"]["UserSummary"][];
         };
+        SyncUsersResponse: {
+            /** @description Number of users synced */
+            synced: number;
+            /** @description Total users in Keycloak */
+            total: number;
+        };
         /**
          * @description 4-character uppercase alphanumeric project key.
          * @example PROJ
@@ -645,7 +668,7 @@ export interface components {
             projectId: string;
             projectKey: components["schemas"]["ProjectKey"];
             /** Format: uuid */
-            storyId?: string | null;
+            storyId: string;
             story?: components["schemas"]["Story"];
             title: string;
             description?: string;
@@ -668,7 +691,7 @@ export interface components {
             description?: string;
             type?: components["schemas"]["TicketType"];
             /** Format: uuid */
-            storyId?: string | null;
+            storyId: string;
             /** Format: uuid */
             stateId?: string;
             /** Format: uuid */
@@ -680,7 +703,7 @@ export interface components {
             description?: string;
             type?: components["schemas"]["TicketType"];
             /** Format: uuid */
-            storyId?: string | null;
+            storyId?: string;
             /** Format: uuid */
             stateId?: string;
             /** Format: uuid */
@@ -846,6 +869,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    syncUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Users synced successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncUsersResponse"];
+                };
+            };
+            /** @description Sync failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

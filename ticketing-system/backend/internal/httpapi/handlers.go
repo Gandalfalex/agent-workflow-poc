@@ -660,14 +660,10 @@ func (h *API) CreateTicket(w http.ResponseWriter, r *http.Request, projectId ope
 		ticketType = string(*req.Type)
 	}
 
-	var storyID *uuid.UUID
-	if req.StoryId != nil {
-		id, err := parseOpenapiUUID(*req.StoryId)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_story_id", "storyId must be a UUID")
-			return
-		}
-		storyID = &id
+	storyID, err := parseOpenapiUUID(req.StoryId)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_story_id", "storyId is required and must be a UUID")
+		return
 	}
 
 	ticket, err := h.store.CreateTicket(r.Context(), projectUUID, store.TicketCreateInput{

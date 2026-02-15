@@ -28,6 +28,7 @@ const updateStory = (patch: Partial<StoryDraft>) => {
 <template>
   <div
     v-if="props.show"
+    data-testid="story.modal"
     class="fixed inset-0 z-20 flex items-center justify-center bg-black/30 px-6"
     @click.self="emit('close')"
   >
@@ -45,6 +46,7 @@ const updateStory = (patch: Partial<StoryDraft>) => {
         <div>
           <label class="text-xs font-semibold text-muted-foreground">Title</label>
           <input
+            data-testid="story.title-input"
             :value="props.story.title"
             type="text"
             placeholder="Story title"
@@ -57,6 +59,7 @@ const updateStory = (patch: Partial<StoryDraft>) => {
             >Description</label
           >
           <textarea
+            data-testid="story.description-input"
             :value="props.story.description"
             rows="4"
             placeholder="Shared goal or summary"
@@ -65,7 +68,7 @@ const updateStory = (patch: Partial<StoryDraft>) => {
           ></textarea>
         </div>
         <div class="flex items-center gap-3">
-          <Button size="sm" :disabled="!props.canCreate || props.storySaving" @click="emit('create')">
+          <Button data-testid="story.create-button" size="sm" :disabled="!props.canCreate || props.storySaving" @click="emit('create')">
             {{ props.storySaving ? "Creating..." : "Create story" }}
           </Button>
           <span v-if="props.storyError" class="text-xs">{{ props.storyError }}</span>

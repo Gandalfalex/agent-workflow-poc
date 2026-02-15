@@ -139,20 +139,12 @@ const storyRows = computed<StoryRow[]>(() => {
             title: story.title,
             description: story.description || undefined,
             ticketsByState: createBuckets(),
-            isUngrouped: false,
         });
     });
 
-    const ungrouped: StoryRow = {
-        id: "ungrouped",
-        title: "No story assigned",
-        description: "Tickets without a story live here.",
-        ticketsByState: createBuckets(),
-        isUngrouped: true,
-    };
-
     tickets.value.forEach((ticket) => {
-        const row = (ticket.storyId && rows.get(ticket.storyId)) || ungrouped;
+        const row = rows.get(ticket.storyId);
+        if (!row) return;
         const bucket = row.ticketsByState[ticket.stateId];
         if (bucket) {
             bucket.push(ticket);
@@ -161,27 +153,13 @@ const storyRows = computed<StoryRow[]>(() => {
         }
     });
 
-    const sortBuckets = (row: StoryRow) => {
+    rows.forEach((row) => {
         Object.values(row.ticketsByState).forEach((bucket) =>
             bucket.sort((a, b) => a.position - b.position),
         );
-    };
+    });
 
-    rows.forEach(sortBuckets);
-    sortBuckets(ungrouped);
-
-    const ordered = Array.from(rows.values());
-    if (
-        Object.values(ungrouped.ticketsByState).some(
-            (bucket) => bucket.length > 0,
-        )
-    ) {
-        ordered.push(ungrouped);
-    } else if (rows.size === 0) {
-        ordered.push(ungrouped);
-    }
-
-    return ordered;
+    return Array.from(rows.values());
 });
 
 const hasActiveSearch = computed(() => boardSearch.value.trim().length > 0);
@@ -247,7 +225,11 @@ const visibleTicketCount = computed(() =>
     ),
 );
 
-const canSubmit = computed(() => newTicket.value.title.trim().length > 0);
+const canSubmit = computed(
+    () =>
+        newTicket.value.title.trim().length > 0 &&
+        newTicket.value.storyId.length > 0,
+);
 const canCreateStory = computed(() => newStory.value.title.trim().length > 0);
 
 const openTicket = async (ticket: TicketResponse) => {
@@ -468,7 +450,7 @@ const createTicketSubmit = async () => {
             title: newTicket.value.title.trim(),
             description: newTicket.value.description.trim(),
             type: newTicket.value.type,
-            storyId: newTicket.value.storyId || undefined,
+            storyId: newTicket.value.storyId,
             stateId: newTicket.value.stateId,
             priority: newTicket.value.priority,
         });
@@ -507,11 +489,13 @@ const onDragEnd = () => {
 const moveToState = async (
     ticketId: string,
     stateId: string,
+    storyId: string,
     position: number,
 ) => {
     try {
         await boardStore.updateTicket(ticketId, {
             stateId,
+            storyId,
             position,
         });
     } catch (err) {
@@ -519,15 +503,19 @@ const moveToState = async (
     }
 };
 
-const onDropColumn = async (stateId: string) => {
+const onDropColumn = async (stateId: string, storyId: string) => {
     if (!draggingId.value) return;
     const column = ticketsByState.value[stateId] || [];
     const position = column.length + 1;
-    await moveToState(draggingId.value, stateId, position);
+    await moveToState(draggingId.value, stateId, storyId, position);
     draggingId.value = null;
 };
 
-const onDropCard = async (targetId: string, stateId: string) => {
+const onDropCard = async (
+    targetId: string,
+    stateId: string,
+    storyId: string,
+) => {
     if (!draggingId.value || draggingId.value === targetId) return;
     const moving = tickets.value.find(
         (ticket) => ticket.id === draggingId.value,
@@ -535,7 +523,7 @@ const onDropCard = async (targetId: string, stateId: string) => {
     if (!moving) return;
     const targetStateTickets = ticketsByState.value[stateId] || [];
     const nextPosition = targetStateTickets.length + 1;
-    await moveToState(moving.id, stateId, nextPosition);
+    await moveToState(moving.id, stateId, storyId, nextPosition);
     draggingId.value = null;
 };
 

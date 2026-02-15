@@ -403,6 +403,8 @@ type fakeAuth struct {
 	loginErr   error
 	verifyUser auth.User
 	verifyErr  error
+	listUsers  []auth.User
+	listErr    error
 }
 
 func (f *fakeAuth) Login(ctx context.Context, username, password string) (auth.User, auth.TokenSet, error) {
@@ -417,6 +419,13 @@ func (f *fakeAuth) Verify(ctx context.Context, token string) (auth.User, error) 
 		return auth.User{}, f.verifyErr
 	}
 	return f.verifyUser, nil
+}
+
+func (f *fakeAuth) ListUsers(ctx context.Context) ([]auth.User, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.listUsers, nil
 }
 
 type fakeWebhookDispatcher struct {

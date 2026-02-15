@@ -71,6 +71,7 @@ const priorityColor = (priority: string) => {
 <template>
     <div
         v-if="props.show"
+        data-testid="ticket.modal"
         class="fixed inset-0 z-30 flex items-center justify-center bg-black/50 px-6"
         @click.self="emit('close')"
     >
@@ -119,6 +120,7 @@ const priorityColor = (priority: string) => {
                             class="absolute right-0 top-full mt-2 w-40 rounded-2xl border border-border bg-card/95 backdrop-blur p-2 text-xs z-50 shadow-lg"
                         >
                             <Button
+                                data-testid="ticket.delete-button"
                                 variant="outline"
                                 size="sm"
                                 class="w-full border-destructive/30 text-destructive hover:bg-destructive/5"
@@ -145,6 +147,7 @@ const priorityColor = (priority: string) => {
                                 >Title</label
                             >
                             <input
+                                data-testid="ticket.title-input"
                                 :value="props.editor.title"
                                 type="text"
                                 class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -182,6 +185,7 @@ const priorityColor = (priority: string) => {
                             ></div>
                             <textarea
                                 v-else
+                                data-testid="ticket.description-input"
                                 :value="props.editor.description"
                                 rows="7"
                                 placeholder="Describe the ticket... (supports **bold**, *italic*, `code`)"
@@ -202,6 +206,7 @@ const priorityColor = (priority: string) => {
                                     >Type</label
                                 >
                                 <select
+                                    data-testid="ticket.type-select"
                                     :value="props.editor.type"
                                     class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                     @change="
@@ -227,6 +232,7 @@ const priorityColor = (priority: string) => {
                                     >Priority</label
                                 >
                                 <select
+                                    data-testid="ticket.priority-select"
                                     :value="props.editor.priority"
                                     class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                     @change="
@@ -252,6 +258,7 @@ const priorityColor = (priority: string) => {
                                     >State</label
                                 >
                                 <select
+                                    data-testid="ticket.state-select"
                                     :value="props.editor.stateId"
                                     class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                     @change="
@@ -343,6 +350,7 @@ const priorityColor = (priority: string) => {
                             >Add comment (Markdown)</label
                         >
                         <textarea
+                            data-testid="ticket.comment-input"
                             :value="props.commentDraft"
                             rows="2"
                             placeholder="Progress, blockers, notes..."
@@ -357,6 +365,7 @@ const priorityColor = (priority: string) => {
                         ></textarea>
                         <div class="mt-2 flex items-center gap-3">
                             <Button
+                                data-testid="ticket.post-comment-button"
                                 size="sm"
                                 :disabled="
                                     props.commentSaving ||
@@ -386,6 +395,7 @@ const priorityColor = (priority: string) => {
                     Cancel
                 </Button>
                 <Button
+                    data-testid="ticket.save-button"
                     size="sm"
                     :disabled="props.ticketSaving"
                     @click="emit('save')"

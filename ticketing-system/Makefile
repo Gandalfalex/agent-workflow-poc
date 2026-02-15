@@ -3,7 +3,7 @@ SHELL := /bin/bash
 OPENAPI_SPEC := $(CURDIR)/openapi.yaml
 DATABASE_URL ?= postgres://ticketing:ticketing@localhost:5433/ticketing?sslmode=disable
 
-.PHONY: generate generate-backend generate-frontend migrate
+.PHONY: generate generate-backend generate-frontend migrate e2e-contract e2e-deps e2e-playwright-install e2e-frontend-build e2e
 
 generate: generate-backend generate-frontend
 
@@ -20,3 +20,28 @@ generate-frontend:
 # Run database migrations
 migrate:
 	cd backend && DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migrate
+
+# Generate backend E2E frontend contract (routes + selector keys).
+e2e-contract:
+	node scripts/generate-e2e-contract.mjs
+
+# Add backend E2E dependencies to go.mod/go.sum.
+e2e-deps:
+	cd backend && go get \
+		github.com/playwright-community/playwright-go@latest \
+		github.com/testcontainers/testcontainers-go@latest \
+		github.com/testcontainers/testcontainers-go/modules/postgres@latest
+	cd backend && go mod tidy
+
+# Install Playwright browser runtime.
+e2e-playwright-install:
+	cd backend && go run github.com/playwright-community/playwright-go/cmd/playwright@latest install chromium
+
+# Build frontend assets used by backend-served E2E tests.
+e2e-frontend-build:
+	cd frontend && npm ci && npm run build
+
+# Run backend E2E browser tests.
+e2e:
+	$(MAKE) e2e-contract
+	cd backend && go test -tags=e2e ./e2e -v
