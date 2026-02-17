@@ -73,6 +73,8 @@ ticketing-system/frontend/tsconfig.app.json.timestamp-*
 ticketing-system/backend/bin/
 ticketing-system/backend/server
 ticketing-system/backend/migrate
+ticketing-system/backend/artifacts
+ticketing-system/backend/artifacts/*
 
 # Codex Agent
 codex-agent/dist/
@@ -101,7 +103,7 @@ __pycache__/
 # Project specific
 .claude/
 *.swp
--e 
+-e
 # Compiled binaries (architecture-specific)
 bin/
 codex-agent/bin/
