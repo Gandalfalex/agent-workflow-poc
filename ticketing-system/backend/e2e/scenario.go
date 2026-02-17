@@ -108,6 +108,13 @@ func (s *Scenario) WhenILogInAs(identifier, password string) *Scenario {
 	})
 }
 
+// WhenILogInWithHarnessUser logs in using the credentials configured for the harness
+// (admin by default, or viewer if WithViewerUser was used).
+func (s *Scenario) WhenILogInWithHarnessUser() *Scenario {
+	id, pw := s.harness.LoginCredentials()
+	return s.WhenILogInAs(id, pw)
+}
+
 func (s *Scenario) WhenIPress(selector, key string) *Scenario {
 	return s.When(fmt.Sprintf("I press %q on %q", key, selector), func(s *Scenario) error {
 		return s.harness.Press(selector, key)
@@ -223,6 +230,122 @@ func (s *Scenario) WhenINavigateToSettings() *Scenario {
 	})
 }
 
+func (s *Scenario) WhenIOpenWorkflowTab() *Scenario {
+	return s.When("I open the workflow tab", func(s *Scenario) error {
+		return s.harness.page.GetByText("Workflow").Click()
+	})
+}
+
+func (s *Scenario) ThenISeeAtLeastWorkflowStateRows(n int) *Scenario {
+	return s.Then(fmt.Sprintf("I see at least %d workflow state rows", n), func(s *Scenario) error {
+		return s.harness.ExpectMinElements("[data-testid=\"workflow.state-row\"]", n)
+	})
+}
+
+func (s *Scenario) ThenWorkflowIncludesStates(names ...string) *Scenario {
+	return s.Then(fmt.Sprintf("workflow includes states %v", names), func(s *Scenario) error {
+		values, err := s.workflowStateNames()
+		if err != nil {
+			return err
+		}
+		seen := map[string]bool{}
+		for _, value := range values {
+			seen[value] = true
+		}
+		for _, name := range names {
+			if !seen[name] {
+				return fmt.Errorf("missing workflow state %q", name)
+			}
+		}
+		return nil
+	})
+}
+
+func (s *Scenario) WhenINameLastWorkflowState(name string) *Scenario {
+	return s.When(fmt.Sprintf("I name the last workflow state %q", name), func(s *Scenario) error {
+		inputs, err := s.harness.page.Locator("[data-testid=\"workflow.state-name-input\"]").All()
+		if err != nil {
+			return fmt.Errorf("get workflow state name inputs: %w", err)
+		}
+		if len(inputs) == 0 {
+			return fmt.Errorf("no workflow state name inputs found")
+		}
+		return inputs[len(inputs)-1].Fill(name)
+	})
+}
+
+func (s *Scenario) WhenIRenameWorkflowState(index int, name string) *Scenario {
+	return s.When(fmt.Sprintf("I rename workflow state %d to %q", index, name), func(s *Scenario) error {
+		inputs, err := s.harness.page.Locator("[data-testid=\"workflow.state-name-input\"]").All()
+		if err != nil {
+			return fmt.Errorf("get workflow state name inputs: %w", err)
+		}
+		if index < 0 || index >= len(inputs) {
+			return fmt.Errorf("workflow state index %d out of range (len=%d)", index, len(inputs))
+		}
+		if err := inputs[index].Clear(); err != nil {
+			return fmt.Errorf("clear workflow state input %d: %w", index, err)
+		}
+		return inputs[index].Fill(name)
+	})
+}
+
+func (s *Scenario) WhenIClearWorkflowStateName(index int) *Scenario {
+	return s.When(fmt.Sprintf("I clear workflow state name at index %d", index), func(s *Scenario) error {
+		inputs, err := s.harness.page.Locator("[data-testid=\"workflow.state-name-input\"]").All()
+		if err != nil {
+			return fmt.Errorf("get workflow state name inputs: %w", err)
+		}
+		if index < 0 || index >= len(inputs) {
+			return fmt.Errorf("workflow state index %d out of range (len=%d)", index, len(inputs))
+		}
+		return inputs[index].Fill("")
+	})
+}
+
+func (s *Scenario) WhenIToggleWorkflowStateClosed(index int) *Scenario {
+	return s.When(fmt.Sprintf("I toggle workflow state closed at index %d", index), func(s *Scenario) error {
+		checkboxes, err := s.harness.page.Locator("[data-testid=\"workflow.state-closed-checkbox\"]").All()
+		if err != nil {
+			return fmt.Errorf("get workflow state closed checkboxes: %w", err)
+		}
+		if index < 0 || index >= len(checkboxes) {
+			return fmt.Errorf("workflow state closed checkbox index %d out of range (len=%d)", index, len(checkboxes))
+		}
+		return checkboxes[index].Click()
+	})
+}
+
+func (s *Scenario) ThenISeeWorkflowStateOrder(expected ...string) *Scenario {
+	return s.Then(fmt.Sprintf("workflow state order is %v", expected), func(s *Scenario) error {
+		values, err := s.workflowStateNames()
+		if err != nil {
+			return err
+		}
+		if len(values) < len(expected) {
+			return fmt.Errorf("expected at least %d workflow states, got %d", len(expected), len(values))
+		}
+		for i, name := range expected {
+			if values[i] != name {
+				return fmt.Errorf("workflow state %d expected %q, got %q", i, name, values[i])
+			}
+		}
+		return nil
+	})
+}
+
+func (s *Scenario) ThenISeeWorkflowSavedNotice() *Scenario {
+	return s.Then("I see workflow saved notice", func(s *Scenario) error {
+		return s.harness.ExpectTextVisible("Workflow saved.")
+	})
+}
+
+func (s *Scenario) ThenISeeWorkflowError() *Scenario {
+	return s.Then("I see workflow error", func(s *Scenario) error {
+		return s.harness.WaitVisibleKey("workflow.error")
+	})
+}
+
 func (s *Scenario) WhenICreateStory(title string) *Scenario {
 	return s.When(fmt.Sprintf("I create story %q", title), func(s *Scenario) error {
 		if err := s.harness.ClickKey("board.create_story_button"); err != nil {
@@ -306,6 +429,19 @@ func (s *Scenario) ThenButtonIsEnabledKey(selectorKey string) *Scenario {
 	})
 }
 
+func (s *Scenario) WhenIUploadFileViaInput(filePath string) *Scenario {
+	return s.When(fmt.Sprintf("I upload file %q via hidden input", filePath), func(s *Scenario) error {
+		selector, err := s.harness.Selector("ticket.file_input")
+		if err != nil {
+			return err
+		}
+		if err := s.harness.page.Locator(selector).SetInputFiles(filePath); err != nil {
+			return fmt.Errorf("set input files on %q: %w", selector, err)
+		}
+		return nil
+	})
+}
+
 func (s *Scenario) WhenIAcceptNextDialog() *Scenario {
 	return s.When("I register dialog auto-accept", func(s *Scenario) error {
 		s.harness.HandleNextDialog(true)
@@ -326,4 +462,20 @@ func (s *Scenario) runStep(keyword, description string, action func(*Scenario) e
 		s.harness.failStep(step, err)
 	}
 	return s
+}
+
+func (s *Scenario) workflowStateNames() ([]string, error) {
+	inputs, err := s.harness.page.Locator("[data-testid=\"workflow.state-name-input\"]").All()
+	if err != nil {
+		return nil, fmt.Errorf("get workflow state name inputs: %w", err)
+	}
+	values := make([]string, 0, len(inputs))
+	for i, input := range inputs {
+		value, err := input.InputValue()
+		if err != nil {
+			return nil, fmt.Errorf("read workflow state name input %d: %w", i, err)
+		}
+		values = append(values, value)
+	}
+	return values, nil
 }
