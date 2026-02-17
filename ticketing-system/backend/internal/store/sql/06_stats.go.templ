@@ -1,0 +1,39 @@
+{{define "stats_by_state.sql"}}
+SELECT s.name, COUNT(*)
+FROM tickets t
+JOIN workflow_states s ON s.id = t.state_id
+WHERE t.project_id = $1
+GROUP BY s.name, s.sort_order
+ORDER BY s.sort_order
+{{end}}
+
+{{define "stats_by_priority.sql"}}
+SELECT t.priority, COUNT(*)
+FROM tickets t
+WHERE t.project_id = $1
+GROUP BY t.priority
+{{end}}
+
+{{define "stats_by_type.sql"}}
+SELECT t.type, COUNT(*)
+FROM tickets t
+WHERE t.project_id = $1
+GROUP BY t.type
+{{end}}
+
+{{define "stats_by_assignee.sql"}}
+SELECT COALESCE(u.name, 'Unassigned'), COUNT(*)
+FROM tickets t
+LEFT JOIN users u ON u.id = t.assignee_id
+WHERE t.project_id = $1
+GROUP BY u.name
+ORDER BY COUNT(*) DESC
+{{end}}
+
+{{define "stats_open_closed.sql"}}
+SELECT s.is_closed, COUNT(*)
+FROM tickets t
+JOIN workflow_states s ON s.id = t.state_id
+WHERE t.project_id = $1
+GROUP BY s.is_closed
+{{end}}

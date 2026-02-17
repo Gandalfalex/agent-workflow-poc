@@ -31,6 +31,12 @@ export type WebhookListResponse = components["schemas"]["WebhookListResponse"];
 export type WebhookTestRequest = components["schemas"]["WebhookTestRequest"];
 export type WebhookTestResponse = components["schemas"]["WebhookTestResponse"];
 export type WebhookEvent = components["schemas"]["WebhookEvent"];
+export type WebhookDelivery = components["schemas"]["WebhookDelivery"];
+export type WebhookDeliveryListResponse =
+  components["schemas"]["WebhookDeliveryListResponse"];
+export type Attachment = components["schemas"]["Attachment"];
+export type AttachmentListResponse =
+  components["schemas"]["AttachmentListResponse"];
 export type Project = components["schemas"]["Project"];
 export type ProjectRole = components["schemas"]["ProjectRole"];
 export type ProjectListResponse = components["schemas"]["ProjectListResponse"];
@@ -52,6 +58,8 @@ export type ProjectGroupListResponse =
   components["schemas"]["ProjectGroupListResponse"];
 export type ProjectGroupCreateRequest =
   components["schemas"]["ProjectGroupCreateRequest"];
+export type StatCount = components["schemas"]["StatCount"];
+export type ProjectStats = components["schemas"]["ProjectStats"];
 export type ProjectGroupUpdateRequest =
   components["schemas"]["ProjectGroupUpdateRequest"];
 
@@ -397,5 +405,88 @@ export async function testWebhook(
       method: "POST",
       body: JSON.stringify(payload),
     },
+  );
+}
+
+export async function listWebhookDeliveries(
+  projectId: string | undefined,
+  webhookId: string,
+): Promise<WebhookDeliveryListResponse> {
+  const project = resolveProjectId(projectId);
+  return request<WebhookDeliveryListResponse>(
+    `/projects/${project}/webhooks/${webhookId}/deliveries`,
+  );
+}
+
+export async function getWorkflow(
+  projectId: string,
+): Promise<WorkflowResponse> {
+  const id = resolveProjectId(projectId);
+  return request<WorkflowResponse>(`/projects/${id}/workflow`);
+}
+
+export async function getMyProjectRole(
+  projectId: string,
+): Promise<{ role: ProjectRole }> {
+  const id = resolveProjectId(projectId);
+  return request<{ role: ProjectRole }>(`/projects/${id}/my-role`);
+}
+
+export async function getProjectStats(
+  projectId: string,
+): Promise<ProjectStats> {
+  const id = resolveProjectId(projectId);
+  return request<ProjectStats>(`/projects/${id}/stats`);
+}
+
+export async function listTicketAttachments(
+  projectId: string,
+  ticketId: string,
+): Promise<AttachmentListResponse> {
+  return request<AttachmentListResponse>(
+    `/projects/${projectId}/tickets/${ticketId}/attachments`,
+  );
+}
+
+export async function uploadTicketAttachment(
+  projectId: string,
+  ticketId: string,
+  file: File,
+): Promise<Attachment> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(
+    `${API_BASE}/projects/${projectId}/tickets/${ticketId}/attachments`,
+    {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    },
+  );
+  if (!res.ok) {
+    const message = await res.text().catch(() => "");
+    const error = new Error(message || res.statusText);
+    (error as Error & { status?: number }).status = res.status;
+    throw error;
+  }
+  return (await res.json()) as Attachment;
+}
+
+export function downloadTicketAttachmentUrl(
+  projectId: string,
+  ticketId: string,
+  attachmentId: string,
+): string {
+  return `${API_BASE}/projects/${projectId}/tickets/${ticketId}/attachments/${attachmentId}/download`;
+}
+
+export async function deleteTicketAttachment(
+  projectId: string,
+  ticketId: string,
+  attachmentId: string,
+): Promise<void> {
+  await request<void>(
+    `/projects/${projectId}/tickets/${ticketId}/attachments/${attachmentId}`,
+    { method: "DELETE" },
   );
 }

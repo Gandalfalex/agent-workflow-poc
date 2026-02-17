@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 
 type StoryDraft = {
   title: string;
@@ -58,14 +59,14 @@ const updateStory = (patch: Partial<StoryDraft>) => {
           <label class="text-xs font-semibold text-muted-foreground"
             >Description</label
           >
-          <textarea
-            data-testid="story.description-input"
-            :value="props.story.description"
-            rows="4"
+          <MarkdownEditor
+            :model-value="props.story.description"
+            @update:model-value="updateStory({ description: $event })"
+            :rows="4"
             placeholder="Shared goal or summary"
-            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            @input="updateStory({ description: ($event.target as HTMLTextAreaElement).value })"
-          ></textarea>
+            data-testid="story.description-input"
+            compact
+          />
         </div>
         <div class="flex items-center gap-3">
           <Button data-testid="story.create-button" size="sm" :disabled="!props.canCreate || props.storySaving" @click="emit('create')">

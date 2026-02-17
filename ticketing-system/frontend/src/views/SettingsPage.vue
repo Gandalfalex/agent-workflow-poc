@@ -8,8 +8,10 @@ import { useSessionStore } from "@/stores/session";
 import type {
     Group,
     ProjectRole,
+    WebhookDelivery,
     WebhookEvent,
     WebhookResponse,
+    WorkflowState,
 } from "@/lib/api";
 
 const props = defineProps<{ projectId: string }>();
@@ -19,7 +21,7 @@ const adminStore = useAdminStore();
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
 
-const settingsTab = ref<"projects" | "webhooks">("projects");
+const settingsTab = ref<"projects" | "webhooks" | "workflow">("projects");
 const selectedProjectId = ref(props.projectId || "");
 const selectedGroupId = ref("");
 const actionNotice = ref<{ tone: "success" | "error"; message: string } | null>(
@@ -57,6 +59,14 @@ const newWebhook = ref({
     enabled: true,
 });
 
+// Workflow editor local state
+const workflowStates = computed(() => boardStore.workflowEditorStates);
+const workflowLoading = computed(() => boardStore.workflowEditorLoading);
+const workflowSaving = computed(() => boardStore.workflowEditorSaving);
+const workflowError = computed(() => boardStore.workflowEditorError);
+const workflowValidationError = ref("");
+const dragIndex = ref<number | null>(null);
+
 const projects = computed(() => adminStore.projects);
 const groups = computed(() => adminStore.groups);
 const projectGroups = computed(() => adminStore.projectGroups);
@@ -78,6 +88,13 @@ const groupError = computed(() => adminStore.groupError);
 const projectGroupError = computed(() => adminStore.projectGroupError);
 const groupMemberError = computed(() => adminStore.groupMemberError);
 const userSearchError = computed(() => adminStore.userSearchError);
+
+const deliveryWebhookId = ref<string | null>(null);
+const webhookDeliveries = computed(() => boardStore.webhookDeliveries);
+const webhookDeliveriesLoading = computed(
+    () => boardStore.webhookDeliveriesLoading,
+);
+const expandedDeliveryId = ref<string | null>(null);
 
 const webhooks = computed(() => boardStore.webhooks);
 const webhookLoading = computed(() => boardStore.webhookLoading);
@@ -293,6 +310,41 @@ const sendTestWebhook = async (hook: WebhookResponse) => {
     }
 };
 
+const toggleDeliveryHistory = async (hook: WebhookResponse) => {
+    if (deliveryWebhookId.value === hook.id) {
+        deliveryWebhookId.value = null;
+        boardStore.webhookDeliveries = [];
+        expandedDeliveryId.value = null;
+        return;
+    }
+    deliveryWebhookId.value = hook.id;
+    expandedDeliveryId.value = null;
+    const id = selectedProjectId.value;
+    if (!id) return;
+    try {
+        await boardStore.loadWebhookDeliveries(id, hook.id);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const toggleDeliveryDetail = (delivery: WebhookDelivery) => {
+    expandedDeliveryId.value =
+        expandedDeliveryId.value === delivery.id ? null : delivery.id;
+};
+
+const timeAgo = (dateStr: string): string => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+};
+
 const createProjectSubmit = async () => {
     if (!canCreateProject.value || projectLoading.value) return;
     try {
@@ -473,6 +525,122 @@ const sortUserResultsByRelevance = (query: string) => {
     adminStore.userResults = scored.map((s) => s.user);
 };
 
+// Workflow editor methods
+const loadWorkflow = async () => {
+    if (!selectedProjectId.value) return;
+    await boardStore.loadWorkflowEditor(selectedProjectId.value);
+};
+
+const addWorkflowState = () => {
+    const nextOrder = workflowStates.value.length + 1;
+    const isFirst = workflowStates.value.length === 0;
+    boardStore.workflowEditorStates = [
+        ...workflowStates.value,
+        {
+            id: `new-${Date.now()}`,
+            projectId: selectedProjectId.value,
+            name: "",
+            order: nextOrder,
+            isDefault: isFirst,
+            isClosed: false,
+        } as WorkflowState,
+    ];
+    workflowValidationError.value = "";
+};
+
+const removeWorkflowState = (index: number) => {
+    const state = workflowStates.value[index];
+    if (!state) return;
+    const isExisting = state.id && !state.id.startsWith("new-");
+    if (isExisting && !window.confirm(`Delete state "${state.name}"? Tickets in this state may be affected.`)) {
+        return;
+    }
+    const updated = [...workflowStates.value];
+    const wasDefault = updated[index]?.isDefault;
+    updated.splice(index, 1);
+    if (wasDefault && updated.length > 0) {
+        updated[0]!.isDefault = true;
+    }
+    boardStore.workflowEditorStates = updated;
+    workflowValidationError.value = "";
+};
+
+const setDefaultState = (index: number) => {
+    boardStore.workflowEditorStates = workflowStates.value.map((s, i) => ({
+        ...s,
+        isDefault: i === index,
+    }));
+    workflowValidationError.value = "";
+};
+
+const updateStateName = (index: number, name: string) => {
+    const updated = [...workflowStates.value];
+    if (updated[index]) {
+        updated[index] = { ...updated[index]!, name };
+    }
+    boardStore.workflowEditorStates = updated;
+    workflowValidationError.value = "";
+};
+
+const toggleStateClosed = (index: number) => {
+    const updated = [...workflowStates.value];
+    if (updated[index]) {
+        updated[index] = { ...updated[index]!, isClosed: !updated[index]!.isClosed };
+    }
+    boardStore.workflowEditorStates = updated;
+};
+
+const onDragStart = (index: number) => {
+    dragIndex.value = index;
+};
+
+const onDragOver = (event: DragEvent, index: number) => {
+    event.preventDefault();
+    if (dragIndex.value === null || dragIndex.value === index) return;
+    const updated = [...workflowStates.value];
+    const [moved] = updated.splice(dragIndex.value, 1);
+    if (moved) {
+        updated.splice(index, 0, moved);
+    }
+    boardStore.workflowEditorStates = updated;
+    dragIndex.value = index;
+};
+
+const onDragEnd = () => {
+    dragIndex.value = null;
+};
+
+const validateWorkflow = (): string | null => {
+    const states = workflowStates.value;
+    if (states.length === 0) return "At least one state is required.";
+    const emptyNames = states.some((s) => !s.name.trim());
+    if (emptyNames) return "All states must have a name.";
+    const names = states.map((s) => s.name.trim().toLowerCase());
+    const uniqueNames = new Set(names);
+    if (uniqueNames.size !== names.length) return "State names must be unique.";
+    const defaultCount = states.filter((s) => s.isDefault).length;
+    if (defaultCount !== 1) return "Exactly one state must be set as default.";
+    return null;
+};
+
+const saveWorkflow = async () => {
+    const error = validateWorkflow();
+    if (error) {
+        workflowValidationError.value = error;
+        return;
+    }
+    workflowValidationError.value = "";
+    if (!selectedProjectId.value) return;
+    try {
+        await boardStore.saveWorkflowEditor(selectedProjectId.value);
+        setNotice("success", "Workflow saved.");
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to save workflow.");
+        }
+    }
+};
+
 onMounted(async () => {
     window.addEventListener("keydown", onGlobalKeydown);
     await loadProjects();
@@ -539,6 +707,14 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'webhooks'"
             >
                 Webhooks
+            </Button>
+            <Button
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'workflow'"
+                @click="settingsTab = 'workflow'; loadWorkflow()"
+            >
+                Workflow
             </Button>
         </div>
     </section>
@@ -1268,6 +1444,18 @@ watch(selectedGroupId, async () => {
                                 Send test
                             </Button>
                             <Button
+                                variant="outline"
+                                size="sm"
+                                :disabled="webhookLoading"
+                                @click="toggleDeliveryHistory(hook)"
+                            >
+                                {{
+                                    deliveryWebhookId === hook.id
+                                        ? "Hide history"
+                                        : "History"
+                                }}
+                            </Button>
+                            <Button
                                 variant="ghost"
                                 size="sm"
                                 :disabled="webhookLoading"
@@ -1294,8 +1482,275 @@ watch(selectedGroupId, async () => {
                                 : "Test failed.")
                         }}
                     </div>
+
+                    <!-- Delivery History Panel -->
+                    <div
+                        v-if="deliveryWebhookId === hook.id"
+                        class="mt-4 rounded-xl border border-border bg-muted/30 p-3"
+                    >
+                        <p
+                            class="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-[0.15em]"
+                        >
+                            Delivery history
+                        </p>
+                        <div
+                            v-if="webhookDeliveriesLoading"
+                            class="text-xs text-muted-foreground"
+                        >
+                            Loading deliveries...
+                        </div>
+                        <div
+                            v-else-if="webhookDeliveries.length === 0"
+                            class="text-xs text-muted-foreground"
+                        >
+                            No delivery attempts recorded yet.
+                        </div>
+                        <div v-else class="space-y-1">
+                            <div
+                                v-for="delivery in webhookDeliveries"
+                                :key="delivery.id"
+                                class="rounded-lg border border-border bg-background"
+                            >
+                                <button
+                                    type="button"
+                                    class="flex w-full items-center gap-3 px-3 py-2 text-left text-xs hover:bg-muted/50 transition"
+                                    @click="toggleDeliveryDetail(delivery)"
+                                >
+                                    <span
+                                        class="inline-block h-2 w-2 rounded-full"
+                                        :class="
+                                            delivery.delivered
+                                                ? 'bg-emerald-500'
+                                                : 'bg-red-500'
+                                        "
+                                    ></span>
+                                    <span class="font-mono text-muted-foreground">
+                                        {{ delivery.event }}
+                                    </span>
+                                    <span class="text-muted-foreground">
+                                        #{{ delivery.attempt }}
+                                    </span>
+                                    <span
+                                        v-if="delivery.statusCode"
+                                        class="font-mono"
+                                        :class="
+                                            delivery.delivered
+                                                ? 'text-emerald-400'
+                                                : 'text-red-400'
+                                        "
+                                    >
+                                        {{ delivery.statusCode }}
+                                    </span>
+                                    <span class="text-muted-foreground">
+                                        {{ delivery.durationMs }}ms
+                                    </span>
+                                    <span
+                                        class="ml-auto text-muted-foreground"
+                                    >
+                                        {{ timeAgo(delivery.createdAt) }}
+                                    </span>
+                                </button>
+                                <div
+                                    v-if="expandedDeliveryId === delivery.id"
+                                    class="border-t border-border px-3 py-2 text-xs space-y-1"
+                                >
+                                    <div v-if="delivery.error">
+                                        <span
+                                            class="font-semibold text-red-400"
+                                            >Error:</span
+                                        >
+                                        <span class="text-muted-foreground ml-1">
+                                            {{ delivery.error }}
+                                        </span>
+                                    </div>
+                                    <div v-if="delivery.responseBody">
+                                        <span
+                                            class="font-semibold text-muted-foreground"
+                                            >Response:</span
+                                        >
+                                        <pre
+                                            class="mt-1 max-h-32 overflow-auto rounded bg-muted p-2 text-[11px] text-muted-foreground"
+                                            >{{ delivery.responseBody }}</pre
+                                        >
+                                    </div>
+                                    <div
+                                        v-if="
+                                            !delivery.error &&
+                                            !delivery.responseBody
+                                        "
+                                        class="text-muted-foreground"
+                                    >
+                                        No additional details.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- Workflow Editor Tab -->
+    <section
+        v-if="settingsTab === 'workflow'"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div class="flex items-center justify-between">
+            <div>
+                <p
+                    class="text-xs uppercase tracking-[0.3em] text-muted-foreground"
+                >
+                    Workflow
+                </p>
+                <h2 class="text-2xl font-semibold">Manage states</h2>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    Add, rename, reorder, and delete workflow states. Drag rows
+                    to reorder.
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Target project: {{ selectedProjectLabel }}
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    :disabled="workflowLoading"
+                    @click="loadWorkflow"
+                >
+                    {{ workflowLoading ? "Loading..." : "Reload" }}
+                </Button>
+            </div>
+        </div>
+
+        <div
+            v-if="workflowValidationError || workflowError"
+            data-testid="workflow.error"
+            class="mt-4 rounded-2xl border px-4 py-3 text-sm border-destructive/40 bg-destructive/10 text-destructive"
+        >
+            {{ workflowValidationError || workflowError }}
+        </div>
+
+        <div
+            v-if="workflowLoading"
+            class="mt-6 text-sm text-muted-foreground"
+        >
+            Loading workflow states...
+        </div>
+
+        <div v-else class="mt-6 space-y-2">
+            <div
+                class="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 px-3 text-[11px] uppercase tracking-[0.15em] text-muted-foreground font-semibold"
+            >
+                <span class="w-6"></span>
+                <span>Name</span>
+                <span class="text-center w-16">Default</span>
+                <span class="text-center w-16">Closed</span>
+                <span class="w-16"></span>
+            </div>
+
+            <div
+                v-for="(state, index) in workflowStates"
+                :key="state.id || index"
+                data-testid="workflow.state-row"
+                class="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 transition"
+                :class="dragIndex === index ? 'opacity-50 border-primary' : ''"
+                draggable="true"
+                @dragstart="onDragStart(index)"
+                @dragover="onDragOver($event, index)"
+                @dragend="onDragEnd"
+            >
+                <span
+                    class="w-6 cursor-grab text-center text-muted-foreground select-none"
+                    title="Drag to reorder"
+                >
+                    &#8801;
+                </span>
+
+                <input
+                    data-testid="workflow.state-name-input"
+                    type="text"
+                    :value="state.name"
+                    placeholder="State name"
+                    class="w-full rounded-lg border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    @input="
+                        updateStateName(
+                            index,
+                            ($event.target as HTMLInputElement).value,
+                        )
+                    "
+                />
+
+                <label
+                    class="flex items-center justify-center w-16"
+                    title="Default state for new tickets"
+                >
+                    <input
+                        data-testid="workflow.state-default-radio"
+                        type="radio"
+                        name="workflow-default-state"
+                        :checked="state.isDefault"
+                        class="h-4 w-4 border-border text-primary focus:ring-ring"
+                        @change="setDefaultState(index)"
+                    />
+                </label>
+
+                <label
+                    class="flex items-center justify-center w-16"
+                    title="Mark as closed/resolved state"
+                >
+                    <input
+                        data-testid="workflow.state-closed-checkbox"
+                        type="checkbox"
+                        :checked="state.isClosed"
+                        class="h-4 w-4 rounded border-border text-primary focus:ring-ring"
+                        @change="toggleStateClosed(index)"
+                    />
+                </label>
+
+                <div class="flex justify-end w-16">
+                    <Button
+                        data-testid="workflow.state-delete-button"
+                        variant="ghost"
+                        size="sm"
+                        :disabled="workflowStates.length <= 1"
+                        @click="removeWorkflowState(index)"
+                    >
+                        Delete
+                    </Button>
+                </div>
+            </div>
+
+            <div
+                v-if="workflowStates.length === 0"
+                class="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground"
+            >
+                No workflow states. Add one to get started.
+            </div>
+        </div>
+
+        <div class="mt-6 flex items-center gap-3">
+            <Button
+                data-testid="workflow.add-state-button"
+                variant="outline"
+                size="sm"
+                @click="addWorkflowState"
+            >
+                Add state
+            </Button>
+            <Button
+                data-testid="workflow.save-button"
+                size="sm"
+                :disabled="
+                    workflowSaving ||
+                    workflowStates.length === 0 ||
+                    !selectedProjectId
+                "
+                @click="saveWorkflow"
+            >
+                {{ workflowSaving ? "Saving..." : "Save workflow" }}
+            </Button>
         </div>
     </section>
 </template>

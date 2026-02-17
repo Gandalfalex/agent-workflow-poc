@@ -25,7 +25,7 @@ func (h *API) ListStories(w http.ResponseWriter, r *http.Request, projectId open
 
 func (h *API) CreateStory(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectID := uuid.UUID(projectId)
-	if !h.requireProjectAccess(w, r, projectID) {
+	if !h.requireProjectRole(w, r, projectID, roleContributor) {
 		return
 	}
 	req, ok := decodeJSON[storyCreateRequest](w, r, "story_create")
@@ -65,18 +65,17 @@ func (h *API) GetStory(w http.ResponseWriter, r *http.Request, id openapi_types.
 
 func (h *API) UpdateStory(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	storyID := uuid.UUID(id)
-	req, ok := decodeJSON[storyUpdateRequest](w, r, "story_update")
-	if !ok {
-		return
-	}
 
 	existing, err := h.store.GetStory(r.Context(), storyID)
 	if handleDBError(w, r, err, "story", "story_load") {
 		return
 	}
+	if !h.requireProjectRole(w, r, existing.ProjectID, roleContributor) {
+		return
+	}
 
-	// Check project access after fetching - return same error to avoid information disclosure
-	if !h.requireProjectAccess(w, r, existing.ProjectID) {
+	req, ok := decodeJSON[storyUpdateRequest](w, r, "story_update")
+	if !ok {
 		return
 	}
 
@@ -98,8 +97,7 @@ func (h *API) DeleteStory(w http.ResponseWriter, r *http.Request, id openapi_typ
 		return
 	}
 
-	// Check project access after fetching - return same error to avoid information disclosure
-	if !h.requireProjectAccess(w, r, story.ProjectID) {
+	if !h.requireProjectRole(w, r, story.ProjectID, roleContributor) {
 		return
 	}
 
@@ -121,6 +119,13 @@ func (h *API) ListTicketComments(w http.ResponseWriter, r *http.Request, id open
 
 func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ticketID := uuid.UUID(id)
+	ticket, err := h.store.GetTicket(r.Context(), ticketID)
+	if handleDBError(w, r, err, "ticket", "ticket_load") {
+		return
+	}
+	if !h.requireProjectRole(w, r, ticket.ProjectID, roleContributor) {
+		return
+	}
 
 	user, ok := authUser(r.Context())
 	if !ok {
@@ -156,6 +161,15 @@ func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openap
 }
 
 func (h *API) DeleteTicketComment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, commentId openapi_types.UUID) {
+	ticketID := uuid.UUID(id)
+	ticket, err := h.store.GetTicket(r.Context(), ticketID)
+	if handleDBError(w, r, err, "ticket", "ticket_load") {
+		return
+	}
+	if !h.requireProjectRole(w, r, ticket.ProjectID, roleContributor) {
+		return
+	}
+
 	commentID := uuid.UUID(commentId)
 	if err := h.store.DeleteComment(r.Context(), commentID); handleDeleteError(w, r, err, "comment", "comment_delete") {
 		return

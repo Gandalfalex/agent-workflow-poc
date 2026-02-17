@@ -94,6 +94,16 @@ func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	return execOne(ctx, s.db, query, pgx.ErrNoRows, id)
 }
 
+func (s *Store) GetProjectRoleForUser(ctx context.Context, projectID, userID uuid.UUID) (string, error) {
+	query := mustSQL("project_role_for_user", nil)
+	var role string
+	err := s.db.QueryRow(ctx, query, projectID, userID).Scan(&role)
+	if err == pgx.ErrNoRows {
+		return "", nil
+	}
+	return role, err
+}
+
 func normalizeProjectKey(value string) (string, error) {
 	key := strings.ToUpper(strings.TrimSpace(value))
 	if !projectKeyPattern.MatchString(key) {

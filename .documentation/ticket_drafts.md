@@ -1,122 +1,117 @@
-# Ticket Drafts (Roadmap Batch 1)
+# Ticket Drafts (Roadmap Batch 2)
 
-Date: February 15, 2026  
+Date: February 17, 2026
 Source: `.documentation/feature_roadmap.md`
 
-## TKT-001: Verify Webhook Delivery End-to-End and Add Retry Coverage
-- Priority: `P0`
-- Problem:
-  - Webhook CRUD and dispatch exist, but end-to-end reliability is not fully validated.
-- Scope:
-  - Validate webhook events for `ticket.created`, `ticket.updated`, `ticket.deleted`, `ticket.state_changed`.
-  - Add/expand integration tests for failure + retry + success flows.
-  - Verify request signing behavior when secret is configured.
-  - Add structured delivery logs with status and attempt count.
-- Acceptance Criteria:
-  - Events are emitted for all supported ticket event types.
-  - Failed webhook deliveries are retried according to configured policy.
-  - Tests cover at least one transient failure scenario and one permanent failure scenario.
-  - When a webhook secret is set, outbound requests include expected signature header.
-  - Logs include webhook id, event type, delivery outcome, and attempt number.
-- Dependencies:
-  - Existing webhook dispatcher/store implementation.
-  - Local test receiver or mock endpoint for integration tests.
+## Previously Completed (Batch 1)
 
-## TKT-002: Run Full Board/Workflow Regression and Fix Critical Bugs
-- Priority: `P0`
-- Problem:
-  - Core board features are present, but QA and integration confidence is incomplete.
-- Scope:
-  - Execute regression checklist for ticket CRUD, state transitions, stories, comments, assignee updates, search/filter.
-  - Validate workflow initialization and updates from UI/API.
-  - Fix critical and high-severity defects found during testing.
-  - Add test coverage for identified regressions.
-- Acceptance Criteria:
-  - Regression checklist is documented and completed with results.
-  - No open critical defects for board/workflow flows.
-  - All fixed regressions have corresponding automated tests.
-  - Board operations remain functional in both happy-path and common edge cases.
-- Dependencies:
-  - Auth-ready local environment with backend, frontend, database, Keycloak.
+| Draft | Title | Status |
+|-------|-------|--------|
+| TKT-001 | Webhook delivery end-to-end | Done (dispatch, signing, events, retry + delivery logs all complete via TKT-007) |
+| TKT-002 | Board/workflow regression | Done (12+ E2E test files, contract-driven harness) |
+| TKT-003 | Local dev compose and runbook | Done (full Docker Compose with all services) |
+| TKT-004 | Role-based authorization audit | Mostly done (hierarchy enforced; granular checks are TKT-008) |
+| TKT-005 | Ticket activity timeline | Carried forward as TKT-009 |
+| TKT-006 | Workflow editor UX | Carried forward as TKT-010 |
 
-## TKT-003: Finalize Local Dev Compose and Runbook
-- Priority: `P0`
-- Problem:
-  - Local setup is partially complete and can cause inconsistent onboarding/verification.
-- Scope:
-  - Consolidate/validate local compose flow for backend, frontend, Postgres, and Keycloak.
-  - Document startup, migration, seed/sync, and shutdown commands.
-  - Ensure one-command bootstrap path is available and tested.
-  - Document common failure modes and recovery steps.
-- Acceptance Criteria:
-  - A new contributor can start the full stack using documented steps only.
-  - Migrations apply successfully in a clean environment.
-  - Auth login flow works in local setup.
-  - Runbook includes troubleshooting for at least 3 common setup failures.
-- Dependencies:
-  - Existing docker-compose files and setup scripts.
+---
 
-## TKT-004: Audit and Enforce Role-Based Authorization Matrix
+## New Tickets
+
+### TKT-007: Add Webhook Retry Logic and Delivery History — **DONE**
+- Priority: `P0`
+- Status: **Completed** (February 17, 2026)
+- What shipped:
+  - Exponential backoff retry (3 attempts: immediate, 30s, 5min) in `deliverWithRetry()`.
+  - `webhook_deliveries` migration (`011_webhook_deliveries.sql`): webhook_id, event, attempt, status_code, response_body, error, delivered, duration_ms, created_at.
+  - Store layer: `CreateWebhookDelivery`, `ListWebhookDeliveries` (latest 50).
+  - API endpoint: `GET /projects/{projectId}/webhooks/{id}/deliveries`.
+  - OpenAPI schema: `WebhookDelivery`, `WebhookDeliveryListResponse`.
+  - Settings UI: "History" button per webhook, expandable delivery list with status dot, event, attempt, status code, duration, time ago, and expandable response/error details.
+  - Response body truncated to 4KB to prevent bloat.
+  - All existing tests pass. fakeStore stubs updated for new interface methods.
+
+### TKT-008: Enforce Granular Per-Operation Role Permissions — **DONE**
+- Priority: `P0`
+- Status: **Completed** (February 17, 2026)
+- What shipped:
+  - SQL template `project_role_for_user.sql` resolving highest role via project_groups + group_memberships join.
+  - `GetProjectRoleForUser` store method returning "" for no membership.
+  - `requireProjectRole()` handler helper with role rank system (admin=3, contributor=2, viewer=1). System admins bypass all checks.
+  - 17+ write handlers patched: ticket/story/comment/attachment CRUD → contributor, workflow/webhook/project-group management → admin.
+  - `GET /projects/{projectId}/my-role` API endpoint returning current user's role.
+  - Frontend: `currentUserRole` state in board store, `canEditTickets`/`canManageProject` getters.
+  - UI gating: read-only ticket modal for viewers, hidden New Ticket/Story buttons, hidden Settings tab for non-admins.
+  - 6 handler unit tests (viewer 403 on create/delete, contributor 201, viewer 200 on read, contributor 403 on workflow, my-role endpoint).
+  - 4 E2E tests with multi-user support: viewer cannot create ticket (UI), viewer cannot see Settings tab, viewer API 403 on create ticket, viewer API 403 on update workflow.
+  - Multi-user E2E infrastructure: `staticAuth` with multiple entries, `WithViewerUser()` harness option, `APIRequest()` helper, viewer seed data.
+
+### TKT-009: Add Ticket Activity Timeline (Backend + UI)
 - Priority: `P1`
 - Problem:
-  - Project-group roles exist, but permission enforcement may not be uniformly tested across endpoints.
+  - Ticket changes (state moves, assignee changes, field edits) are not recorded or visible.
 - Scope:
-  - Define explicit permission matrix for `viewer`, `contributor`, `admin`.
-  - Audit protected endpoints for expected authorization checks.
-  - Add negative tests for forbidden operations.
-  - Align frontend controls with backend authorization (hide/disable disallowed actions).
+  - Create `ticket_activities` table: ticket_id, actor_id, action, field, old_value, new_value, created_at.
+  - Generate activity entries automatically in ticket update handler.
+  - Add API endpoint: `GET /projects/{projectId}/tickets/{id}/activities`.
+  - Render chronological timeline in ticket detail modal, interleaved with comments.
+  - Add OpenAPI spec entry and generated types.
 - Acceptance Criteria:
-  - Permission matrix is documented and committed.
-  - Protected endpoints return correct `403` responses for unauthorized roles.
-  - Tests validate at least one blocked action per role where applicable.
-  - UI does not expose actions users cannot perform.
+  - State changes, assignee changes, and priority changes generate activity records.
+  - Timeline is visible in ticket modal in chronological order.
+  - Activity records are immutable.
+  - E2E test validates timeline entries after ticket update.
 - Dependencies:
-  - Current auth and project/group role assignment behavior.
+  - Ticket update handlers. Database migration pipeline.
 
-## TKT-005: Add Ticket Activity Timeline (Backend + UI)
+### TKT-010: Build Visual Workflow State Editor
 - Priority: `P1`
 - Problem:
-  - Comments exist, but ticket change history is not fully visible/auditable.
+  - Workflow states can only be edited via raw API. No UI for managing states.
 - Scope:
-  - Add immutable activity records for state changes, assignee changes, and key field edits.
-  - Expose activity timeline via API endpoint or ticket detail expansion.
-  - Render timeline in ticket modal with timestamp and actor.
-  - Add migration(s) and store logic for activity persistence.
+  - Add workflow editor section to settings page.
+  - Controls: add state, rename state, delete state, drag-and-drop reorder.
+  - State properties: name, isDefault (exactly one required), isClosed.
+  - Client-side validation before save. Backend validation on PATCH.
+  - Confirmation dialog before deleting a state that has tickets.
 - Acceptance Criteria:
-  - Activity entries are created automatically for tracked ticket changes.
-  - Timeline is visible in ticket detail UI in chronological order.
-  - Activity records are immutable after creation.
-  - API and UI tests cover timeline creation and display.
+  - Users can add, rename, reorder, and delete workflow states from settings.
+  - Exactly one default state is enforced.
+  - Reordering persists and reflects on the board.
+  - Deleting a state with tickets shows a warning/confirmation.
+  - E2E test covers add + reorder + save flow.
 - Dependencies:
-  - Ticket update handlers and ticket modal UI.
-  - Database migration pipeline.
+  - Existing `PATCH /projects/{projectId}/workflow` endpoint.
 
-## TKT-006: Improve Workflow Editor UX and Validation
+### TKT-011: Add Ticket File Attachments with MinIO CDN — **DONE**
 - Priority: `P1`
-- Problem:
-  - Workflow management works but needs stronger UX and validation guardrails.
-- Scope:
-  - Improve workflow editor controls for add, rename, reorder, default/closed state flags.
-  - Add client-side validation before save.
-  - Add backend validation for invalid workflow definitions.
-  - Improve error messaging and recovery in settings UI.
-- Acceptance Criteria:
-  - Users can safely edit workflows without creating invalid state sets.
-  - Saving invalid workflow configurations is blocked with clear error messages.
-  - At least one default workflow state is always enforced.
-  - Reordering states persists and reflects correctly on board view.
-- Dependencies:
-  - Existing workflow API and settings page.
+- Status: **Completed** (February 17, 2026)
+- What shipped:
+  - MinIO S3-compatible object storage with swappable `ObjectStore` interface (MinIO for prod, in-memory for E2E).
+  - 4 REST endpoints: upload (multipart), list, download (streaming), delete.
+  - `ticket_attachments` migration, store CRUD, handler layer.
+  - Frontend: file picker, attachment list with download links/delete buttons in ticket modal.
+  - Docker Compose `minio` service. 10MB configurable upload limit.
+  - 2 E2E tests (upload+list, delete).
+- Not yet shipped: Nginx CDN caching layer (downloads go through backend).
 
-## Suggested Labels (Optional)
-- `area/backend`
-- `area/frontend`
-- `area/auth`
-- `area/webhooks`
-- `area/workflow`
-- `priority/p0`
-- `priority/p1`
+### TKT-012: Add Project Dashboard Overview Page — **DONE**
+- Priority: `P1`
+- Status: **Completed** (February 17, 2026)
+- What shipped:
+  - `GET /projects/{projectId}/stats` API endpoint returning aggregate ticket counts.
+  - `ProjectStats` and `StatCount` OpenAPI schemas with generated types.
+  - Store layer with 5 SQL aggregation queries: by state, priority, type, assignee, and open/closed.
+  - Frontend route `/projects/:projectId/dashboard` with lazy-loaded `DashboardPage.vue`.
+  - Dashboard tab in header navigation alongside Board and Settings.
+  - Summary cards (total, open, closed) with large numbers and color accents.
+  - Horizontal bar charts for state, priority (color-coded), type (color-coded), and assignee.
+  - Loading skeleton and empty state handling.
+  - All existing tests pass. fakeStore stubs updated for new interface methods.
+- Not yet shipped: Recent activity feed (depends on TKT-009).
+
+---
 
 ## Suggested Milestone Split
-1. Milestone A (Stabilization): `TKT-001`, `TKT-002`, `TKT-003`
-2. Milestone B (Completeness): `TKT-004`, `TKT-005`, `TKT-006`
+1. **Milestone A (Harden):** ~~TKT-007~~, ~~TKT-008~~ — **Complete**
+2. **Milestone B (Core Features):** TKT-009, TKT-010, ~~TKT-011~~, ~~TKT-012~~

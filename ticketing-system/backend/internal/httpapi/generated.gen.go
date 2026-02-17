@@ -56,6 +56,23 @@ const (
 	TicketUpdated      WebhookEvent = "ticket.updated"
 )
 
+// Attachment defines model for Attachment.
+type Attachment struct {
+	ContentType    string             `json:"contentType"`
+	CreatedAt      time.Time          `json:"createdAt"`
+	Filename       string             `json:"filename"`
+	Id             openapi_types.UUID `json:"id"`
+	Size           int64              `json:"size"`
+	TicketId       openapi_types.UUID `json:"ticketId"`
+	UploadedBy     openapi_types.UUID `json:"uploadedBy"`
+	UploadedByName string             `json:"uploadedByName"`
+}
+
+// AttachmentListResponse defines model for AttachmentListResponse.
+type AttachmentListResponse struct {
+	Items []Attachment `json:"items"`
+}
+
 // AuthLoginRequest defines model for AuthLoginRequest.
 type AuthLoginRequest struct {
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
@@ -193,10 +210,26 @@ type ProjectPermission string
 // ProjectRole defines model for ProjectRole.
 type ProjectRole string
 
+// ProjectStats defines model for ProjectStats.
+type ProjectStats struct {
+	ByAssignee  []StatCount `json:"byAssignee"`
+	ByPriority  []StatCount `json:"byPriority"`
+	ByState     []StatCount `json:"byState"`
+	ByType      []StatCount `json:"byType"`
+	TotalClosed int         `json:"totalClosed"`
+	TotalOpen   int         `json:"totalOpen"`
+}
+
 // ProjectUpdateRequest defines model for ProjectUpdateRequest.
 type ProjectUpdateRequest struct {
 	Description *string `json:"description,omitempty"`
 	Name        *string `json:"name,omitempty"`
+}
+
+// StatCount defines model for StatCount.
+type StatCount struct {
+	Label string `json:"label"`
+	Value int    `json:"value"`
 }
 
 // Story defines model for Story.
@@ -359,6 +392,25 @@ type WebhookCreateRequest struct {
 	Url     string         `json:"url"`
 }
 
+// WebhookDelivery defines model for WebhookDelivery.
+type WebhookDelivery struct {
+	Attempt      int                `json:"attempt"`
+	CreatedAt    time.Time          `json:"createdAt"`
+	Delivered    bool               `json:"delivered"`
+	DurationMs   int                `json:"durationMs"`
+	Error        *string            `json:"error,omitempty"`
+	Event        string             `json:"event"`
+	Id           openapi_types.UUID `json:"id"`
+	ResponseBody *string            `json:"responseBody,omitempty"`
+	StatusCode   *int               `json:"statusCode,omitempty"`
+	WebhookId    openapi_types.UUID `json:"webhookId"`
+}
+
+// WebhookDeliveryListResponse defines model for WebhookDeliveryListResponse.
+type WebhookDeliveryListResponse struct {
+	Items []WebhookDelivery `json:"items"`
+}
+
 // WebhookEvent defines model for WebhookEvent.
 type WebhookEvent string
 
@@ -427,6 +479,11 @@ type ListTicketsParams struct {
 	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// UploadTicketAttachmentMultipartBody defines parameters for UploadTicketAttachment.
+type UploadTicketAttachmentMultipartBody struct {
+	File openapi_types.File `json:"file"`
+}
+
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
 	// Q Search by name or email
@@ -462,6 +519,9 @@ type CreateStoryJSONRequestBody = StoryCreateRequest
 
 // CreateTicketJSONRequestBody defines body for CreateTicket for application/json ContentType.
 type CreateTicketJSONRequestBody = TicketCreateRequest
+
+// UploadTicketAttachmentMultipartRequestBody defines body for UploadTicketAttachment for multipart/form-data ContentType.
+type UploadTicketAttachmentMultipartRequestBody UploadTicketAttachmentMultipartBody
 
 // CreateWebhookJSONRequestBody defines body for CreateWebhook for application/json ContentType.
 type CreateWebhookJSONRequestBody = WebhookCreateRequest
@@ -555,6 +615,12 @@ type ServerInterface interface {
 	// Update project group role
 	// (PATCH /projects/{projectId}/groups/{groupId})
 	UpdateProjectGroup(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, groupId openapi_types.UUID)
+	// Get the current user's role on this project
+	// (GET /projects/{projectId}/my-role)
+	GetMyProjectRole(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Get project statistics
+	// (GET /projects/{projectId}/stats)
+	GetProjectStats(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
 	// List stories
 	// (GET /projects/{projectId}/stories)
 	ListStories(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -567,6 +633,18 @@ type ServerInterface interface {
 	// Create ticket
 	// (POST /projects/{projectId}/tickets)
 	CreateTicket(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// List ticket attachments
+	// (GET /projects/{projectId}/tickets/{ticketId}/attachments)
+	ListTicketAttachments(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID)
+	// Upload file attachment to ticket
+	// (POST /projects/{projectId}/tickets/{ticketId}/attachments)
+	UploadTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID)
+	// Delete ticket attachment
+	// (DELETE /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId})
+	DeleteTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, attachmentId openapi_types.UUID)
+	// Download attachment file
+	// (GET /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download)
+	DownloadTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, attachmentId openapi_types.UUID)
 	// List webhooks
 	// (GET /projects/{projectId}/webhooks)
 	ListWebhooks(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -582,6 +660,9 @@ type ServerInterface interface {
 	// Update webhook
 	// (PATCH /projects/{projectId}/webhooks/{id})
 	UpdateWebhook(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID)
+	// List webhook delivery history
+	// (GET /projects/{projectId}/webhooks/{id}/deliveries)
+	ListWebhookDeliveries(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID)
 	// Send test webhook
 	// (POST /projects/{projectId}/webhooks/{id}/test)
 	TestWebhook(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID)
@@ -765,6 +846,18 @@ func (_ Unimplemented) UpdateProjectGroup(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Get the current user's role on this project
+// (GET /projects/{projectId}/my-role)
+func (_ Unimplemented) GetMyProjectRole(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get project statistics
+// (GET /projects/{projectId}/stats)
+func (_ Unimplemented) GetProjectStats(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // List stories
 // (GET /projects/{projectId}/stories)
 func (_ Unimplemented) ListStories(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
@@ -786,6 +879,30 @@ func (_ Unimplemented) ListTickets(w http.ResponseWriter, r *http.Request, proje
 // Create ticket
 // (POST /projects/{projectId}/tickets)
 func (_ Unimplemented) CreateTicket(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List ticket attachments
+// (GET /projects/{projectId}/tickets/{ticketId}/attachments)
+func (_ Unimplemented) ListTicketAttachments(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Upload file attachment to ticket
+// (POST /projects/{projectId}/tickets/{ticketId}/attachments)
+func (_ Unimplemented) UploadTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete ticket attachment
+// (DELETE /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId})
+func (_ Unimplemented) DeleteTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, attachmentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Download attachment file
+// (GET /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download)
+func (_ Unimplemented) DownloadTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, attachmentId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -816,6 +933,12 @@ func (_ Unimplemented) GetWebhook(w http.ResponseWriter, r *http.Request, projec
 // Update webhook
 // (PATCH /projects/{projectId}/webhooks/{id})
 func (_ Unimplemented) UpdateWebhook(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List webhook delivery history
+// (GET /projects/{projectId}/webhooks/{id}/deliveries)
+func (_ Unimplemented) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1535,6 +1658,68 @@ func (siw *ServerInterfaceWrapper) UpdateProjectGroup(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// GetMyProjectRole operation middleware
+func (siw *ServerInterfaceWrapper) GetMyProjectRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMyProjectRole(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProjectStats operation middleware
+func (siw *ServerInterfaceWrapper) GetProjectStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProjectStats(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListStories operation middleware
 func (siw *ServerInterfaceWrapper) ListStories(w http.ResponseWriter, r *http.Request) {
 
@@ -1693,6 +1878,184 @@ func (siw *ServerInterfaceWrapper) CreateTicket(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateTicket(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTicketAttachments operation middleware
+func (siw *ServerInterfaceWrapper) ListTicketAttachments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTicketAttachments(w, r, projectId, ticketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadTicketAttachment operation middleware
+func (siw *ServerInterfaceWrapper) UploadTicketAttachment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadTicketAttachment(w, r, projectId, ticketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTicketAttachment operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTicketAttachment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "attachmentId" -------------
+	var attachmentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attachmentId", chi.URLParam(r, "attachmentId"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "attachmentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTicketAttachment(w, r, projectId, ticketId, attachmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadTicketAttachment operation middleware
+func (siw *ServerInterfaceWrapper) DownloadTicketAttachment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "attachmentId" -------------
+	var attachmentId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "attachmentId", chi.URLParam(r, "attachmentId"), &attachmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "attachmentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadTicketAttachment(w, r, projectId, ticketId, attachmentId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1875,6 +2238,46 @@ func (siw *ServerInterfaceWrapper) UpdateWebhook(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateWebhook(w, r, projectId, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWebhookDeliveries operation middleware
+func (siw *ServerInterfaceWrapper) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWebhookDeliveries(w, r, projectId, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2490,6 +2893,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Patch(options.BaseURL+"/projects/{projectId}/groups/{groupId}", wrapper.UpdateProjectGroup)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/my-role", wrapper.GetMyProjectRole)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/stats", wrapper.GetProjectStats)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/stories", wrapper.ListStories)
 	})
 	r.Group(func(r chi.Router) {
@@ -2500,6 +2909,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/tickets", wrapper.CreateTicket)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/attachments", wrapper.ListTicketAttachments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/attachments", wrapper.UploadTicketAttachment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}", wrapper.DeleteTicketAttachment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download", wrapper.DownloadTicketAttachment)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/webhooks", wrapper.ListWebhooks)
@@ -2515,6 +2936,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/projects/{projectId}/webhooks/{id}", wrapper.UpdateWebhook)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/webhooks/{id}/deliveries", wrapper.ListWebhookDeliveries)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/webhooks/{id}/test", wrapper.TestWebhook)

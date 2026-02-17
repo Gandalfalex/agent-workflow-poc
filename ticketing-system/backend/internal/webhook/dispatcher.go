@@ -18,6 +18,7 @@ import (
 
 type Store interface {
 	ListWebhooksForEvent(ctx context.Context, projectID uuid.UUID, event string) ([]store.Webhook, error)
+	CreateWebhookDelivery(ctx context.Context, input store.WebhookDeliveryCreateInput) (store.WebhookDelivery, error)
 }
 
 type Dispatcher struct {
@@ -38,6 +39,8 @@ type Result struct {
 	Error        error
 }
 
+var retryDelays = [3]time.Duration{0, 30 * time.Second, 5 * time.Minute}
+
 func New(store Store) *Dispatcher {
 	return &Dispatcher{
 		store: store,
@@ -53,15 +56,51 @@ func (d *Dispatcher) Dispatch(ctx context.Context, projectID uuid.UUID, event st
 		return
 	}
 
+	envelope := Envelope{Event: event, SentAt: time.Now().UTC(), Data: data}
 	for _, hook := range webhooks {
 		hook := hook
-		go func() {
-			_, _ = d.deliver(context.Background(), hook, Envelope{
-				Event:  event,
-				SentAt: time.Now().UTC(),
-				Data:   data,
-			})
-		}()
+		go d.deliverWithRetry(hook, envelope)
+	}
+}
+
+func (d *Dispatcher) deliverWithRetry(hook store.Webhook, envelope Envelope) {
+	for attempt, delay := range retryDelays {
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+
+		start := time.Now()
+		result, _ := d.deliver(context.Background(), hook, envelope)
+		durationMs := int(time.Since(start).Milliseconds())
+
+		input := store.WebhookDeliveryCreateInput{
+			WebhookID:  hook.ID,
+			Event:      envelope.Event,
+			Attempt:    attempt + 1,
+			Delivered:  result.Delivered,
+			DurationMs: durationMs,
+		}
+		if result.StatusCode != 0 {
+			code := result.StatusCode
+			input.StatusCode = &code
+		}
+		if result.ResponseBody != "" {
+			body := result.ResponseBody
+			if len(body) > 4096 {
+				body = body[:4096]
+			}
+			input.ResponseBody = &body
+		}
+		if result.Error != nil {
+			errMsg := result.Error.Error()
+			input.Error = &errMsg
+		}
+
+		_, _ = d.store.CreateWebhookDelivery(context.Background(), input)
+
+		if result.Delivered {
+			return
+		}
 	}
 }
 

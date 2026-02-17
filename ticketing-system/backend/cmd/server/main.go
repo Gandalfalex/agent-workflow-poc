@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ticketing-system/backend/internal/auth"
+	"ticketing-system/backend/internal/blob"
 	"ticketing-system/backend/internal/config"
 	"ticketing-system/backend/internal/httpapi"
 	"ticketing-system/backend/internal/migrate"
@@ -43,10 +44,26 @@ func main() {
 
 	dispatcher := webhook.New(st)
 
+	blobStore, err := blob.NewMinIO(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
+	if err != nil {
+		log.Printf("WARNING: MinIO init failed, file attachments disabled: %v", err)
+	} else {
+		if err := blobStore.EnsureBucket(ctx); err != nil {
+			log.Printf("WARNING: MinIO bucket init failed, file attachments disabled: %v", err)
+			blobStore = nil
+		}
+	}
+
+	var blobOpt blob.ObjectStore
+	if blobStore != nil {
+		blobOpt = blobStore
+	}
+
 	handler := httpapi.NewHandler(st, authClient, dispatcher, httpapi.HandlerOptions{
 		CookieName:     "ticketing_session",
 		CookieSecure:   cfg.CookieSecure,
 		AllowedOrigins: cfg.CORSAllowedOrigins,
+		BlobStore:      blobOpt,
 	})
 	router := httpapi.Router(handler)
 	apiHandler := http.Handler(router)

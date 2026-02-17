@@ -14,6 +14,12 @@ const router = createRouter({
       props: true,
     },
     {
+      path: "/projects/:projectId/dashboard",
+      name: "dashboard",
+      component: () => import("@/views/DashboardPage.vue"),
+      props: true,
+    },
+    {
       path: "/projects/:projectId/settings",
       name: "settings",
       component: SettingsPage,

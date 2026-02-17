@@ -1,148 +1,164 @@
 # Feature Roadmap
 
-Date: February 15, 2026
+Date: February 17, 2026
 Source baseline: `.documentation/current_features.md`
 
+## Completed
+
+### Local dev environment (was P0)
+- Docker Compose fully working with backend, frontend, Postgres, Keycloak, n8n, codex-agent.
+- Migrations run automatically on startup. Keycloak realm imported via volume.
+- Production compose with Traefik also available.
+
+### Board and workflow regression (was P0)
+- 12+ E2E test files with contract-driven Playwright harness.
+- Coverage: ticket CRUD, state transitions, stories, comments, drag-and-drop, webhook events, navigation, unhappy paths.
+- No critical regressions remain.
+
+### Webhook delivery (was P0, complete)
+- Dispatcher, HMAC signing, event filtering, async delivery all working.
+- E2E tests validate `ticket.created` and `ticket.state_changed` events.
+- Exponential backoff retry (3 attempts: immediate, 30s, 5min) with delivery logging.
+- `webhook_deliveries` table tracks every attempt with status, response, duration.
+- Delivery history API endpoint and settings UI panel with expandable detail rows.
+
+### Role-based access control (was P1, complete)
+- Admin/contributor/viewer role hierarchy enforced.
+- `requireAdmin()` and `requireProjectAccess()` middleware in place.
+- Per-operation `requireProjectRole()` enforcement: viewers read-only, contributors CRUD tickets, admins manage settings.
+- Frontend role-aware UI gating (read-only modals, hidden controls, restricted tabs).
+- Multi-user E2E tests with RBAC negative-path coverage.
+- Remaining gap: no audit trail.
+
+### Markdown editor upgrade (was P1-P2)
+- Reusable `MarkdownEditor.vue` with toolbar, keyboard shortcuts, and preview toggle.
+- Applied to all markdown text areas: ticket description, comments, new ticket, story.
+- No new dependencies — uses existing `marked` + `lucide-vue-next`.
+- Remaining gap: image paste support.
+
+### Project dashboard (was P1, complete)
+- Project-level statistics API and dashboard page.
+- Aggregate ticket counts by state, priority, type, and assignee.
+- Dashboard tab in header navigation alongside Board and Settings.
+
+### Ticket file attachments (was P1)
+- MinIO S3-compatible object storage with swappable `ObjectStore` interface.
+- Upload, list, download, delete via REST API (multipart form upload, streaming download).
+- `ticket_attachments` table with metadata in Postgres, blobs in MinIO.
+- Frontend UI in ticket modal: file picker, attachment list with download links, delete buttons.
+- In-memory ObjectStore for E2E tests (no MinIO container needed).
+- Docker Compose `minio` service added. 10MB configurable upload limit.
+- 2 E2E tests: upload+list, delete.
+- Remaining gap: no Nginx CDN caching layer (downloads served through backend).
+
+---
+
 ## Roadmap Goals
-- Stabilize and productionize what already exists.
-- Close known integration gaps (especially webhooks and QA).
-- Add high-impact product features that improve planning, execution, and visibility.
+- Complete remaining gaps in webhooks and RBAC.
+- Add high-impact product features for planning, visibility, and usability.
+- Improve frontend polish and self-service administration.
 
-## Prioritization Method
-- `P0` Critical foundation or release blocker.
-- `P1` High-value feature with moderate implementation risk.
-- `P2` Valuable enhancement after core stability and workflow completion.
+## Prioritization
+- `P0` Remaining gaps that affect reliability or security.
+- `P1` High-value features with clear user benefit.
+- `P2` Nice-to-have enhancements after core features land.
 
-## Phase 1 (P0): Stabilization and Release Readiness
+---
 
-### 1. End-to-end webhook reliability
-- Scope:
-  - Verify event emission paths for create/update/delete/state-change.
-  - Add retry/backoff behavior validation and delivery result logging.
-  - Expand integration tests covering signature/secret behavior.
-- Why now:
-  - Webhooks are partially complete and explicitly marked as pending integration verification.
-- Exit criteria:
-  - Webhook events are consistently delivered in local and staging.
-  - Test coverage includes success/failure/retry scenarios.
-  - Operational troubleshooting info is available in logs.
+## Phase 1 (P0): Close Remaining Gaps
 
-### 2. Workflow and board QA hardening
-- Scope:
-  - Full regression pass for ticket CRUD, state moves, stories, comments, assignee, and search.
-  - Validate default workflow initialization and edit behavior.
-  - Fix edge-case bugs discovered during QA.
-- Why now:
-  - Core workflow is functional but needs confidence for wider use.
-- Exit criteria:
-  - No critical regressions in board flows.
-  - Smoke test checklist passes in clean environment.
+### ~~1. Webhook retry and delivery logs~~ ✓ Completed (TKT-007)
+- ~~Add exponential backoff retry on failed deliveries (max 3 attempts).~~
+- Implemented: 3-attempt retry with backoff (0s, 30s, 5min), `webhook_deliveries` table, delivery history API + settings UI panel.
 
-### 3. Local developer environment consistency
-- Scope:
-  - Reconcile and finalize local `docker-compose` path for ticketing backend/frontend/db/keycloak.
-  - Document single-command startup and seed/sync steps.
-- Why now:
-  - Faster onboarding and repeatable QA require one reliable dev setup.
-- Exit criteria:
-  - New contributor can run full stack from docs without manual fixes.
+### ~~2. Granular role-based permission enforcement~~ ✓ Completed (TKT-008)
+- ~~Enforce per-operation checks: viewers cannot create/edit/delete tickets; contributors cannot manage projects/groups.~~
+- Implemented: `requireProjectRole()` helper with role rank system, 17+ handler patches, `GET /my-role` endpoint, frontend UI gating, 6 unit tests, 4 E2E tests.
 
-## Phase 2 (P1): Core Product Completeness
+## Phase 2 (P1): Core Product Features
 
-### 4. Role-based permission enforcement audit
-- Scope:
-  - Verify backend authorization checks align with project-group role model.
-  - Ensure viewer/contributor/admin behavior is enforced consistently in API and UI.
-  - Add missing negative tests (forbidden access) for critical endpoints.
-- Why now:
-  - Access control is central to multi-project usage and security.
-- Exit criteria:
-  - Permission matrix is documented and test-backed.
-  - Unauthorized operations return correct error codes.
+### 3. Ticket activity timeline
+- Add immutable activity records for state changes, assignee changes, field edits.
+- New `ticket_activities` table with migration.
+- API endpoint to retrieve activity for a ticket.
+- Render chronological timeline in ticket detail modal.
+- Why: Comments exist but change history is not auditable.
 
-### 5. Ticket activity timeline
-- Scope:
-  - Add immutable activity entries for state changes, assignee changes, and key field edits.
-  - Show ticket history in the ticket modal.
-- Why now:
-  - Current comments exist, but users need auditable change context.
-- Exit criteria:
-  - Timeline entries are generated automatically for tracked actions.
-  - Users can view chronological ticket history in UI.
+### 4. Workflow editor UI
+- Visual workflow state editor in settings: add, rename, reorder, set default/closed flags.
+- Drag-and-drop state reordering.
+- Client-side and backend validation (must have exactly one default state).
+- Why: Workflow API exists but editing requires raw API calls.
 
-### 6. Workflow administration UX improvements
-- Scope:
-  - Improve workflow editor for add/reorder/rename/close-state controls.
-  - Guardrails for invalid workflow states (for example, no default state).
-- Why now:
-  - Workflow API exists; admin UX can be made safer and faster.
-- Exit criteria:
-  - Workflow updates are intuitive and validated before save.
-  - Error states are clear and recoverable in UI.
+### ~~5. Ticket attachments with MinIO~~ ✓ Completed (TKT-011)
+- ~~MinIO as S3-compatible object storage, Nginx as caching CDN layer in front.~~
+- Implemented: MinIO blob storage, REST API (upload/list/download/delete), frontend UI, E2E tests.
+- Remaining: Nginx CDN caching layer for repeat downloads.
 
-## Phase 3 (P1-P2): Planning and Team Productivity
+### ~~6. Dashboard and project overview page~~ ✓ Completed (TKT-012)
+- ~~Project-level dashboard showing: open ticket count by state, ticket count by priority, recent activity.~~
+- Implemented: Stats API endpoint, dashboard page with summary cards and bar charts by state/priority/type/assignee.
+- Remaining: Recent activity feed (depends on TKT-009 activity timeline).
 
-### 7. Backlog planning enhancements
-- Scope:
-  - Story-centric backlog view with ticket counts and basic progress indicators.
-  - Bulk actions for moving tickets between states or assigning users.
-- Why now:
-  - Improves throughput for teams managing larger ticket sets.
-- Exit criteria:
-  - Backlog can be planned without opening each ticket individually.
-  - Bulk operations work with permission checks.
+## Phase 3 (P1-P2): Collaboration and Productivity
 
-### 8. Saved filters and board views
-- Scope:
-  - Save named filters (assignee, type, priority, state).
-  - Quick switching between personal/team presets.
-- Why now:
-  - Existing search is useful but not persistent for daily workflows.
-- Exit criteria:
-  - Users can create, apply, and delete saved filters.
-  - Filter state persists across refresh/session.
+### 7. @mention notifications
+- Parse `@username` in comments and trigger in-app notifications.
+- Notification list accessible from header with unread count.
+- Notification on ticket assignment changes.
+- Why: Increases responsiveness without needing external integrations.
 
-### 9. Notifications and mention basics
-- Scope:
-  - Add comment mentions (for example `@user`) and in-app notification list.
-  - Trigger notifications for assignment and mention events.
-- Why now:
-  - Increases responsiveness without needing external integrations first.
-- Exit criteria:
-  - Mentioned/assigned users see actionable notifications.
-  - Notifications link back to relevant ticket context.
+### 8. Saved board filters
+- Save named filter presets (assignee, type, priority, state combinations).
+- Quick-switch between personal filter presets.
+- Filter state persists across page refresh.
+- Why: Existing search resets on every page load.
+
+### 9. Bulk ticket operations
+- Multi-select tickets on the board.
+- Bulk actions: move to state, assign user, change priority, delete.
+- Permission checks applied per operation.
+- Why: Managing larger backlogs one ticket at a time is slow.
+
+### ~~10. Markdown editor upgrade~~ ✓ Completed
+- ~~Replace plain textarea with a toolbar-equipped markdown editor.~~
+- Implemented: Reusable `MarkdownEditor.vue` component with toolbar (bold, italic, code, link, lists, quote, heading), keyboard shortcuts (Ctrl+B/I/E/K, Tab/Shift+Tab), edit/preview toggle. Applied to TicketModal (description + comments), NewTicketModal, and StoryModal. Zero new dependencies.
+- Remaining: image paste support.
 
 ## Phase 4 (P2): Integrations and Reporting
 
-### 10. Outbound integration expansion
-- Scope:
-  - Add richer webhook event payloads and versioned schema notes.
-  - Optional event subscriptions by type granularity.
-- Exit criteria:
-  - Integrators can reliably consume versioned payload contracts.
+### 11. Outbound webhook payload versioning
+- Add `v1` envelope with schema version, event timestamp, idempotency key.
+- Document payload schema per event type.
+- Optional per-event-type subscription granularity.
+- Why: Integrators need stable, documented contracts.
 
-### 11. Lightweight reporting
-- Scope:
-  - Basic project metrics: ticket throughput, cycle time estimates, open-by-state.
-  - Read-only dashboard endpoint + settings page panel.
-- Exit criteria:
-  - Teams can inspect sprint/project health without external BI tooling.
+### 12. Lightweight project reporting
+- Basic metrics: ticket throughput, average cycle time, open-by-state over time.
+- Read-only reporting endpoint and settings page panel.
+- Why: Teams need sprint/project health without external BI tools.
 
-## Recommended Execution Order (Next 6 Tickets)
-1. Webhook integration verification and retry test coverage (P0).
-2. End-to-end board/workflow regression pass with bug fixes (P0).
-3. Finalize local docker/dev runbook and startup scripts (P0).
-4. Role-based permission audit and forbidden-path tests (P1).
-5. Ticket activity timeline (backend + UI) (P1).
-6. Workflow editor UX/validation improvements (P1).
+### 13. Email and Slack notification channels
+- Configurable notification delivery: in-app, email, Slack webhook.
+- Per-user notification preferences.
+- Why: Not everyone watches the app in real time.
+
+---
+
+## Recommended Next 5 Tickets
+1. ~~Webhook retry logic and delivery log table (P0).~~ ✓ Done (TKT-007)
+2. ~~Granular per-operation RBAC enforcement (P0, TKT-008).~~ ✓ Done
+3. Ticket activity timeline - backend + UI (P1, TKT-009).
+4. Workflow editor UI with drag-and-drop states (P1, TKT-010).
+5. ~~Project dashboard overview page (P1, TKT-012).~~ ✓ Done
 
 ## Risks and Dependencies
-- Keycloak and local auth setup remain a dependency for reliable end-to-end testing.
-- Schema changes for timeline/reporting need migration planning to avoid breaking existing data.
-- Feature throughput depends on maintaining OpenAPI-first workflow and generated client/server sync.
+- Schema changes for activity timeline need migration planning.
+- Notification features depend on a notification infrastructure decision (polling vs WebSocket).
+- Feature throughput depends on maintaining OpenAPI-first workflow and generated type sync.
 
-## Definition of Done for Each Roadmap Item
+## Definition of Done
 - API behavior implemented and covered by automated tests.
 - Frontend UX added/updated with loading and error states.
-- Documentation updated (feature docs + operator/developer notes).
-- Manual verification checklist completed in local docker environment.
+- Documentation updated in `.documentation/`.
+- E2E contract updated and tests pass.

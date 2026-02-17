@@ -5,19 +5,30 @@ import {
   createTicket,
   deleteStory,
   deleteTicket,
+  deleteTicketAttachment,
   deleteWebhook,
   getBoard,
+  getMyProjectRole,
+  getProjectStats,
+  getWorkflow,
   listStories,
+  listTicketAttachments,
   listTicketComments,
+  listWebhookDeliveries,
   listWebhooks,
   testWebhook,
   updateTicket,
   updateWorkflow,
+  uploadTicketAttachment,
+  type Attachment,
+  type ProjectRole,
   type Story,
   type TicketComment,
   type TicketCreateRequest,
   type TicketResponse,
   type TicketUpdateRequest,
+  type ProjectStats,
+  type WebhookDelivery,
   type WebhookEvent,
   type WebhookResponse,
   type WorkflowState,
@@ -187,7 +198,28 @@ export const useBoardStore = defineStore("board", {
     storyError: "",
     commentSaving: false,
     commentError: "",
+    ticketAttachments: [] as Attachment[],
+    attachmentUploading: false,
+    attachmentError: "",
+    webhookDeliveries: [] as WebhookDelivery[],
+    webhookDeliveriesLoading: false,
+    dashboardStats: null as ProjectStats | null,
+    dashboardLoading: false,
+    currentUserRole: null as ProjectRole | null,
+    workflowEditorStates: [] as WorkflowState[],
+    workflowEditorLoading: false,
+    workflowEditorSaving: false,
+    workflowEditorError: "",
   }),
+  getters: {
+    canEditTickets(): boolean {
+      const role = this.currentUserRole;
+      return role === "admin" || role === "contributor";
+    },
+    canManageProject(): boolean {
+      return this.currentUserRole === "admin";
+    },
+  },
   actions: {
     reset() {
       this.states = [];
@@ -207,6 +239,18 @@ export const useBoardStore = defineStore("board", {
       this.storyError = "";
       this.commentSaving = false;
       this.commentError = "";
+      this.ticketAttachments = [];
+      this.attachmentUploading = false;
+      this.attachmentError = "";
+      this.webhookDeliveries = [];
+      this.webhookDeliveriesLoading = false;
+      this.dashboardStats = null;
+      this.dashboardLoading = false;
+      this.currentUserRole = null;
+      this.workflowEditorStates = [];
+      this.workflowEditorLoading = false;
+      this.workflowEditorSaving = false;
+      this.workflowEditorError = "";
     },
     applyDemo() {
       this.apiMode = "demo";
@@ -218,6 +262,8 @@ export const useBoardStore = defineStore("board", {
     clearComments() {
       this.ticketComments = [];
       this.commentError = "";
+      this.ticketAttachments = [];
+      this.attachmentError = "";
     },
     async loadBoard(projectId: string) {
       this.loading = true;
@@ -423,6 +469,45 @@ export const useBoardStore = defineStore("board", {
         };
       }
     },
+    async loadWebhookDeliveries(projectId: string, webhookId: string) {
+      this.webhookDeliveriesLoading = true;
+      this.webhookDeliveries = [];
+      try {
+        const list = await listWebhookDeliveries(projectId, webhookId);
+        this.webhookDeliveries = list.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.webhookDeliveries = [];
+      } finally {
+        this.webhookDeliveriesLoading = false;
+      }
+    },
+    async loadDashboardStats(projectId: string) {
+      this.dashboardLoading = true;
+      try {
+        this.dashboardStats = await getProjectStats(projectId);
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.dashboardStats = null;
+      } finally {
+        this.dashboardLoading = false;
+      }
+    },
+    async loadCurrentUserRole(projectId: string) {
+      try {
+        const result = await getMyProjectRole(projectId);
+        this.currentUserRole = result.role;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.currentUserRole = null;
+      }
+    },
     async createTicket(projectId: string, payload: TicketCreateRequest) {
       try {
         if (this.apiMode === "demo") {
@@ -548,6 +633,101 @@ export const useBoardStore = defineStore("board", {
         this.commentSaving = false;
       }
       return null;
+    },
+    async loadTicketAttachments(projectId: string, ticketId: string) {
+      this.attachmentError = "";
+      try {
+        const list = await listTicketAttachments(projectId, ticketId);
+        this.ticketAttachments = list.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.ticketAttachments = [];
+        this.attachmentError = "Unable to load attachments.";
+      }
+    },
+    async uploadAttachment(projectId: string, ticketId: string, file: File) {
+      this.attachmentUploading = true;
+      this.attachmentError = "";
+      try {
+        await uploadTicketAttachment(projectId, ticketId, file);
+        await this.loadTicketAttachments(projectId, ticketId);
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.attachmentError = "Unable to upload file.";
+        throw err;
+      } finally {
+        this.attachmentUploading = false;
+      }
+    },
+    async removeAttachment(
+      projectId: string,
+      ticketId: string,
+      attachmentId: string,
+    ) {
+      this.attachmentError = "";
+      try {
+        await deleteTicketAttachment(projectId, ticketId, attachmentId);
+        this.ticketAttachments = this.ticketAttachments.filter(
+          (a) => a.id !== attachmentId,
+        );
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.attachmentError = "Unable to delete attachment.";
+        throw err;
+      }
+    },
+    async loadWorkflowEditor(projectId: string) {
+      this.workflowEditorLoading = true;
+      this.workflowEditorError = "";
+      try {
+        const result = await getWorkflow(projectId);
+        this.workflowEditorStates = result.states.map((s) => ({ ...s }));
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.workflowEditorError = "Unable to load workflow states.";
+      } finally {
+        this.workflowEditorLoading = false;
+      }
+    },
+    async saveWorkflowEditor(projectId: string) {
+      this.workflowEditorSaving = true;
+      this.workflowEditorError = "";
+      try {
+        const inputs: WorkflowStateInput[] = this.workflowEditorStates.map(
+          (s, i) => {
+            const input: WorkflowStateInput = {
+              name: s.name,
+              order: i + 1,
+              isDefault: s.isDefault,
+              isClosed: s.isClosed,
+            };
+            // New client-side rows use temporary ids ("new-*"); omit them.
+            if (s.id && !s.id.startsWith("new-")) {
+              input.id = s.id;
+            }
+            return input;
+          },
+        );
+        const result = await updateWorkflow(projectId, inputs);
+        this.workflowEditorStates = result.states.map((s) => ({ ...s }));
+        this.states = result.states;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.workflowEditorError = "Unable to save workflow.";
+        throw err;
+      } finally {
+        this.workflowEditorSaving = false;
+      }
     },
   },
 });

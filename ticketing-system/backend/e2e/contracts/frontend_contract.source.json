@@ -51,7 +51,21 @@
     "ticket.save_button": "ticket.save-button",
     "ticket.comment_input": "ticket.comment-input",
     "ticket.post_comment_button": "ticket.post-comment-button",
-    "ticket.delete_button": "ticket.delete-button"
+    "ticket.delete_button": "ticket.delete-button",
+    "ticket.attachments_section": "ticket.attachments-section",
+    "ticket.upload_attachment_button": "ticket.upload-attachment-button",
+    "ticket.file_input": "ticket.file-input",
+    "ticket.attachment_item": "ticket.attachment-item",
+    "ticket.attachment_download_link": "ticket.attachment-download-link",
+    "ticket.attachment_delete_button": "ticket.attachment-delete-button",
+    "workflow.state_row": "workflow.state-row",
+    "workflow.state_name_input": "workflow.state-name-input",
+    "workflow.state_default_radio": "workflow.state-default-radio",
+    "workflow.state_closed_checkbox": "workflow.state-closed-checkbox",
+    "workflow.state_delete_button": "workflow.state-delete-button",
+    "workflow.add_state_button": "workflow.add-state-button",
+    "workflow.save_button": "workflow.save-button",
+    "workflow.error": "workflow.error"
   },
   "flows": {
     "smoke_login_screen": {

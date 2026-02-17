@@ -15,6 +15,8 @@ tags:
   - name: tickets
   - name: workflow
   - name: webhooks
+  - name: attachments
+  - name: dashboard
   - name: admin
 
 security:
@@ -792,6 +794,178 @@ paths:
         "204":
           description: Deleted
 
+  /projects/{projectId}/tickets/{ticketId}/attachments:
+    get:
+      summary: List ticket attachments
+      operationId: listTicketAttachments
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Attachment list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentListResponse"
+    post:
+      summary: Upload file attachment to ticket
+      operationId: uploadTicketAttachment
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        "201":
+          description: Attachment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attachment"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download:
+    get:
+      summary: Download attachment file
+      operationId: downloadTicketAttachment
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: attachmentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}:
+    delete:
+      summary: Delete ticket attachment
+      operationId: deleteTicketAttachment
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: attachmentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/stats:
+    get:
+      summary: Get project statistics
+      operationId: getProjectStats
+      tags: [dashboard]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats"
+
+  /projects/{projectId}/my-role:
+    get:
+      summary: Get the current user's role on this project
+      operationId: getMyProjectRole
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current user's project role
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role]
+                properties:
+                  role:
+                    $ref: "#/components/schemas/ProjectRole"
+
   /projects/{projectId}/workflow:
     get:
       summary: Get workflow states
@@ -955,6 +1129,32 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /projects/{projectId}/webhooks/{id}/deliveries:
+    get:
+      summary: List webhook delivery history
+      operationId: listWebhookDeliveries
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Delivery list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDeliveryListResponse"
 
   /projects/{projectId}/webhooks/{id}/test:
     post:
@@ -1644,6 +1844,112 @@ components:
         responseBody:
           type: string
       required: [delivered]
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        webhookId:
+          type: string
+          format: uuid
+        event:
+          type: string
+        attempt:
+          type: integer
+        statusCode:
+          type: integer
+        responseBody:
+          type: string
+        error:
+          type: string
+        delivered:
+          type: boolean
+        durationMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, webhookId, event, attempt, delivered, durationMs, createdAt]
+
+    WebhookDeliveryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookDelivery"
+      required: [items]
+
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+          format: int64
+        uploadedBy:
+          type: string
+          format: uuid
+        uploadedByName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, filename, contentType, size, uploadedBy, uploadedByName, createdAt]
+
+    AttachmentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attachment"
+      required: [items]
+
+    StatCount:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: integer
+      required: [label, value]
+
+    ProjectStats:
+      type: object
+      properties:
+        totalOpen:
+          type: integer
+        totalClosed:
+          type: integer
+        byState:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+        byPriority:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+        byType:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+        byAssignee:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+      required: [totalOpen, totalClosed, byState, byPriority, byType, byAssignee]
 
     ErrorResponse:
       type: object

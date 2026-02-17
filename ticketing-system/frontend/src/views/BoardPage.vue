@@ -58,8 +58,12 @@ const workflowSetupError = computed(() => boardStore.workflowSetupError);
 const ticketComments = computed(() => boardStore.ticketComments);
 const commentSaving = computed(() => boardStore.commentSaving);
 const commentError = computed(() => boardStore.commentError);
+const ticketAttachments = computed(() => boardStore.ticketAttachments);
+const attachmentUploading = computed(() => boardStore.attachmentUploading);
+const attachmentError = computed(() => boardStore.attachmentError);
 const storiesCount = computed(() => boardStore.stories.length);
 const groupMembers = computed(() => adminStore.groupMembers);
+const canEditTickets = computed(() => boardStore.canEditTickets);
 
 const priorities: TicketPriority[] = ["low", "medium", "high", "urgent"];
 const ticketTypes: TicketType[] = ["feature", "bug"];
@@ -249,6 +253,7 @@ const openTicket = async (ticket: TicketResponse) => {
             await boardStore.loadStories(props.projectId);
         }
         await boardStore.loadTicketComments(ticket.id);
+        await boardStore.loadTicketAttachments(props.projectId, ticket.id);
     }
 };
 
@@ -333,6 +338,32 @@ const addCommentSubmit = async () => {
     }
 };
 
+const uploadAttachmentHandler = async (file: File) => {
+    if (!selectedTicket.value || !props.projectId) return;
+    try {
+        await boardStore.uploadAttachment(
+            props.projectId,
+            selectedTicket.value.id,
+            file,
+        );
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const deleteAttachmentHandler = async (attachmentId: string) => {
+    if (!selectedTicket.value || !props.projectId) return;
+    try {
+        await boardStore.removeAttachment(
+            props.projectId,
+            selectedTicket.value.id,
+            attachmentId,
+        );
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
 const openNewTicket = async (stateId?: string, storyId?: string) => {
     const fallbackState = states.value[0]?.id || "";
     newTicket.value = {
@@ -404,6 +435,7 @@ const onGlobalKeydown = async (event: KeyboardEvent) => {
     }
     if (event.key.toLowerCase() === "n") {
         if (
+            !canEditTickets.value ||
             showNewTicket.value ||
             showStoryModal.value ||
             selectedTicket.value
@@ -619,6 +651,7 @@ watch(
     />
 
     <NewTicketModal
+        v-if="canEditTickets"
         :show="showNewTicket"
         :ticket="newTicket"
         :states="states"
@@ -633,6 +666,7 @@ watch(
     />
 
     <StoryModal
+        v-if="canEditTickets"
         :show="showStoryModal"
         :story="newStory"
         :can-create="canCreateStory"
@@ -657,11 +691,19 @@ watch(
         :comment-saving="commentSaving"
         :comment-error="commentError"
         :current-user-id="sessionStore.user?.id"
+        :attachments="ticketAttachments"
+        :attachment-uploading="attachmentUploading"
+        :attachment-error="attachmentError"
+        :project-id="props.projectId"
+        :ticket-id="selectedTicket?.id || ''"
+        :read-only="!canEditTickets"
         @update:editor="updateTicketEditor"
         @update:commentDraft="updateCommentDraft"
         @close="closeTicket"
         @save="saveTicket"
         @delete="deleteTicketSubmit"
         @add-comment="addCommentSubmit"
+        @upload-attachment="uploadAttachmentHandler"
+        @delete-attachment="deleteAttachmentHandler"
     />
 </template>

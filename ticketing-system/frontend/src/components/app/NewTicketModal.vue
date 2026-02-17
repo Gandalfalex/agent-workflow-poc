@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { computed, ref } from "vue";
 import type {
     Story,
@@ -141,20 +142,14 @@ const handleAssigneeBlur = () => {
                     <label class="text-xs font-semibold text-muted-foreground"
                         >Description</label
                     >
-                    <textarea
-                        data-testid="new-ticket.description-input"
-                        :value="props.ticket.description"
-                        rows="3"
+                    <MarkdownEditor
+                        :model-value="props.ticket.description"
+                        @update:model-value="updateField({ description: $event })"
+                        :rows="3"
                         placeholder="What needs to happen?"
-                        class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        @input="
-                            updateField({
-                                description: (
-                                    $event.target as HTMLTextAreaElement
-                                ).value,
-                            })
-                        "
-                    ></textarea>
+                        data-testid="new-ticket.description-input"
+                        compact
+                    />
                 </div>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div>

@@ -17,6 +17,11 @@ type Config struct {
 	CORSAllowedOrigins []string
 	FrontendDir        string
 	BasePath           string
+	MinIOEndpoint      string
+	MinIOAccessKey     string
+	MinIOSecretKey     string
+	MinIOBucket        string
+	MinIOUseSSL        bool
 }
 
 func Load() Config {
@@ -74,6 +79,24 @@ func Load() Config {
 		basePath = strings.TrimSuffix(basePath, "/")
 	}
 
+	minioEndpoint := os.Getenv("MINIO_ENDPOINT")
+	if minioEndpoint == "" {
+		minioEndpoint = "localhost:9000"
+	}
+	minioAccessKey := os.Getenv("MINIO_ACCESS_KEY")
+	if minioAccessKey == "" {
+		minioAccessKey = "minioadmin"
+	}
+	minioSecretKey := os.Getenv("MINIO_SECRET_KEY")
+	if minioSecretKey == "" {
+		minioSecretKey = "minioadmin"
+	}
+	minioBucket := os.Getenv("MINIO_BUCKET")
+	if minioBucket == "" {
+		minioBucket = "ticketing-attachments"
+	}
+	minioUseSSL := os.Getenv("MINIO_USE_SSL") == "true"
+
 	return Config{
 		Port:               port,
 		DatabaseURL:        dbURL,
@@ -86,6 +109,11 @@ func Load() Config {
 		CORSAllowedOrigins: allowedOrigins,
 		FrontendDir:        frontendDir,
 		BasePath:           basePath,
+		MinIOEndpoint:      minioEndpoint,
+		MinIOAccessKey:     minioAccessKey,
+		MinIOSecretKey:     minioSecretKey,
+		MinIOBucket:        minioBucket,
+		MinIOUseSSL:        minioUseSSL,
 	}
 }
 

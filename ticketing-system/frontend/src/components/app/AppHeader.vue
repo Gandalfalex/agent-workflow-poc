@@ -4,15 +4,16 @@ import type { Project } from "@/lib/api";
 
 const props = defineProps<{
     activeProjectLabel: string;
-    activePage: "board" | "settings";
+    activePage: "board" | "dashboard" | "settings";
     currentUserName: string;
     projectLoading: boolean;
     projects: Project[];
     activeProjectId: string;
+    canManageProject: boolean;
 }>();
 
 const emit = defineEmits<{
-    (e: "set-page", value: "board" | "settings"): void;
+    (e: "set-page", value: "board" | "dashboard" | "settings"): void;
     (e: "select-project", value: string): void;
     (e: "logout"): void;
     (e: "refresh"): void;
@@ -57,6 +58,19 @@ const emit = defineEmits<{
                     Board
                 </button>
                 <button
+                    data-testid="nav.dashboard-tab"
+                    class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                    :class="
+                        props.activePage === 'dashboard'
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="emit('set-page', 'dashboard')"
+                >
+                    Dashboard
+                </button>
+                <button
+                    v-if="props.canManageProject"
                     data-testid="nav.settings-tab"
                     class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
                     :class="

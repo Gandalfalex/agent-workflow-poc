@@ -27,6 +27,10 @@ func (f *fakeStore) ListWebhooksForEvent(ctx context.Context, projectID uuid.UUI
 	return f.webhooks, nil
 }
 
+func (f *fakeStore) CreateWebhookDelivery(ctx context.Context, input store.WebhookDeliveryCreateInput) (store.WebhookDelivery, error) {
+	return store.WebhookDelivery{}, nil
+}
+
 func TestNew(t *testing.T) {
 	d := New(&fakeStore{})
 

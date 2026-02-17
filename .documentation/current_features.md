@@ -1,74 +1,96 @@
 # Current Features
 
-Snapshot date: February 15, 2026
+Snapshot date: February 17, 2026
 
 ## Core Platform
 - OpenAPI-defined backend API (`ticketing-system/openapi.yaml`) with generated backend/frontend types.
-- Go backend + PostgreSQL persistence with migrations.
+- Go backend + PostgreSQL persistence with automatic migrations on startup.
 - Vue 3 + TypeScript frontend using Pinia stores and route-based project views.
+- Full Docker Compose orchestration: backend, frontend, Postgres, Keycloak, n8n, codex-agent.
 
 ## Authentication
-- Session-based authentication for web UI.
-- Login endpoint (`/auth/login`) and logout endpoint (`/auth/logout`).
-- Current user endpoint (`/auth/me`) for session restoration.
-- Keycloak-backed auth integration in backend.
+- Keycloak-backed OAuth2/OIDC integration.
+- Session-based authentication with token cookies and configurable TTL.
+- Login endpoint (`/auth/login`), logout endpoint (`/auth/logout`), current user endpoint (`/auth/me`).
+- Context-based user injection via auth middleware.
 
 ## Projects and Access Control
-- Project CRUD:
-  - List, create, get, update, delete projects.
-- Group CRUD:
-  - List, create, get, update, delete groups.
-- Group membership management:
-  - List members, add member, remove member.
-- Project-group role mapping:
-  - List project groups, add group to project, update role, remove group from project.
-- User directory search endpoint for assignment/member workflows (`/users?q=`).
+- Project CRUD: list, create, get, update, delete.
+- Group CRUD: list, create, get, update, delete.
+- Group membership management: list members, add member, remove member.
+- Project-group role mapping: list project groups, add group, update role, remove group.
+- Role hierarchy enforced in backend: `admin`, `contributor`, `viewer`.
+- Per-operation role enforcement via `requireProjectRole()` helper: viewers (read-only), contributors (CRUD tickets/stories/comments/attachments), admins (manage workflow/webhooks/project groups).
+- `GET /projects/{projectId}/my-role` endpoint returns the current user's role for a project.
+- Frontend role-aware UI: read-only ticket modal for viewers, hidden create/delete controls, Settings tab restricted to admins.
+- Admin operations gated by `requireAdmin()` middleware.
+- Project access gated by `requireProjectAccess()` middleware.
+- User directory search endpoint (`/users?q=`) with fuzzy matching.
 
 ## Ticketing and Board
-- Kanban board API and UI for project board view.
-- Ticket CRUD:
-  - List tickets, create ticket, get ticket, update ticket, delete ticket.
-- Ticket fields supported in UI/API:
-  - Title, description, priority, type (`feature`/`bug`), state, assignee, story linkage.
-- Ticket key/number model supported by backend schema and migrations.
-- Story support:
-  - List stories, create story, get story, update story, delete story.
-  - Board groups tickets under stories in the UI.
-- Ticket comments:
-  - List ticket comments, add ticket comment, delete ticket comment.
+- Kanban board API and UI with drag-and-drop ticket reordering.
+- Ticket CRUD: list, create, get, update, delete.
+- Ticket fields: title, description, priority (urgent/high/medium/low), type (feature/bug), state, assignee, story linkage.
+- Ticket key/number model in backend schema.
+- Story support: list, create, get, update, delete. Board groups tickets under stories.
+- Ticket comments: list, create, delete. Markdown rendering with toolbar-equipped editor.
+- Ticket file attachments: upload, list, download, delete. MinIO S3-compatible object storage with swappable ObjectStore interface (in-memory for E2E tests). 10MB file size limit.
+- Board search and filtering.
 
 ## Workflow Management
-- Workflow state retrieval and update per project.
-- UI flow to initialize default workflow states when needed.
+- Workflow state retrieval and update per project via API.
+- Default workflow state initialization when needed.
+- Board columns driven by workflow states.
 
 ## Webhooks
-- Project-scoped webhook management:
-  - List, create, get, update, delete webhooks.
-- Webhook test endpoint support.
-- UI settings support for:
-  - Creating webhooks, enabling/disabling, and testing delivery.
+- Project-scoped webhook CRUD: list, create, get, update, delete.
+- Async webhook dispatcher with goroutine-based delivery.
+- HMAC-SHA256 request signing (`X-Ticketing-Signature` header) when secret is configured.
+- Supported events: `ticket.created`, `ticket.updated`, `ticket.deleted`, `ticket.state_changed`.
+- Exponential backoff retry on failed deliveries: 3 attempts (immediate, 30s, 5min).
+- `webhook_deliveries` table logging every delivery attempt with status code, response body, error, duration, and timestamp.
+- Delivery history API endpoint: `GET /projects/{projectId}/webhooks/{id}/deliveries` (latest 50).
+- Webhook test endpoint for manual verification.
+- UI for creating, editing, enabling/disabling, and testing webhooks.
+- Delivery history panel in webhook settings: expandable rows with status dot, event, attempt number, status code, duration, time ago, and response/error details.
 
-## Admin/Operations
-- Admin endpoint to sync users from Keycloak to local database (`/admin/sync-users`).
+## Project Dashboard
+- Project-level statistics API endpoint: `GET /projects/{projectId}/stats`.
+- Aggregate ticket counts by state, priority, type, and assignee computed from existing ticket data.
+- Open vs closed ticket totals derived from workflow state `isClosed` flag.
+- Dashboard page accessible from header navigation tab alongside Board and Settings.
+- Summary cards showing total, open, and closed ticket counts.
+- Horizontal bar charts for each dimension (state, priority, type, assignee) with color-coded bars.
+- Loading skeleton and empty state handling.
+
+## Admin and Operations
+- Admin endpoint to sync users from Keycloak (`/admin/sync-users`).
 - Health check endpoint (`/health`).
-- Docker/dev orchestration files for local and production-like setup.
+- Docker Compose for local dev: Postgres, Keycloak (with realm import), n8n, backend API, codex-agent, MinIO.
+- Production Docker Compose with Traefik reverse proxy and HTTPS.
 
-## Frontend UX Currently Present
-- Login view and session bootstrap.
-- Project board page with:
-  - Ticket/stories display by workflow state.
-  - Ticket detail modal/editor.
-  - New ticket modal.
-  - Story creation modal.
-  - Board search/filtering.
-- Settings page with:
-  - Project and group management actions.
-  - Group member management.
-  - Project role assignment for groups.
-  - Webhook management.
+## Codex Agent (MCP Server)
+- TypeScript MCP server providing authenticated ticket management tools.
+- Keycloak OAuth2 token management with automatic refresh.
+- MCP tools: `list_projects`, `list_tickets`, `get_ticket`, `search_tickets`, `add_comment`, `update_ticket_state`, `get_project_workflow`.
 
-## Noted Gaps / In-Progress Areas
-- `ticketing-system/STATUS.md` marks some areas as partially complete/integration pending:
-  - End-to-end webhook integration verification.
-  - Final QA and some dev setup cleanup.
-- Status file still includes duplicate older unchecked items even though much functionality is implemented.
+## E2E Testing
+- Contract-driven Go + Playwright test harness (`ticketing-system/backend/e2e/`).
+- Frontend contract file (`contracts/frontend_contract.json`) with routes, selectors, and flows.
+- BDD-style scenario builder for readable test definitions.
+- PostgreSQL testcontainers for isolated test environments.
+- Webhook event capture mechanism for integration validation.
+- Multi-user E2E support: admin and viewer user seeding, `WithViewerUser()` harness option, API request helper with auth cookies.
+- Test coverage: login/logout, project selection, ticket CRUD, story management, comments, file attachments (upload, delete), webhook events, drag-and-drop, form validation, unhappy paths, RBAC negative-path tests (viewer cannot create/delete tickets, cannot access settings/workflow).
+
+## Frontend UX
+- Login view with session bootstrap.
+- Project board page: Kanban columns, ticket/story display, drag-and-drop, search/filter.
+- Reusable MarkdownEditor component with formatting toolbar (bold, italic, code, link, lists, quote, heading), keyboard shortcuts (Ctrl+B/I/E/K, Tab indent), and edit/preview toggle. Used in all description and comment fields.
+- Ticket detail modal: inline editing, comments with markdown, file attachments (upload/download/delete), assignee/priority/type/story fields.
+- New ticket and story creation modals with markdown-enabled description fields.
+- Settings page (two tabs):
+  - Projects: project CRUD, group management, member management, project-group role assignment.
+  - Webhooks: webhook CRUD, test delivery, enable/disable toggle, delivery history panel.
+- Project dashboard page: summary cards (total/open/closed), bar charts by state, priority, type, and assignee.
+- Project drawer for switching between projects.

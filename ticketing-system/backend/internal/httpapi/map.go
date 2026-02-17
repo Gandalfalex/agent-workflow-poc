@@ -197,3 +197,57 @@ func mapComment(comment store.Comment) ticketCommentResponse {
 		CreatedAt:  comment.CreatedAt,
 	}
 }
+
+func mapWebhookDelivery(d store.WebhookDelivery) webhookDeliveryResponse {
+	resp := webhookDeliveryResponse{
+		Id:         toOpenapiUUID(d.ID),
+		WebhookId:  toOpenapiUUID(d.WebhookID),
+		Event:      d.Event,
+		Attempt:    d.Attempt,
+		Delivered:  d.Delivered,
+		DurationMs: d.DurationMs,
+		CreatedAt:  d.CreatedAt,
+	}
+	if d.StatusCode != nil {
+		resp.StatusCode = d.StatusCode
+	}
+	if d.ResponseBody != nil {
+		resp.ResponseBody = d.ResponseBody
+	}
+	if d.Error != nil {
+		resp.Error = d.Error
+	}
+	return resp
+}
+
+func mapProjectStats(stats store.ProjectStats) projectStatsResponse {
+	return projectStatsResponse{
+		TotalOpen:   stats.TotalOpen,
+		TotalClosed: stats.TotalClosed,
+		ByState:     mapStatCounts(stats.ByState),
+		ByPriority:  mapStatCounts(stats.ByPriority),
+		ByType:      mapStatCounts(stats.ByType),
+		ByAssignee:  mapStatCounts(stats.ByAssignee),
+	}
+}
+
+func mapStatCounts(counts []store.StatCount) []statCountResponse {
+	out := make([]statCountResponse, 0, len(counts))
+	for _, sc := range counts {
+		out = append(out, statCountResponse{Label: sc.Label, Value: sc.Value})
+	}
+	return out
+}
+
+func mapAttachment(att store.Attachment) attachmentResponse {
+	return attachmentResponse{
+		Id:             toOpenapiUUID(att.ID),
+		TicketId:       toOpenapiUUID(att.TicketID),
+		Filename:       att.Filename,
+		ContentType:    att.ContentType,
+		Size:           att.Size,
+		UploadedBy:     toOpenapiUUID(att.UploadedBy),
+		UploadedByName: att.UploadedByName,
+		CreatedAt:      att.CreatedAt,
+	}
+}

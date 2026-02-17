@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"ticketing-system/backend/internal/auth"
+	"ticketing-system/backend/internal/blob"
 	"ticketing-system/backend/internal/httpapi"
 	"ticketing-system/backend/internal/migrate"
 	"ticketing-system/backend/internal/store"
@@ -33,7 +35,8 @@ import (
 )
 
 const (
-	e2eUserToken = "e2e-static-token"
+	e2eUserToken   = "e2e-static-token"
+	e2eViewerToken = "e2e-viewer-token"
 )
 
 type Harness struct {
@@ -49,6 +52,7 @@ type Harness struct {
 	server    *httptest.Server
 	store     *store.Store
 	container *postgres.PostgresContainer
+	blobStore *blob.MemoryStore
 
 	playwright     *playwright.Playwright
 	browser        playwright.Browser
@@ -64,6 +68,12 @@ func WithWebhookCapture() HarnessOption {
 	}
 }
 
+func WithViewerUser() HarnessOption {
+	return func(h *Harness) {
+		h.config.loginAsViewer = true
+	}
+}
+
 type harnessConfig struct {
 	testTimeout       time.Duration
 	stepTimeout       time.Duration
@@ -71,6 +81,7 @@ type harnessConfig struct {
 	headless          bool
 	artifactsDir      string
 	contractFile      string
+	loginAsViewer     bool
 }
 
 type FrontendContract struct {
@@ -98,38 +109,52 @@ type SeedData struct {
 	ProjectID    string
 	StoryID      string
 	UserID       string
+	ViewerUserID string
 	BacklogID    string
 	InProgressID string
 	DoneID       string
 }
 
+type staticAuthEntry struct {
+	user     auth.User
+	token    string
+	password string
+}
+
 type staticAuth struct {
-	user          auth.User
-	validPassword string
+	entries []staticAuthEntry
 }
 
 func (a staticAuth) Login(_ context.Context, username, password string) (auth.User, auth.TokenSet, error) {
 	if strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
 		return auth.User{}, auth.TokenSet{}, errors.New("missing credentials")
 	}
-	if a.validPassword != "" && password != a.validPassword {
-		return auth.User{}, auth.TokenSet{}, errors.New("invalid credentials")
+	for _, e := range a.entries {
+		if (e.user.Email == username || e.user.Name == username) && e.password == password {
+			return e.user, auth.TokenSet{
+				AccessToken: e.token,
+				ExpiresIn:   3600,
+			}, nil
+		}
 	}
-	return a.user, auth.TokenSet{
-		AccessToken: e2eUserToken,
-		ExpiresIn:   3600,
-	}, nil
+	return auth.User{}, auth.TokenSet{}, errors.New("invalid credentials")
 }
 
 func (a staticAuth) Verify(_ context.Context, token string) (auth.User, error) {
-	if token != e2eUserToken {
-		return auth.User{}, errors.New("invalid token")
+	for _, e := range a.entries {
+		if e.token == token {
+			return e.user, nil
+		}
 	}
-	return a.user, nil
+	return auth.User{}, errors.New("invalid token")
 }
 
 func (a staticAuth) ListUsers(_ context.Context) ([]auth.User, error) {
-	return []auth.User{a.user}, nil
+	users := make([]auth.User, len(a.entries))
+	for i, e := range a.entries {
+		users[i] = e.user
+	}
+	return users, nil
 }
 
 type noopWebhooks struct{}
@@ -296,8 +321,39 @@ func (h *Harness) Store() *store.Store {
 	return h.store
 }
 
+func (h *Harness) BlobStore() *blob.MemoryStore {
+	return h.blobStore
+}
+
 func (h *Harness) Context() context.Context {
 	return h.ctx
+}
+
+// LoginCredentials returns the (identifier, password) for the active user.
+func (h *Harness) LoginCredentials() (string, string) {
+	if h.config.loginAsViewer {
+		return "viewer@example.local", "viewer123"
+	}
+	return "e2e@example.local", "admin123"
+}
+
+// APIRequest makes a direct HTTP request to the backend with the active user's auth cookie.
+func (h *Harness) APIRequest(method, path string, body io.Reader) (*http.Response, error) {
+	url := h.resolveURL(path)
+	req, err := http.NewRequestWithContext(h.ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	token := e2eUserToken
+	if h.config.loginAsViewer {
+		token = e2eViewerToken
+	}
+	req.AddCookie(&http.Cookie{Name: "ticketing_session", Value: token})
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	client := &http.Client{Timeout: h.config.stepTimeout}
+	return client.Do(req)
 }
 
 func (h *Harness) ExpectSelectorHidden(selector string) error {
@@ -649,17 +705,33 @@ func (h *Harness) start() error {
 	}
 
 	testUserID := uuid.New()
+	viewerUserID := uuid.New()
 	authStub := staticAuth{
-		user: auth.User{
-			ID:    testUserID.String(),
-			Email: "e2e@example.local",
-			Name:  "E2E User",
-			Roles: []string{"admin"},
+		entries: []staticAuthEntry{
+			{
+				user: auth.User{
+					ID:    testUserID.String(),
+					Email: "e2e@example.local",
+					Name:  "E2E User",
+					Roles: []string{"admin"},
+				},
+				token:    e2eUserToken,
+				password: "admin123",
+			},
+			{
+				user: auth.User{
+					ID:    viewerUserID.String(),
+					Email: "viewer@example.local",
+					Name:  "Viewer User",
+					Roles: []string{"default-roles-ticketing"},
+				},
+				token:    e2eViewerToken,
+				password: "viewer123",
+			},
 		},
-		validPassword: "admin123",
 	}
 
-	seed, err := seedDefaultData(h.ctx, st, testUserID)
+	seed, err := seedDefaultData(h.ctx, st, testUserID, viewerUserID)
 	if err != nil {
 		return fmt.Errorf("seed default data: %w", err)
 	}
@@ -670,8 +742,12 @@ func (h *Harness) start() error {
 		webhookDispatcher = h.webhookCapture
 	}
 
+	memBlob := blob.NewMemory()
+	h.blobStore = memBlob
+
 	api := httpapi.NewHandler(st, authStub, webhookDispatcher, httpapi.HandlerOptions{
 		CookieName: "ticketing_session",
+		BlobStore:  memBlob,
 	})
 
 	frontendDir := frontendDistDir(h.t)
@@ -915,7 +991,7 @@ func renderRoutePath(routePath string, params map[string]string) (string, error)
 	return rendered, nil
 }
 
-func seedDefaultData(ctx context.Context, st *store.Store, userID uuid.UUID) (SeedData, error) {
+func seedDefaultData(ctx context.Context, st *store.Store, userID, viewerUserID uuid.UUID) (SeedData, error) {
 	project, err := st.CreateProject(ctx, store.ProjectCreateInput{
 		Key:  "E2E1",
 		Name: "E2E Project",
@@ -947,6 +1023,30 @@ func seedDefaultData(ctx context.Context, st *store.Store, userID uuid.UUID) (Se
 		return SeedData{}, fmt.Errorf("add project group: %w", err)
 	}
 
+	// Seed viewer user + group with viewer role
+	if err := st.UpsertUser(ctx, store.UserUpsertInput{
+		ID:    viewerUserID,
+		Name:  "Viewer User",
+		Email: "viewer@example.local",
+	}); err != nil {
+		return SeedData{}, fmt.Errorf("upsert viewer user: %w", err)
+	}
+
+	viewerGroup, err := st.CreateGroup(ctx, store.GroupCreateInput{
+		Name: "Viewer Group",
+	})
+	if err != nil {
+		return SeedData{}, fmt.Errorf("create viewer group: %w", err)
+	}
+
+	if _, err := st.AddGroupMember(ctx, viewerGroup.ID, viewerUserID); err != nil {
+		return SeedData{}, fmt.Errorf("add viewer group member: %w", err)
+	}
+
+	if _, err := st.AddProjectGroup(ctx, project.ID, viewerGroup.ID, "viewer"); err != nil {
+		return SeedData{}, fmt.Errorf("add viewer project group: %w", err)
+	}
+
 	states, err := st.ReplaceWorkflowStates(ctx, project.ID, []store.WorkflowStateInput{
 		{Name: "Backlog", Order: 1, IsDefault: true, IsClosed: false},
 		{Name: "In Progress", Order: 2, IsDefault: false, IsClosed: false},
@@ -972,6 +1072,7 @@ func seedDefaultData(ctx context.Context, st *store.Store, userID uuid.UUID) (Se
 		ProjectID:    project.ID.String(),
 		StoryID:      story.ID.String(),
 		UserID:       userID.String(),
+		ViewerUserID: viewerUserID.String(),
 		BacklogID:    stateMap["Backlog"],
 		InProgressID: stateMap["In Progress"],
 		DoneID:       stateMap["Done"],

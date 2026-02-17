@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { marked } from "marked";
 import { ref } from "vue";
 import type {
+    Attachment,
     TicketComment,
     TicketPriority,
     TicketType,
     WorkflowState,
 } from "@/lib/api";
+import { downloadTicketAttachmentUrl } from "@/lib/api";
 
 type TicketEditor = {
     title: string;
@@ -31,6 +34,12 @@ const props = defineProps<{
     commentSaving: boolean;
     commentError: string;
     currentUserId?: string;
+    attachments: Attachment[];
+    attachmentUploading: boolean;
+    attachmentError: string;
+    projectId: string;
+    ticketId: string;
+    readOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -40,9 +49,35 @@ const emit = defineEmits<{
     (e: "save"): void;
     (e: "delete"): void;
     (e: "add-comment"): void;
+    (e: "upload-attachment", file: File): void;
+    (e: "delete-attachment", attachmentId: string): void;
 }>();
 
-const showDescriptionPreview = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+const triggerFileUpload = () => {
+    fileInput.value?.click();
+};
+
+const onFileSelected = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) {
+        emit("upload-attachment", file);
+        input.value = "";
+    }
+};
+
+const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+};
+
+const downloadUrl = (att: Attachment): string => {
+    return downloadTicketAttachmentUrl(props.projectId, props.ticketId, att.id);
+};
+
 const menuOpen = ref(false);
 
 const updateEditor = (patch: Partial<TicketEditor>) => {
@@ -102,7 +137,7 @@ const priorityColor = (priority: string) => {
                     <Button variant="ghost" size="sm" @click="emit('close')">
                         Close
                     </Button>
-                    <div class="relative">
+                    <div v-if="!props.readOnly" class="relative">
                         <button
                             class="rounded-full border border-border bg-background px-2 py-1 text-lg font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground cursor-pointer"
                             aria-label="Ticket actions"
@@ -151,6 +186,7 @@ const priorityColor = (priority: string) => {
                                 :value="props.editor.title"
                                 type="text"
                                 class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                :disabled="props.readOnly"
                                 @input="
                                     updateEditor({
                                         title: ($event.target as HTMLInputElement)
@@ -160,44 +196,18 @@ const priorityColor = (priority: string) => {
                             />
                         </div>
                         <div>
-                            <div class="flex items-center justify-between">
-                                <label
-                                    class="text-xs font-semibold text-muted-foreground"
-                                    >Description</label
-                                >
-                                <button
-                                    type="button"
-                                    class="text-xs text-muted-foreground hover:text-foreground transition"
-                                    @click="
-                                        showDescriptionPreview =
-                                            !showDescriptionPreview
-                                    "
-                                >
-                                    {{
-                                        showDescriptionPreview ? "Edit" : "Preview"
-                                    }}
-                                </button>
-                            </div>
-                            <div
-                                v-if="showDescriptionPreview"
-                                class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm prose prose-sm dark:prose-invert max-w-none min-h-[160px]"
-                                v-html="marked(props.editor.description || '')"
-                            ></div>
-                            <textarea
-                                v-else
+                            <label
+                                class="text-xs font-semibold text-muted-foreground"
+                                >Description</label
+                            >
+                            <MarkdownEditor
+                                :model-value="props.editor.description"
+                                @update:model-value="updateEditor({ description: $event })"
+                                :rows="7"
+                                placeholder="Describe the ticket..."
                                 data-testid="ticket.description-input"
-                                :value="props.editor.description"
-                                rows="7"
-                                placeholder="Describe the ticket... (supports **bold**, *italic*, `code`)"
-                                class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                                @input="
-                                    updateEditor({
-                                        description: (
-                                            $event.target as HTMLTextAreaElement
-                                        ).value,
-                                    })
-                                "
-                            ></textarea>
+                                show-preview
+                            />
                         </div>
                         <div class="grid gap-4 sm:grid-cols-3">
                             <div>
@@ -209,6 +219,7 @@ const priorityColor = (priority: string) => {
                                     data-testid="ticket.type-select"
                                     :value="props.editor.type"
                                     class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :disabled="props.readOnly"
                                     @change="
                                         updateEditor({
                                             type: (
@@ -235,6 +246,7 @@ const priorityColor = (priority: string) => {
                                     data-testid="ticket.priority-select"
                                     :value="props.editor.priority"
                                     class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :disabled="props.readOnly"
                                     @change="
                                         updateEditor({
                                             priority: (
@@ -261,6 +273,7 @@ const priorityColor = (priority: string) => {
                                     data-testid="ticket.state-select"
                                     :value="props.editor.stateId"
                                     class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :disabled="props.readOnly"
                                     @change="
                                         updateEditor({
                                             stateId: (
@@ -284,6 +297,59 @@ const priorityColor = (priority: string) => {
                             class="rounded-2xl border border-border bg-secondary/60 px-3 py-2 text-xs"
                         >
                             {{ props.ticketError }}
+                        </div>
+
+                        <!-- Attachments -->
+                        <div data-testid="ticket.attachments-section">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-semibold text-muted-foreground">Attachments</label>
+                                <button
+                                    v-if="!props.readOnly"
+                                    data-testid="ticket.upload-attachment-button"
+                                    type="button"
+                                    class="text-xs text-primary hover:text-primary/80 transition font-semibold"
+                                    :disabled="props.attachmentUploading"
+                                    @click="triggerFileUpload"
+                                >
+                                    {{ props.attachmentUploading ? "Uploading..." : "+ Upload" }}
+                                </button>
+                            </div>
+                            <input
+                                ref="fileInput"
+                                data-testid="ticket.file-input"
+                                type="file"
+                                class="hidden"
+                                @change="onFileSelected"
+                            />
+                            <div v-if="props.attachments.length" class="mt-2 space-y-1.5">
+                                <div
+                                    v-for="att in props.attachments"
+                                    :key="att.id"
+                                    data-testid="ticket.attachment-item"
+                                    class="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-2"
+                                >
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <a
+                                            data-testid="ticket.attachment-download-link"
+                                            :href="downloadUrl(att)"
+                                            target="_blank"
+                                            class="text-xs text-primary hover:underline truncate"
+                                        >{{ att.filename }}</a>
+                                        <span class="text-[10px] text-muted-foreground whitespace-nowrap">{{ formatFileSize(att.size) }}</span>
+                                    </div>
+                                    <button
+                                        v-if="!props.readOnly"
+                                        data-testid="ticket.attachment-delete-button"
+                                        type="button"
+                                        class="text-[10px] text-destructive hover:text-destructive/80 transition ml-2 whitespace-nowrap"
+                                        @click="emit('delete-attachment', att.id)"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                            <p v-else class="mt-2 text-[10px] text-muted-foreground">No files attached.</p>
+                            <p v-if="props.attachmentError" class="mt-1 text-xs text-destructive">{{ props.attachmentError }}</p>
                         </div>
                     </div>
                 </div>
@@ -344,25 +410,20 @@ const priorityColor = (priority: string) => {
                         No comments yet.
                     </div>
 
-                    <div class="border-t border-border px-6 py-3 flex-shrink-0">
+                    <div v-if="!props.readOnly" class="border-t border-border px-6 py-3 flex-shrink-0">
                         <label
                             class="text-[10px] font-semibold text-muted-foreground block mb-2"
                             >Add comment (Markdown)</label
                         >
-                        <textarea
-                            data-testid="ticket.comment-input"
-                            :value="props.commentDraft"
-                            rows="2"
+                        <MarkdownEditor
+                            :model-value="props.commentDraft"
+                            @update:model-value="emit('update:commentDraft', $event)"
+                            :rows="2"
                             placeholder="Progress, blockers, notes..."
-                            class="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                            @input="
-                                emit(
-                                    'update:commentDraft',
-                                    ($event.target as HTMLTextAreaElement)
-                                        .value,
-                                )
-                            "
-                        ></textarea>
+                            data-testid="ticket.comment-input"
+                            compact
+                            :show-preview="false"
+                        />
                         <div class="mt-2 flex items-center gap-3">
                             <Button
                                 data-testid="ticket.post-comment-button"
@@ -395,6 +456,7 @@ const priorityColor = (priority: string) => {
                     Cancel
                 </Button>
                 <Button
+                    v-if="!props.readOnly"
                     data-testid="ticket.save-button"
                     size="sm"
                     :disabled="props.ticketSaving"

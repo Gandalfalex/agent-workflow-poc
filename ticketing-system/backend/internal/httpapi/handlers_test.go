@@ -114,6 +114,12 @@ type fakeStore struct {
 	createComment    store.Comment
 	createCommentErr error
 	deleteCommentErr error
+
+	webhookDeliveries    []store.WebhookDelivery
+	webhookDeliveriesErr error
+
+	projectRoleForUser    string
+	projectRoleForUserErr error
 }
 
 func (f *fakeStore) Ping(ctx context.Context) error {
@@ -316,6 +322,40 @@ func (f *fakeStore) DeleteComment(ctx context.Context, id uuid.UUID) error {
 	return f.deleteCommentErr
 }
 
+func (f *fakeStore) ListAttachments(ctx context.Context, ticketID uuid.UUID) ([]store.Attachment, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) GetAttachment(ctx context.Context, id uuid.UUID) (store.Attachment, error) {
+	return store.Attachment{}, nil
+}
+
+func (f *fakeStore) CreateAttachment(ctx context.Context, ticketID uuid.UUID, input store.AttachmentCreateInput) (store.Attachment, error) {
+	return store.Attachment{}, nil
+}
+
+func (f *fakeStore) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeStore) ListWebhookDeliveries(ctx context.Context, webhookID uuid.UUID) ([]store.WebhookDelivery, error) {
+	if f.webhookDeliveriesErr != nil {
+		return nil, f.webhookDeliveriesErr
+	}
+	return f.webhookDeliveries, nil
+}
+
+func (f *fakeStore) GetProjectStats(ctx context.Context, projectID uuid.UUID) (store.ProjectStats, error) {
+	return store.ProjectStats{}, nil
+}
+
+func (f *fakeStore) GetProjectRoleForUser(ctx context.Context, projectID, userID uuid.UUID) (string, error) {
+	if f.projectRoleForUser != "" {
+		return f.projectRoleForUser, f.projectRoleForUserErr
+	}
+	return "admin", f.projectRoleForUserErr
+}
+
 func (f *fakeStore) ReplaceWorkflowStates(ctx context.Context, projectID uuid.UUID, inputs []store.WorkflowStateInput) ([]store.WorkflowState, error) {
 	f.replaceInputs = inputs
 	if f.replaceErr != nil {
@@ -463,6 +503,18 @@ func newTestRequest(method, url string, body io.Reader) *http.Request {
 		Email: "test@example.com",
 		Name:  "Test User",
 		Roles: []string{"admin"},
+	}
+	return req.WithContext(context.WithValue(req.Context(), authUserKey, user))
+}
+
+// newTestRequestAsUser creates a request with a non-admin user (subject to role checks).
+func newTestRequestAsUser(method, url string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, url, body)
+	user := auth.User{
+		ID:    "22222222-2222-2222-2222-222222222222",
+		Email: "regular@example.com",
+		Name:  "Regular User",
+		Roles: []string{"default-roles-ticketing"},
 	}
 	return req.WithContext(context.WithValue(req.Context(), authUserKey, user))
 }
@@ -767,6 +819,117 @@ func TestCreateWebhook(t *testing.T) {
 		}
 		if resp.Id != openapiUUID(id.String()) {
 			t.Fatalf("expected id %s, got %s", id.String(), resp.Id)
+		}
+	})
+}
+
+func TestRBAC(t *testing.T) {
+	projectID := openapiUUID("11111111-1111-1111-1111-111111111111")
+
+	t.Run("viewer cannot create ticket", func(t *testing.T) {
+		fs := &fakeStore{projectRoleForUser: "viewer"}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodPost, "/tickets", strings.NewReader(`{"title":"Hello"}`))
+		rec := httptest.NewRecorder()
+
+		h.CreateTicket(rec, req, projectID)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+	})
+
+	t.Run("contributor can create ticket", func(t *testing.T) {
+		id := uuid.New()
+		stateID := uuid.New()
+		fs := &fakeStore{
+			projectRoleForUser: "contributor",
+			createTicket: store.Ticket{
+				ID: id, Key: "TIC-3000", Number: 3000, Title: "Hello",
+				StateID: stateID, StateName: "Backlog", StateOrder: 1,
+				Priority: "medium", Position: 1,
+				CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+			},
+		}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodPost, "/tickets", strings.NewReader(`{"title":"Hello"}`))
+		rec := httptest.NewRecorder()
+
+		h.CreateTicket(rec, req, projectID)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected status 201, got %d", rec.Code)
+		}
+	})
+
+	t.Run("viewer can list tickets", func(t *testing.T) {
+		fs := &fakeStore{
+			projectRoleForUser: "viewer",
+			projectIDsForUser:  []uuid.UUID{uuid.UUID(projectID)},
+		}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodGet, "/tickets", nil)
+		rec := httptest.NewRecorder()
+
+		h.ListTickets(rec, req, projectID, ListTicketsParams{})
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("contributor cannot update workflow", func(t *testing.T) {
+		fs := &fakeStore{projectRoleForUser: "contributor"}
+		h := newHandlerWith(fs)
+		body := `{"states":[{"name":"Done","order":1,"isDefault":true,"isClosed":true}]}`
+		req := newTestRequestAsUser(http.MethodPut, "/workflow", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.UpdateWorkflow(rec, req, projectID)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+	})
+
+	t.Run("viewer cannot delete ticket", func(t *testing.T) {
+		ticketID := uuid.New()
+		fs := &fakeStore{
+			projectRoleForUser: "viewer",
+			getTicket: store.Ticket{
+				ID: ticketID, ProjectID: uuid.UUID(projectID),
+				Key: "TIC-1", Title: "Test",
+				CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+			},
+		}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodDelete, "/tickets/"+ticketID.String(), nil)
+		rec := httptest.NewRecorder()
+
+		h.DeleteTicket(rec, req, openapiUUID(ticketID.String()))
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+	})
+
+	t.Run("get my project role", func(t *testing.T) {
+		fs := &fakeStore{projectRoleForUser: "contributor"}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodGet, "/my-role", nil)
+		rec := httptest.NewRecorder()
+
+		h.GetMyProjectRole(rec, req, projectID)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		var resp map[string]string
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp["role"] != "contributor" {
+			t.Fatalf("expected role contributor, got %q", resp["role"])
 		}
 	})
 }

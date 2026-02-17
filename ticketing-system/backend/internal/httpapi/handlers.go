@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ticketing-system/backend/internal/auth"
+	"ticketing-system/backend/internal/blob"
 	"ticketing-system/backend/internal/store"
 	"ticketing-system/backend/internal/webhook"
 
@@ -55,11 +56,18 @@ type Store interface {
 	CreateTicket(ctx context.Context, projectID uuid.UUID, input store.TicketCreateInput) (store.Ticket, error)
 	UpdateTicket(ctx context.Context, id uuid.UUID, input store.TicketUpdateInput) (store.Ticket, error)
 	DeleteTicket(ctx context.Context, id uuid.UUID) error
+	GetProjectStats(ctx context.Context, projectID uuid.UUID) (store.ProjectStats, error)
 	ListWebhooks(ctx context.Context, projectID uuid.UUID) ([]store.Webhook, error)
 	GetWebhook(ctx context.Context, projectID uuid.UUID, id uuid.UUID) (store.Webhook, error)
 	CreateWebhook(ctx context.Context, projectID uuid.UUID, input store.WebhookCreateInput) (store.Webhook, error)
 	UpdateWebhook(ctx context.Context, projectID uuid.UUID, id uuid.UUID, input store.WebhookUpdateInput) (store.Webhook, error)
 	DeleteWebhook(ctx context.Context, projectID uuid.UUID, id uuid.UUID) error
+	ListWebhookDeliveries(ctx context.Context, webhookID uuid.UUID) ([]store.WebhookDelivery, error)
+	ListAttachments(ctx context.Context, ticketID uuid.UUID) ([]store.Attachment, error)
+	GetAttachment(ctx context.Context, id uuid.UUID) (store.Attachment, error)
+	CreateAttachment(ctx context.Context, ticketID uuid.UUID, input store.AttachmentCreateInput) (store.Attachment, error)
+	DeleteAttachment(ctx context.Context, id uuid.UUID) error
+	GetProjectRoleForUser(ctx context.Context, projectID, userID uuid.UUID) (string, error)
 }
 
 type Authenticator interface {
@@ -78,6 +86,8 @@ type API struct {
 	store                     Store
 	auth                      Authenticator
 	webhooks                  WebhookDispatcher
+	blob                      blob.ObjectStore
+	maxUploadSize             int64
 	cookieName                string
 	cookieTTL                 time.Duration
 	cookieSecure              bool
@@ -118,12 +128,19 @@ func NewHandler(st Store, authClient Authenticator, webhookDispatcher WebhookDis
 		defaultProjectName = "Default Project"
 	}
 
+	maxUpload := opts.MaxUploadSize
+	if maxUpload <= 0 {
+		maxUpload = 10 << 20 // 10 MB
+	}
+
 	now := time.Now()
 
 	return &API{
 		store:                     st,
 		auth:                      authClient,
 		webhooks:                  webhookDispatcher,
+		blob:                      opts.BlobStore,
+		maxUploadSize:             maxUpload,
 		cookieName:                cookieName,
 		cookieTTL:                 ttl,
 		cookieSecure:              opts.CookieSecure,
@@ -146,6 +163,8 @@ type HandlerOptions struct {
 	DefaultProjectKey         string
 	DefaultProjectName        string
 	DefaultProjectDescription *string
+	BlobStore                 blob.ObjectStore
+	MaxUploadSize             int64
 }
 
 func (h *API) projectFor(projectID openapi_types.UUID) Project {
@@ -185,6 +204,51 @@ func isAdmin(ctx context.Context) bool {
 		}
 	}
 	return false
+}
+
+const (
+	roleViewer      = "viewer"
+	roleContributor = "contributor"
+	roleAdmin       = "admin"
+)
+
+func roleRank(role string) int {
+	switch role {
+	case roleAdmin:
+		return 3
+	case roleContributor:
+		return 2
+	case roleViewer:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (h *API) requireProjectRole(w http.ResponseWriter, r *http.Request, projectID uuid.UUID, minRole string) bool {
+	if isAdmin(r.Context()) {
+		return true
+	}
+	user, ok := authUser(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "missing session")
+		return false
+	}
+	userID, err := uuid.Parse(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role_check_failed", "invalid user id")
+		return false
+	}
+	role, err := h.store.GetProjectRoleForUser(r.Context(), projectID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role_check_failed", "unable to verify role")
+		return false
+	}
+	if roleRank(role) < roleRank(minRole) {
+		writeError(w, http.StatusForbidden, "insufficient_role", "requires "+minRole+" role or higher")
+		return false
+	}
+	return true
 }
 
 func toWebhookEventStrings(events []WebhookEvent) []string {
@@ -374,6 +438,9 @@ func (h *API) DeleteProject(w http.ResponseWriter, r *http.Request, projectId op
 
 func (h *API) ListProjectGroups(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectID) {
+		return
+	}
 	items, err := h.store.ListProjectGroups(r.Context(), projectID)
 	if handleListError(w, r, err, "project groups", "project_group_list") {
 		return
@@ -382,10 +449,10 @@ func (h *API) ListProjectGroups(w http.ResponseWriter, r *http.Request, projectI
 }
 
 func (h *API) AddProjectGroup(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
-	if !requireAdmin(w, r) {
+	projectID := uuid.UUID(projectId)
+	if !h.requireProjectRole(w, r, projectID, roleAdmin) {
 		return
 	}
-	projectID := uuid.UUID(projectId)
 	req, ok := decodeJSON[projectGroupCreateRequest](w, r, "project_group_create")
 	if !ok {
 		return
@@ -401,10 +468,10 @@ func (h *API) AddProjectGroup(w http.ResponseWriter, r *http.Request, projectId 
 }
 
 func (h *API) UpdateProjectGroup(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, groupId openapi_types.UUID) {
-	if !requireAdmin(w, r) {
+	projectID := uuid.UUID(projectId)
+	if !h.requireProjectRole(w, r, projectID, roleAdmin) {
 		return
 	}
-	projectID := uuid.UUID(projectId)
 	groupUUID := uuid.UUID(groupId)
 	req, ok := decodeJSON[projectGroupUpdateRequest](w, r, "project_group_update")
 	if !ok {
@@ -420,10 +487,10 @@ func (h *API) UpdateProjectGroup(w http.ResponseWriter, r *http.Request, project
 }
 
 func (h *API) DeleteProjectGroup(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, groupId openapi_types.UUID) {
-	if !requireAdmin(w, r) {
+	projectID := uuid.UUID(projectId)
+	if !h.requireProjectRole(w, r, projectID, roleAdmin) {
 		return
 	}
-	projectID := uuid.UUID(projectId)
 	groupUUID := uuid.UUID(groupId)
 	if err := h.store.DeleteProjectGroup(r.Context(), projectID, groupUUID); handleDeleteError(w, r, err, "project group", "project_group_delete") {
 		return
@@ -618,7 +685,7 @@ func (h *API) ListTickets(w http.ResponseWriter, r *http.Request, projectId open
 
 func (h *API) CreateTicket(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectUUID := uuid.UUID(projectId)
-	if !h.requireProjectAccess(w, r, projectUUID) {
+	if !h.requireProjectRole(w, r, projectUUID, roleContributor) {
 		return
 	}
 	req, ok := decodeJSON[ticketCreateRequest](w, r, "ticket_create")
@@ -695,12 +762,24 @@ func (h *API) GetTicket(w http.ResponseWriter, r *http.Request, id openapi_types
 	if handleDBError(w, r, err, "ticket", "ticket_load") {
 		return
 	}
+	if !h.requireProjectAccess(w, r, ticket.ProjectID) {
+		return
+	}
 
 	writeJSON(w, http.StatusOK, mapTicket(ticket))
 }
 
 func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ticketID := uuid.UUID(id)
+
+	current, err := h.store.GetTicket(r.Context(), ticketID)
+	if handleDBError(w, r, err, "ticket", "ticket_load") {
+		return
+	}
+	if !h.requireProjectRole(w, r, current.ProjectID, roleContributor) {
+		return
+	}
+
 	req, ok := decodeJSON[ticketUpdateRequest](w, r, "ticket_update")
 	if !ok {
 		return
@@ -708,9 +787,7 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 
 	var previous *store.Ticket
 	if h.webhooks != nil {
-		if current, err := h.store.GetTicket(r.Context(), ticketID); err == nil {
-			previous = &current
-		}
+		previous = &current
 	}
 
 	input := store.TicketUpdateInput{
@@ -780,10 +857,15 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 func (h *API) DeleteTicket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	ticketID := uuid.UUID(id)
 
-	var deletedTicket *store.Ticket
-	if ticket, err := h.store.GetTicket(r.Context(), ticketID); err == nil {
-		deletedTicket = &ticket
+	ticket, err := h.store.GetTicket(r.Context(), ticketID)
+	if handleDBError(w, r, err, "ticket", "ticket_load") {
+		return
 	}
+	if !h.requireProjectRole(w, r, ticket.ProjectID, roleContributor) {
+		return
+	}
+
+	deletedTicket := &ticket
 
 	if err := h.store.DeleteTicket(r.Context(), ticketID); handleDeleteError(w, r, err, "ticket", "ticket_delete") {
 		return
@@ -813,7 +895,7 @@ func (h *API) GetWorkflow(w http.ResponseWriter, r *http.Request, projectId open
 
 func (h *API) UpdateWorkflow(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectUUID := uuid.UUID(projectId)
-	if !h.requireProjectAccess(w, r, projectUUID) {
+	if !h.requireProjectRole(w, r, projectUUID, roleAdmin) {
 		return
 	}
 	req, ok := decodeJSON[workflowUpdateRequest](w, r, "workflow_update")
@@ -866,7 +948,7 @@ func (h *API) ListWebhooks(w http.ResponseWriter, r *http.Request, projectId ope
 
 func (h *API) CreateWebhook(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectUUID := uuid.UUID(projectId)
-	if !h.requireProjectAccess(w, r, projectUUID) {
+	if !h.requireProjectRole(w, r, projectUUID, roleAdmin) {
 		return
 	}
 	req, ok := decodeJSON[webhookCreateRequest](w, r, "webhook_create")
@@ -912,7 +994,7 @@ func (h *API) GetWebhook(w http.ResponseWriter, r *http.Request, projectId opena
 
 func (h *API) UpdateWebhook(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID) {
 	projectUUID := uuid.UUID(projectId)
-	if !h.requireProjectAccess(w, r, projectUUID) {
+	if !h.requireProjectRole(w, r, projectUUID, roleAdmin) {
 		return
 	}
 	webhookID := uuid.UUID(id)
@@ -942,7 +1024,7 @@ func (h *API) UpdateWebhook(w http.ResponseWriter, r *http.Request, projectId op
 
 func (h *API) DeleteWebhook(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID) {
 	projectUUID := uuid.UUID(projectId)
-	if !h.requireProjectAccess(w, r, projectUUID) {
+	if !h.requireProjectRole(w, r, projectUUID, roleAdmin) {
 		return
 	}
 	webhookID := uuid.UUID(id)
@@ -955,7 +1037,7 @@ func (h *API) DeleteWebhook(w http.ResponseWriter, r *http.Request, projectId op
 
 func (h *API) TestWebhook(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID) {
 	projectUUID := uuid.UUID(projectId)
-	if !h.requireProjectAccess(w, r, projectUUID) {
+	if !h.requireProjectRole(w, r, projectUUID, roleAdmin) {
 		return
 	}
 	webhookID := uuid.UUID(id)
@@ -1005,6 +1087,67 @@ func (h *API) TestWebhook(w http.ResponseWriter, r *http.Request, projectId open
 		StatusCode:   statusCode,
 		ResponseBody: responseBody,
 	})
+}
+
+func (h *API) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, id openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+	webhookID := uuid.UUID(id)
+	// Verify webhook belongs to project
+	if _, err := h.store.GetWebhook(r.Context(), projectUUID, webhookID); handleDBError(w, r, err, "webhook", "webhook_load") {
+		return
+	}
+	deliveries, err := h.store.ListWebhookDeliveries(r.Context(), webhookID)
+	if handleListError(w, r, err, "webhook deliveries", "webhook_delivery_list") {
+		return
+	}
+	writeJSON(w, http.StatusOK, webhookDeliveryListResponse{Items: mapSlice(deliveries, mapWebhookDelivery)})
+}
+
+func (h *API) GetProjectStats(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+	stats, err := h.store.GetProjectStats(r.Context(), projectUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "stats_error", "Failed to load project statistics")
+		return
+	}
+	writeJSON(w, http.StatusOK, mapProjectStats(stats))
+}
+
+func (h *API) GetMyProjectRole(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	user, ok := authUser(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "missing session")
+		return
+	}
+
+	// System admins get admin role on all projects
+	if isAdmin(r.Context()) {
+		writeJSON(w, http.StatusOK, map[string]string{"role": roleAdmin})
+		return
+	}
+
+	userID, err := uuid.Parse(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid_user_id", "invalid user id")
+		return
+	}
+	role, err := h.store.GetProjectRoleForUser(r.Context(), projectUUID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "role_load_failed", "unable to load role")
+		return
+	}
+	if role == "" {
+		writeError(w, http.StatusForbidden, "no_access", "no access to this project")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"role": role})
 }
 
 func mapUser(user auth.User) userResponse {

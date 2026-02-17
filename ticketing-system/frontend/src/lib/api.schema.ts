@@ -377,6 +377,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/tickets/{ticketId}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List ticket attachments */
+        get: operations["listTicketAttachments"];
+        put?: never;
+        /** Upload file attachment to ticket */
+        post: operations["uploadTicketAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download attachment file */
+        get: operations["downloadTicketAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete ticket attachment */
+        delete: operations["deleteTicketAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get project statistics */
+        get: operations["getProjectStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/my-role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the current user's role on this project */
+        get: operations["getMyProjectRole"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/workflow": {
         parameters: {
             query?: never;
@@ -430,6 +516,23 @@ export interface paths {
         head?: never;
         /** Update webhook */
         patch: operations["updateWebhook"];
+        trace?: never;
+    };
+    "/projects/{projectId}/webhooks/{id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List webhook delivery history */
+        get: operations["listWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{projectId}/webhooks/{id}/test": {
@@ -767,6 +870,54 @@ export interface components {
             delivered: boolean;
             statusCode?: number;
             responseBody?: string;
+        };
+        WebhookDelivery: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            webhookId: string;
+            event: string;
+            attempt: number;
+            statusCode?: number;
+            responseBody?: string;
+            error?: string;
+            delivered: boolean;
+            durationMs: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        WebhookDeliveryListResponse: {
+            items: components["schemas"]["WebhookDelivery"][];
+        };
+        Attachment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ticketId: string;
+            filename: string;
+            contentType: string;
+            /** Format: int64 */
+            size: number;
+            /** Format: uuid */
+            uploadedBy: string;
+            uploadedByName: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AttachmentListResponse: {
+            items: components["schemas"]["Attachment"][];
+        };
+        StatCount: {
+            label: string;
+            value: number;
+        };
+        ProjectStats: {
+            totalOpen: number;
+            totalClosed: number;
+            byState: components["schemas"]["StatCount"][];
+            byPriority: components["schemas"]["StatCount"][];
+            byType: components["schemas"]["StatCount"][];
+            byAssignee: components["schemas"]["StatCount"][];
         };
         ErrorResponse: {
             error: string;
@@ -1661,6 +1812,160 @@ export interface operations {
             };
         };
     };
+    listTicketAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentListResponse"];
+                };
+            };
+        };
+    };
+    uploadTicketAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Attachment created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Attachment"];
+                };
+            };
+            /** @description File too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    downloadTicketAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ticketId: string;
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File content */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+        };
+    };
+    deleteTicketAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ticketId: string;
+                attachmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getProjectStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project statistics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectStats"];
+                };
+            };
+        };
+    };
+    getMyProjectRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user's project role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        role: components["schemas"]["ProjectRole"];
+                    };
+                };
+            };
+        };
+    };
     getWorkflow: {
         parameters: {
             query?: never;
@@ -1824,6 +2129,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Webhook"];
+                };
+            };
+        };
+    };
+    listWebhookDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Delivery list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryListResponse"];
                 };
             };
         };

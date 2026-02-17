@@ -80,6 +80,19 @@ JOIN group_memberships gm ON gm.group_id = pg.group_id
 WHERE gm.user_id = $1
 {{end}}
 
+{{define "project_role_for_user.sql"}}
+SELECT pg.role
+FROM project_groups pg
+JOIN group_memberships gm ON gm.group_id = pg.group_id
+WHERE pg.project_id = $1 AND gm.user_id = $2
+ORDER BY CASE pg.role
+  WHEN 'admin' THEN 1
+  WHEN 'contributor' THEN 2
+  WHEN 'viewer' THEN 3
+END
+LIMIT 1
+{{end}}
+
 {{define "groups_delete.sql"}}
 DELETE FROM groups
 WHERE id = $1

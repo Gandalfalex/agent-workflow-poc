@@ -38,8 +38,12 @@ const activeProjectLabel = computed(() =>
         ? `${activeProject.value.key} · ${activeProject.value.name}`
         : "Ticketing Workspace",
 );
-const activePage = computed<"board" | "settings">(() =>
-    route.name === "settings" ? "settings" : "board",
+const activePage = computed<"board" | "dashboard" | "settings">(() =>
+    route.name === "settings"
+        ? "settings"
+        : route.name === "dashboard"
+          ? "dashboard"
+          : "board",
 );
 
 const canLogin = computed(
@@ -127,7 +131,7 @@ const selectProject = async (projectId: string) => {
     });
 };
 
-const setPage = async (page: "board" | "settings") => {
+const setPage = async (page: "board" | "dashboard" | "settings") => {
     const targetProjectId = activeProjectId.value || projects.value[0]?.id;
     if (!targetProjectId) {
         await adminStore.loadProjects();
@@ -144,12 +148,28 @@ const refreshActive = async () => {
     }
     if (activePage.value === "board") {
         try {
+            await boardStore.loadCurrentUserRole(projectId);
             await boardStore.loadBoard(projectId);
             await boardStore.loadStories(projectId);
             await boardStore.loadWebhooks(projectId);
         } catch (err) {
             handleAuthError(err);
         }
+        return;
+    }
+    if (activePage.value === "dashboard") {
+        try {
+            await boardStore.loadCurrentUserRole(projectId);
+            await boardStore.loadDashboardStats(projectId);
+        } catch (err) {
+            handleAuthError(err);
+        }
+        return;
+    }
+    try {
+        await boardStore.loadCurrentUserRole(projectId);
+    } catch (err) {
+        handleAuthError(err);
         return;
     }
     await adminStore.loadProjects();
@@ -196,6 +216,7 @@ onMounted(() => {
                     :project-loading="projectLoading"
                     :projects="projects"
                     :active-project-id="activeProjectId"
+                    :can-manage-project="boardStore.canManageProject"
                     @set-page="setPage"
                     @select-project="selectProject"
                     @logout="performLogout"
