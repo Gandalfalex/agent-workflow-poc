@@ -25,6 +25,7 @@ const props = defineProps<{
     apiMode: "live" | "demo";
     workflowSetupBusy: boolean;
     workflowSetupError: string;
+    canEditTickets: boolean;
     hasActiveFilter: boolean;
     searchQuery: string;
     onInitializeWorkflow: () => void;
@@ -146,6 +147,7 @@ const assigneeInitials = (name?: string) => {
                     {{ ticketsCount }} tickets
                 </span>
                 <button
+                    v-if="props.canEditTickets"
                     data-testid="board.create-story-button"
                     class="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-base font-semibold text-foreground transition hover:border-primary hover:text-primary"
                     @click="props.onOpenStoryModal"
@@ -218,6 +220,7 @@ const assigneeInitials = (name?: string) => {
                         </p>
                         <div class="relative">
                             <button
+                                v-if="props.canEditTickets"
                                 class="rounded-full border border-border bg-background px-2 py-1 text-[12px] font-semibold uppercase tracking-[0.3em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
                                 aria-label="Story actions"
                                 @click.stop="toggleStoryMenu(row.id)"
@@ -225,12 +228,18 @@ const assigneeInitials = (name?: string) => {
                                 &#x22EE;
                             </button>
                             <div
-                                v-if="openStoryMenu === row.id"
+                                v-if="
+                                    props.canEditTickets &&
+                                    openStoryMenu === row.id
+                                "
                                 class="dropdown-backdrop"
                                 @click="closeStoryMenu"
                             ></div>
                             <div
-                                v-if="openStoryMenu === row.id"
+                                v-if="
+                                    props.canEditTickets &&
+                                    openStoryMenu === row.id
+                                "
                                 class="absolute right-0 top-full z-50 mt-2 w-36 rounded-2xl border border-border bg-card/95 backdrop-blur p-2 text-xs shadow-lg"
                             >
                                 <button
@@ -292,6 +301,7 @@ const assigneeInitials = (name?: string) => {
                             </p>
                         </div>
                         <button
+                            v-if="props.canEditTickets"
                             data-testid="board.add-ticket-button"
                             class="w-full rounded-xl border-2 border-dashed border-border px-3 py-2.5 text-xs font-semibold text-muted-foreground transition-all hover:border-primary hover:bg-primary/5 hover:text-primary"
                             @click="

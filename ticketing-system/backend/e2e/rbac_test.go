@@ -55,7 +55,7 @@ func TestRBACViewerAPICreateTicket403(t *testing.T) {
 	h := scenario.Harness()
 
 	body := `{"title":"Should Fail"}`
-	resp, err := h.APIRequest("POST", fmt.Sprintf("/api/projects/%s/tickets", seed.ProjectID), strings.NewReader(body))
+	resp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("API request failed: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestRBACViewerAPIUpdateWorkflow403(t *testing.T) {
 	h := scenario.Harness()
 
 	body := `{"states":[{"name":"Done","order":1,"isDefault":true,"isClosed":true}]}`
-	resp, err := h.APIRequest("PUT", fmt.Sprintf("/api/projects/%s/workflow", seed.ProjectID), strings.NewReader(body))
+	resp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("API request failed: %v", err)
 	}

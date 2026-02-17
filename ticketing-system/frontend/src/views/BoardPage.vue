@@ -87,6 +87,7 @@ const handleAuthError = (err: unknown) => {
 const refreshBoard = async () => {
     if (!props.projectId) return;
     try {
+        await boardStore.loadCurrentUserRole(props.projectId);
         await boardStore.loadBoard(props.projectId);
         await boardStore.loadStories(props.projectId);
         await boardStore.loadWebhooks(props.projectId);
@@ -604,9 +605,17 @@ watch(
                     placeholder="Filter tickets..."
                     class="w-full rounded-xl border border-input bg-background pl-3 pr-16 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
-                <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-muted-foreground">
-                    <kbd class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold">/</kbd>
-                    <kbd class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold">N</kbd>
+                <div
+                    class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-muted-foreground"
+                >
+                    <kbd
+                        class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold"
+                        >/</kbd
+                    >
+                    <kbd
+                        class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold"
+                        >N</kbd
+                    >
                 </div>
             </div>
             <button
@@ -636,6 +645,7 @@ watch(
         :api-mode="apiMode"
         :workflow-setup-busy="workflowSetupBusy"
         :workflow-setup-error="workflowSetupError"
+        :can-edit-tickets="canEditTickets"
         :has-active-filter="hasActiveSearch"
         :search-query="boardSearch"
         :on-initialize-workflow="initializeWorkflow"

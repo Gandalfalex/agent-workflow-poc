@@ -79,9 +79,15 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_API_ADMIN_PASSWORD}
       COOKIE_SECURE: "true"
       CORS_ALLOWED_ORIGINS: "*"
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-ticketing-attachments}
+      MINIO_USE_SSL: "false"
     depends_on:
       - ticketing-postgres-prod
       - keycloak
+      - minio
     networks:
       - prod-network
     restart: unless-stopped
@@ -94,6 +100,18 @@ services:
       POSTGRES_DB: ${TICKETING_DB_NAME}
     volumes:
       - ticketing-prod-data:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio-prod-data:/data
     networks:
       - prod-network
     restart: unless-stopped
@@ -144,5 +162,6 @@ networks:
 volumes:
   keycloak-prod-data:
   ticketing-prod-data:
+  minio-prod-data:
   n8n-prod-data:
   n8n-prod-postgres-data:

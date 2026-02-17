@@ -332,9 +332,9 @@ func (h *Harness) Context() context.Context {
 // LoginCredentials returns the (identifier, password) for the active user.
 func (h *Harness) LoginCredentials() (string, string) {
 	if h.config.loginAsViewer {
-		return "viewer@example.local", "viewer123"
+		return "NormalUser", "viewer123"
 	}
-	return "e2e@example.local", "admin123"
+	return "AdminUser", "admin123"
 }
 
 // APIRequest makes a direct HTTP request to the backend with the active user's auth cookie.
@@ -712,7 +712,7 @@ func (h *Harness) start() error {
 				user: auth.User{
 					ID:    testUserID.String(),
 					Email: "e2e@example.local",
-					Name:  "E2E User",
+					Name:  "AdminUser",
 					Roles: []string{"admin"},
 				},
 				token:    e2eUserToken,
@@ -722,7 +722,7 @@ func (h *Harness) start() error {
 				user: auth.User{
 					ID:    viewerUserID.String(),
 					Email: "viewer@example.local",
-					Name:  "Viewer User",
+					Name:  "NormalUser",
 					Roles: []string{"default-roles-ticketing"},
 				},
 				token:    e2eViewerToken,
@@ -1002,7 +1002,7 @@ func seedDefaultData(ctx context.Context, st *store.Store, userID, viewerUserID 
 
 	if err := st.UpsertUser(ctx, store.UserUpsertInput{
 		ID:    userID,
-		Name:  "E2E User",
+		Name:  "AdminUser",
 		Email: "e2e@example.local",
 	}); err != nil {
 		return SeedData{}, fmt.Errorf("upsert user: %w", err)
@@ -1026,7 +1026,7 @@ func seedDefaultData(ctx context.Context, st *store.Store, userID, viewerUserID 
 	// Seed viewer user + group with viewer role
 	if err := st.UpsertUser(ctx, store.UserUpsertInput{
 		ID:    viewerUserID,
-		Name:  "Viewer User",
+		Name:  "NormalUser",
 		Email: "viewer@example.local",
 	}); err != nil {
 		return SeedData{}, fmt.Errorf("upsert viewer user: %w", err)

@@ -44,4 +44,14 @@ e2e-frontend-build:
 # Run backend E2E browser tests.
 e2e:
 	$(MAKE) e2e-contract
-	cd backend && go test -tags=e2e ./e2e -v
+	@set -o pipefail; \
+	log_file=$$(mktemp -t ticketing-e2e-XXXX.log); \
+	if cd backend && go test -tags=e2e ./e2e -v 2>&1 | tee "$$log_file"; then \
+		rm -f "$$log_file"; \
+	else \
+		echo ""; \
+		echo "Failed tests summary:"; \
+		grep -E '^--- FAIL: ' "$$log_file" | sed -E 's/^--- FAIL: ([^ ]+).*/- \1/' | sort -u || true; \
+		echo "Raw log: $$log_file"; \
+		exit 1; \
+	fi
