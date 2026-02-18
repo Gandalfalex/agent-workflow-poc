@@ -77,18 +77,13 @@ Source baseline: `.documentation/current_features.md`
 
 ## Phase 2 (P1): Core Product Features
 
-### 3. Ticket activity timeline
-- Add immutable activity records for state changes, assignee changes, field edits.
-- New `ticket_activities` table with migration.
-- API endpoint to retrieve activity for a ticket.
-- Render chronological timeline in ticket detail modal.
-- Why: Comments exist but change history is not auditable.
+### ~~3. Ticket activity timeline~~ ✓ Completed (TKT-009)
+- Implemented: `ticket_activities` table, `GET /tickets/{id}/activities` endpoint, auto-recording on ticket update (state, priority, assignee, type, title), timeline section in TicketModal.vue, 2 E2E tests.
+- Remaining: Dashboard recent activity feed (can now be built on top of this).
 
-### 4. Workflow editor UI
-- Visual workflow state editor in settings: add, rename, reorder, set default/closed flags.
-- Drag-and-drop state reordering.
-- Client-side and backend validation (must have exactly one default state).
-- Why: Workflow API exists but editing requires raw API calls.
+### ~~4. Workflow editor UI~~ ✓ Completed (TKT-010)
+- ~~Visual workflow state editor in settings: add, rename, reorder, set default/closed flags.~~
+- Implemented: Workflow editor tab in settings with add/rename/delete/drag-reorder, isDefault radio, isClosed checkbox, client-side validation, confirmation dialog on delete, 4 E2E tests.
 
 ### ~~5. Ticket attachments with MinIO~~ ✓ Completed (TKT-011)
 - ~~MinIO as S3-compatible object storage, Nginx as caching CDN layer in front.~~
@@ -148,8 +143,8 @@ Source baseline: `.documentation/current_features.md`
 ## Recommended Next 5 Tickets
 1. ~~Webhook retry logic and delivery log table (P0).~~ ✓ Done (TKT-007)
 2. ~~Granular per-operation RBAC enforcement (P0, TKT-008).~~ ✓ Done
-3. Ticket activity timeline - backend + UI (P1, TKT-009).
-4. Workflow editor UI with drag-and-drop states (P1, TKT-010).
+3. ~~Ticket activity timeline - backend + UI (P1, TKT-009).~~ ✓ Done
+4. ~~Workflow editor UI with drag-and-drop states (P1, TKT-010).~~ ✓ Done
 5. ~~Project dashboard overview page (P1, TKT-012).~~ ✓ Done
 
 ## Risks and Dependencies

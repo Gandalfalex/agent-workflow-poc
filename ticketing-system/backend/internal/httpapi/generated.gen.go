@@ -294,6 +294,25 @@ type Ticket struct {
 	UpdatedAt  time.Time          `json:"updatedAt"`
 }
 
+// TicketActivity defines model for TicketActivity.
+type TicketActivity struct {
+	// Action Type of activity: state_changed, priority_changed, assignee_changed, type_changed, title_changed, description_changed
+	Action    string             `json:"action"`
+	ActorId   openapi_types.UUID `json:"actorId"`
+	ActorName string             `json:"actorName"`
+	CreatedAt time.Time          `json:"createdAt"`
+	Field     *string            `json:"field,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	NewValue  *string            `json:"newValue,omitempty"`
+	OldValue  *string            `json:"oldValue,omitempty"`
+	TicketId  openapi_types.UUID `json:"ticketId"`
+}
+
+// TicketActivityListResponse defines model for TicketActivityListResponse.
+type TicketActivityListResponse struct {
+	Items []TicketActivity `json:"items"`
+}
+
 // TicketComment defines model for TicketComment.
 type TicketComment struct {
 	AuthorId   openapi_types.UUID `json:"authorId"`
@@ -690,6 +709,9 @@ type ServerInterface interface {
 	// Update ticket
 	// (PATCH /tickets/{id})
 	UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List ticket activities
+	// (GET /tickets/{id}/activities)
+	ListTicketActivities(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// List ticket comments
 	// (GET /tickets/{id}/comments)
 	ListTicketComments(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -993,6 +1015,12 @@ func (_ Unimplemented) GetTicket(w http.ResponseWriter, r *http.Request, id open
 // Update ticket
 // (PATCH /tickets/{id})
 func (_ Unimplemented) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List ticket activities
+// (GET /tickets/{id}/activities)
+func (_ Unimplemented) ListTicketActivities(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2575,6 +2603,37 @@ func (siw *ServerInterfaceWrapper) UpdateTicket(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListTicketActivities operation middleware
+func (siw *ServerInterfaceWrapper) ListTicketActivities(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTicketActivities(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTicketComments operation middleware
 func (siw *ServerInterfaceWrapper) ListTicketComments(w http.ResponseWriter, r *http.Request) {
 
@@ -2966,6 +3025,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/tickets/{id}", wrapper.UpdateTicket)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tickets/{id}/activities", wrapper.ListTicketActivities)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tickets/{id}/comments", wrapper.ListTicketComments)

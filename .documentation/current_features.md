@@ -37,6 +37,13 @@ Snapshot date: February 17, 2026
 - Ticket file attachments: upload, list, download, delete. MinIO S3-compatible object storage with swappable ObjectStore interface (in-memory for E2E tests). 10MB file size limit.
 - Board search and filtering.
 
+## Ticket Activity Timeline
+- Immutable `ticket_activities` table recording every field change on ticket update.
+- Tracked actions: `state_changed`, `priority_changed`, `assignee_changed`, `type_changed`, `title_changed`.
+- API endpoint: `GET /tickets/{id}/activities` returning chronological list.
+- OpenAPI schema: `TicketActivity`, `TicketActivityListResponse` with generated Go and TypeScript types.
+- Activity section in ticket detail modal: human-readable labels per action, shown above comments, reloads automatically after ticket save without closing the modal.
+
 ## Workflow Management
 - Workflow state retrieval and update per project via API.
 - Default workflow state initialization when needed.
@@ -81,13 +88,13 @@ Snapshot date: February 17, 2026
 - PostgreSQL testcontainers for isolated test environments.
 - Webhook event capture mechanism for integration validation.
 - Multi-user E2E support: admin and viewer user seeding, `WithViewerUser()` harness option, API request helper with auth cookies.
-- Test coverage: login/logout, project selection, ticket CRUD, story management, comments, file attachments (upload, delete), webhook events, drag-and-drop, form validation, unhappy paths, RBAC negative-path tests (viewer cannot create/delete tickets, cannot access settings/workflow).
+- Test coverage: login/logout, project selection, ticket CRUD, story management, comments, file attachments (upload, delete), webhook events, drag-and-drop, form validation, unhappy paths, RBAC negative-path tests (viewer cannot create/delete tickets, cannot access settings/workflow), activity timeline (state change, priority change visible after ticket update).
 
 ## Frontend UX
 - Login view with session bootstrap.
 - Project board page: Kanban columns, ticket/story display, drag-and-drop, search/filter.
 - Reusable MarkdownEditor component with formatting toolbar (bold, italic, code, link, lists, quote, heading), keyboard shortcuts (Ctrl+B/I/E/K, Tab indent), and edit/preview toggle. Used in all description and comment fields.
-- Ticket detail modal: inline editing, comments with markdown, file attachments (upload/download/delete), assignee/priority/type/story fields.
+- Ticket detail modal: inline editing, comments with markdown, file attachments (upload/download/delete), assignee/priority/type/story fields, activity timeline showing state/priority/assignee/type/title changes.
 - New ticket and story creation modals with markdown-enabled description fields.
 - Settings page (two tabs):
   - Projects: project CRUD, group management, member management, project-group role assignment.

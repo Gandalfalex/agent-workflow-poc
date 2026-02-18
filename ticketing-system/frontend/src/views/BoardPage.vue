@@ -56,6 +56,7 @@ const webhooks = computed(() => boardStore.webhooks);
 const workflowSetupBusy = computed(() => boardStore.workflowSetupBusy);
 const workflowSetupError = computed(() => boardStore.workflowSetupError);
 const ticketComments = computed(() => boardStore.ticketComments);
+const ticketActivities = computed(() => boardStore.ticketActivities);
 const commentSaving = computed(() => boardStore.commentSaving);
 const commentError = computed(() => boardStore.commentError);
 const ticketAttachments = computed(() => boardStore.ticketAttachments);
@@ -254,6 +255,7 @@ const openTicket = async (ticket: TicketResponse) => {
             await boardStore.loadStories(props.projectId);
         }
         await boardStore.loadTicketComments(ticket.id);
+        await boardStore.loadTicketActivities(ticket.id);
         await boardStore.loadTicketAttachments(props.projectId, ticket.id);
     }
 };
@@ -284,7 +286,7 @@ const saveTicket = async () => {
             payload,
         );
         selectedTicket.value = updated;
-        closeTicket();
+        await boardStore.loadTicketActivities(updated.id);
     } catch (err) {
         if (!handleAuthError(err)) {
             ticketError.value = "Unable to update ticket.";
@@ -696,6 +698,7 @@ watch(
         :ticket-types="ticketTypes"
         :ticket-saving="ticketSaving"
         :ticket-error="ticketError"
+        :activities="ticketActivities"
         :comments="ticketComments"
         :comment-draft="commentDraft"
         :comment-saving="commentSaving"

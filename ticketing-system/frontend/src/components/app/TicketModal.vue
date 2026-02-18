@@ -5,6 +5,7 @@ import { marked } from "marked";
 import { ref } from "vue";
 import type {
     Attachment,
+    TicketActivity,
     TicketComment,
     TicketPriority,
     TicketType,
@@ -29,6 +30,7 @@ const props = defineProps<{
     ticketTypes: TicketType[];
     ticketSaving: boolean;
     ticketError: string;
+    activities: TicketActivity[];
     comments: TicketComment[];
     commentDraft: string;
     commentSaving: boolean;
@@ -354,8 +356,61 @@ const priorityColor = (priority: string) => {
                     </div>
                 </div>
 
-                <!-- Right: Comments (independently scrollable) -->
+                <!-- Right: Activity + Comments (independently scrollable) -->
                 <div class="flex flex-col min-h-0 overflow-hidden">
+                    <!-- Activity Timeline -->
+                    <div
+                        v-if="props.activities.length"
+                        class="flex-shrink-0 border-b border-border"
+                    >
+                        <div class="px-6 py-3 flex items-center gap-2">
+                            <span class="text-sm font-semibold text-foreground">Activity</span>
+                        </div>
+                        <div
+                            data-testid="ticket.activity-timeline"
+                            class="px-6 pb-3 space-y-1 max-h-40 overflow-y-auto"
+                        >
+                            <div
+                                v-for="activity in props.activities"
+                                :key="activity.id"
+                                data-testid="ticket.activity-item"
+                                class="flex items-start gap-2 text-xs text-muted-foreground"
+                            >
+                                <span class="mt-0.5 h-1.5 w-1.5 rounded-full bg-muted-foreground flex-shrink-0"></span>
+                                <span>
+                                    <span class="font-medium text-foreground">{{ activity.actorName }}</span>
+                                    <span v-if="activity.action === 'state_changed'">
+                                        changed state from
+                                        <span class="font-medium text-foreground">{{ activity.oldValue }}</span>
+                                        to
+                                        <span class="font-medium text-foreground">{{ activity.newValue }}</span>
+                                    </span>
+                                    <span v-else-if="activity.action === 'priority_changed'">
+                                        changed priority from
+                                        <span class="font-medium text-foreground">{{ activity.oldValue }}</span>
+                                        to
+                                        <span class="font-medium text-foreground">{{ activity.newValue }}</span>
+                                    </span>
+                                    <span v-else-if="activity.action === 'assignee_changed'">
+                                        <span v-if="activity.newValue">assigned to <span class="font-medium text-foreground">{{ activity.newValue }}</span></span>
+                                        <span v-else>removed assignee</span>
+                                    </span>
+                                    <span v-else-if="activity.action === 'type_changed'">
+                                        changed type from
+                                        <span class="font-medium text-foreground">{{ activity.oldValue }}</span>
+                                        to
+                                        <span class="font-medium text-foreground">{{ activity.newValue }}</span>
+                                    </span>
+                                    <span v-else-if="activity.action === 'title_changed'">
+                                        renamed ticket
+                                    </span>
+                                    <span v-else>{{ activity.action }}</span>
+                                    <span class="ml-1 text-muted-foreground/60">· {{ new Date(activity.createdAt).toLocaleString() }}</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div
                         class="flex items-center justify-between px-6 py-3 flex-shrink-0 border-b border-border"
                     >

@@ -68,6 +68,8 @@ type Store interface {
 	CreateAttachment(ctx context.Context, ticketID uuid.UUID, input store.AttachmentCreateInput) (store.Attachment, error)
 	DeleteAttachment(ctx context.Context, id uuid.UUID) error
 	GetProjectRoleForUser(ctx context.Context, projectID, userID uuid.UUID) (string, error)
+	ListActivities(ctx context.Context, ticketID uuid.UUID) ([]store.Activity, error)
+	CreateActivity(ctx context.Context, ticketID uuid.UUID, input store.ActivityCreateInput) error
 }
 
 type Authenticator interface {
@@ -836,6 +838,12 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if actorID, err := uuid.Parse(actor.ID); err == nil {
+			h.recordTicketActivities(r.Context(), current, ticket, actorID, actor.Name)
+		}
+	}
+
 	response := mapTicket(ticket)
 	projectUUID := uuid.UUID(response.ProjectId)
 	if h.webhooks != nil {
@@ -1302,4 +1310,89 @@ func (h *API) SyncUsers(w http.ResponseWriter, r *http.Request) {
 		Synced: synced,
 		Total:  len(keycloakUsers),
 	})
+}
+
+func (h *API) ListTicketActivities(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	ticketID := uuid.UUID(id)
+	activities, err := h.store.ListActivities(r.Context(), ticketID)
+	if handleListError(w, r, err, "activities", "activity_list") {
+		return
+	}
+	writeJSON(w, http.StatusOK, ticketActivityListResponse{Items: mapSlice(activities, mapActivity)})
+}
+
+func (h *API) recordTicketActivities(ctx context.Context, before, after store.Ticket, actorID uuid.UUID, actorName string) {
+	type fieldChange struct {
+		action   string
+		field    string
+		oldValue string
+		newValue string
+	}
+
+	var changes []fieldChange
+
+	if before.StateID != after.StateID {
+		changes = append(changes, fieldChange{
+			action:   "state_changed",
+			field:    "state",
+			oldValue: before.StateName,
+			newValue: after.StateName,
+		})
+	}
+	if before.Priority != after.Priority {
+		changes = append(changes, fieldChange{
+			action:   "priority_changed",
+			field:    "priority",
+			oldValue: before.Priority,
+			newValue: after.Priority,
+		})
+	}
+	assigneeChanged := (before.AssigneeID == nil) != (after.AssigneeID == nil) ||
+		(before.AssigneeID != nil && after.AssigneeID != nil && *before.AssigneeID != *after.AssigneeID)
+	if assigneeChanged {
+		oldName := ""
+		newName := ""
+		if before.AssigneeName != nil {
+			oldName = *before.AssigneeName
+		}
+		if after.AssigneeName != nil {
+			newName = *after.AssigneeName
+		}
+		changes = append(changes, fieldChange{
+			action:   "assignee_changed",
+			field:    "assignee",
+			oldValue: oldName,
+			newValue: newName,
+		})
+	}
+	if before.Type != after.Type {
+		changes = append(changes, fieldChange{
+			action:   "type_changed",
+			field:    "type",
+			oldValue: before.Type,
+			newValue: after.Type,
+		})
+	}
+	if before.Title != after.Title {
+		changes = append(changes, fieldChange{
+			action:   "title_changed",
+			field:    "title",
+			oldValue: before.Title,
+			newValue: after.Title,
+		})
+	}
+
+	for _, c := range changes {
+		field := c.field
+		oldVal := c.oldValue
+		newVal := c.newValue
+		_ = h.store.CreateActivity(ctx, after.ID, store.ActivityCreateInput{
+			ActorID:   actorID,
+			ActorName: actorName,
+			Action:    c.action,
+			Field:     &field,
+			OldValue:  &oldVal,
+			NewValue:  &newVal,
+		})
+	}
 }

@@ -18,6 +18,9 @@ export type TicketCommentListResponse =
   components["schemas"]["TicketCommentListResponse"];
 export type TicketCommentCreateRequest =
   components["schemas"]["TicketCommentCreateRequest"];
+export type TicketActivity = components["schemas"]["TicketActivity"];
+export type TicketActivityListResponse =
+  components["schemas"]["TicketActivityListResponse"];
 export type AuthUser = components["schemas"]["User"];
 export type UserSummary = components["schemas"]["UserSummary"];
 export type UserListResponse = components["schemas"]["UserListResponse"];
@@ -299,6 +302,14 @@ export async function deleteStory(id: string): Promise<void> {
   await request<void>(`/stories/${id}`, {
     method: "DELETE",
   });
+}
+
+export async function listTicketActivities(
+  ticketId: string,
+): Promise<TicketActivityListResponse> {
+  return request<TicketActivityListResponse>(
+    `/tickets/${ticketId}/activities`,
+  );
 }
 
 export async function listTicketComments(

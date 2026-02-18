@@ -49,6 +49,8 @@
     "story.description_input": "[data-testid=\"story.description-input\"]",
     "story.modal": "[data-testid=\"story.modal\"]",
     "story.title_input": "[data-testid=\"story.title-input\"]",
+    "ticket.activity_item": "[data-testid=\"ticket.activity-item\"]",
+    "ticket.activity_timeline": "[data-testid=\"ticket.activity-timeline\"]",
     "ticket.attachment_delete_button": "[data-testid=\"ticket.attachment-delete-button\"]",
     "ticket.attachment_download_link": "[data-testid=\"ticket.attachment-download-link\"]",
     "ticket.attachment_item": "[data-testid=\"ticket.attachment-item\"]",

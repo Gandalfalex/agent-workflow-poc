@@ -48,3 +48,5 @@ type statCountResponse = StatCount
 type projectStatsResponse = ProjectStats
 type webhookDeliveryResponse = WebhookDelivery
 type webhookDeliveryListResponse = WebhookDeliveryListResponse
+type ticketActivityResponse = TicketActivity
+type ticketActivityListResponse = TicketActivityListResponse

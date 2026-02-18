@@ -360,6 +360,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tickets/{id}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List ticket activities */
+        get: operations["listTicketActivities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tickets/{id}/comments/{commentId}": {
         parameters: {
             query?: never;
@@ -742,6 +759,25 @@ export interface components {
         };
         StoryListResponse: {
             items: components["schemas"]["Story"][];
+        };
+        TicketActivity: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ticketId: string;
+            /** Format: uuid */
+            actorId: string;
+            actorName: string;
+            /** @description Type of activity: state_changed, priority_changed, assignee_changed, type_changed, title_changed, description_changed */
+            action: string;
+            field?: string;
+            oldValue?: string;
+            newValue?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TicketActivityListResponse: {
+            items: components["schemas"]["TicketActivity"][];
         };
         TicketComment: {
             /** Format: uuid */
@@ -1787,6 +1823,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TicketComment"];
+                };
+            };
+        };
+    };
+    listTicketActivities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Activity list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketActivityListResponse"];
                 };
             };
         };

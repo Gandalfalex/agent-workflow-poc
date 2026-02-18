@@ -13,6 +13,7 @@ import {
   getWorkflow,
   listStories,
   listTicketAttachments,
+  listTicketActivities,
   listTicketComments,
   listWebhookDeliveries,
   listWebhooks,
@@ -23,6 +24,7 @@ import {
   type Attachment,
   type ProjectRole,
   type Story,
+  type TicketActivity,
   type TicketComment,
   type TicketCreateRequest,
   type TicketResponse,
@@ -183,6 +185,7 @@ export const useBoardStore = defineStore("board", {
     stories: [] as Story[],
     webhooks: [] as WebhookResponse[],
     ticketComments: [] as TicketComment[],
+    ticketActivities: [] as TicketActivity[],
     apiMode: "live" as ApiMode,
     loading: true,
     errorMessage: "",
@@ -227,6 +230,7 @@ export const useBoardStore = defineStore("board", {
       this.stories = [];
       this.webhooks = [];
       this.ticketComments = [];
+      this.ticketActivities = [];
       this.apiMode = "live";
       this.loading = true;
       this.errorMessage = "";
@@ -262,6 +266,7 @@ export const useBoardStore = defineStore("board", {
     clearComments() {
       this.ticketComments = [];
       this.commentError = "";
+      this.ticketActivities = [];
       this.ticketAttachments = [];
       this.attachmentError = "";
     },
@@ -599,6 +604,14 @@ export const useBoardStore = defineStore("board", {
         }
         this.ticketComments = [];
         this.commentError = "Unable to load comments.";
+      }
+    },
+    async loadTicketActivities(ticketId: string) {
+      try {
+        const list = await listTicketActivities(ticketId);
+        this.ticketActivities = list.items;
+      } catch {
+        this.ticketActivities = [];
       }
     },
     async addTicketComment(

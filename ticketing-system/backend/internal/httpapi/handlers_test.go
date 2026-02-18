@@ -349,6 +349,14 @@ func (f *fakeStore) GetProjectStats(ctx context.Context, projectID uuid.UUID) (s
 	return store.ProjectStats{}, nil
 }
 
+func (f *fakeStore) ListActivities(ctx context.Context, ticketID uuid.UUID) ([]store.Activity, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) CreateActivity(ctx context.Context, ticketID uuid.UUID, input store.ActivityCreateInput) error {
+	return nil
+}
+
 func (f *fakeStore) GetProjectRoleForUser(ctx context.Context, projectID, userID uuid.UUID) (string, error) {
 	if f.projectRoleForUser != "" {
 		return f.projectRoleForUser, f.projectRoleForUserErr

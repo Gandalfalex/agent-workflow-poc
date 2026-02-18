@@ -65,7 +65,9 @@
     "workflow.state_delete_button": "workflow.state-delete-button",
     "workflow.add_state_button": "workflow.add-state-button",
     "workflow.save_button": "workflow.save-button",
-    "workflow.error": "workflow.error"
+    "workflow.error": "workflow.error",
+    "ticket.activity_timeline": "ticket.activity-timeline",
+    "ticket.activity_item": "ticket.activity-item"
   },
   "flows": {
     "smoke_login_screen": {

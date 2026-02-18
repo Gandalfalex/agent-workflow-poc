@@ -46,42 +46,33 @@ Source: `.documentation/feature_roadmap.md`
   - 4 E2E tests with multi-user support: viewer cannot create ticket (UI), viewer cannot see Settings tab, viewer API 403 on create ticket, viewer API 403 on update workflow.
   - Multi-user E2E infrastructure: `staticAuth` with multiple entries, `WithViewerUser()` harness option, `APIRequest()` helper, viewer seed data.
 
-### TKT-009: Add Ticket Activity Timeline (Backend + UI)
+### TKT-009: Add Ticket Activity Timeline (Backend + UI) — **DONE**
 - Priority: `P1`
-- Problem:
-  - Ticket changes (state moves, assignee changes, field edits) are not recorded or visible.
-- Scope:
-  - Create `ticket_activities` table: ticket_id, actor_id, action, field, old_value, new_value, created_at.
-  - Generate activity entries automatically in ticket update handler.
-  - Add API endpoint: `GET /projects/{projectId}/tickets/{id}/activities`.
-  - Render chronological timeline in ticket detail modal, interleaved with comments.
-  - Add OpenAPI spec entry and generated types.
-- Acceptance Criteria:
-  - State changes, assignee changes, and priority changes generate activity records.
-  - Timeline is visible in ticket modal in chronological order.
-  - Activity records are immutable.
-  - E2E test validates timeline entries after ticket update.
-- Dependencies:
-  - Ticket update handlers. Database migration pipeline.
+- Status: **Completed** (February 18, 2026)
+- What shipped:
+  - `ticket_activities` migration (`012_ticket_activities.sql`): ticket_id, actor_id, actor_name, action, field, old_value, new_value, created_at.
+  - Store layer: `ListActivities`, `CreateActivity` methods in `store/activities.go`.
+  - SQL templates in `07_activities.go.templ`.
+  - `GET /tickets/{id}/activities` API endpoint with OpenAPI spec + generated Go and TypeScript types.
+  - Activity recording in `UpdateTicket` handler for: state_changed, priority_changed, assignee_changed, type_changed, title_changed.
+  - Frontend: `listTicketActivities` API wrapper, `ticketActivities` store state, `loadTicketActivities` action.
+  - TicketModal.vue: Activity section above comments with human-readable descriptions per action type.
+  - 2 E2E tests: state change activity visible after ticket update, priority change activity visible.
+  - Contract selectors: `ticket.activity_timeline`, `ticket.activity_item`.
 
-### TKT-010: Build Visual Workflow State Editor
+### TKT-010: Build Visual Workflow State Editor — **DONE**
 - Priority: `P1`
-- Problem:
-  - Workflow states can only be edited via raw API. No UI for managing states.
-- Scope:
-  - Add workflow editor section to settings page.
-  - Controls: add state, rename state, delete state, drag-and-drop reorder.
-  - State properties: name, isDefault (exactly one required), isClosed.
-  - Client-side validation before save. Backend validation on PATCH.
-  - Confirmation dialog before deleting a state that has tickets.
-- Acceptance Criteria:
-  - Users can add, rename, reorder, and delete workflow states from settings.
-  - Exactly one default state is enforced.
-  - Reordering persists and reflects on the board.
-  - Deleting a state with tickets shows a warning/confirmation.
-  - E2E test covers add + reorder + save flow.
-- Dependencies:
-  - Existing `PATCH /projects/{projectId}/workflow` endpoint.
+- Status: **Completed** (February 2026)
+- What shipped:
+  - Workflow editor tab in SettingsPage with full CRUD for workflow states.
+  - Controls: add state, rename state, delete state, drag-and-drop reorder via `draggable` rows.
+  - State properties: name input, isDefault radio (exactly one enforced), isClosed checkbox.
+  - Client-side validation: at least 1 state, non-empty names, unique names, exactly 1 default.
+  - `window.confirm()` dialog when deleting an existing state that may have tickets.
+  - Backend `PUT /projects/{projectId}/workflow` with transactional `ReplaceWorkflowStates`.
+  - Board store integration: `loadWorkflowEditor()` and `saveWorkflowEditor()` actions.
+  - 4 E2E tests: add+save, rename+toggle closed, validation error, reorder via API.
+  - Contract selectors for all workflow editor elements.
 
 ### TKT-011: Add Ticket File Attachments with MinIO CDN — **DONE**
 - Priority: `P1`
@@ -114,4 +105,4 @@ Source: `.documentation/feature_roadmap.md`
 
 ## Suggested Milestone Split
 1. **Milestone A (Harden):** ~~TKT-007~~, ~~TKT-008~~ — **Complete**
-2. **Milestone B (Core Features):** TKT-009, TKT-010, ~~TKT-011~~, ~~TKT-012~~
+2. **Milestone B (Core Features):** TKT-009, ~~TKT-010~~, ~~TKT-011~~, ~~TKT-012~~

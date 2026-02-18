@@ -198,6 +198,27 @@ func mapComment(comment store.Comment) ticketCommentResponse {
 	}
 }
 
+func mapActivity(a store.Activity) ticketActivityResponse {
+	resp := ticketActivityResponse{
+		Id:        toOpenapiUUID(a.ID),
+		TicketId:  toOpenapiUUID(a.TicketID),
+		ActorId:   toOpenapiUUID(a.ActorID),
+		ActorName: a.ActorName,
+		Action:    a.Action,
+		CreatedAt: a.CreatedAt,
+	}
+	if a.Field != nil {
+		resp.Field = a.Field
+	}
+	if a.OldValue != nil {
+		resp.OldValue = a.OldValue
+	}
+	if a.NewValue != nil {
+		resp.NewValue = a.NewValue
+	}
+	return resp
+}
+
 func mapWebhookDelivery(d store.WebhookDelivery) webhookDeliveryResponse {
 	resp := webhookDeliveryResponse{
 		Id:         toOpenapiUUID(d.ID),
