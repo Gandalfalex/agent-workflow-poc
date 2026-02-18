@@ -1,4 +1,26 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_ADMIN_DB:-postgres}
+      TICKETING_DB_USER: ${TICKETING_DB_USER}
+      TICKETING_DB_PASSWORD: ${TICKETING_DB_PASSWORD}
+      TICKETING_DB_NAME: ${TICKETING_DB_NAME}
+      KEYCLOAK_DB_USER: ${KEYCLOAK_DB_USER}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KEYCLOAK_DB_NAME: ${KEYCLOAK_DB_NAME}
+      N8N_DB_USER: ${N8N_DB_USER}
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD}
+      N8N_DB_NAME: ${N8N_DB_NAME}
+    volumes:
+      - postgres-prod-data:/var/lib/postgresql/data
+      - ./postgres-init/prod:/docker-entrypoint-initdb.d:ro
+    networks:
+      - prod-network
+    restart: unless-stopped
+
   # Traefik reverse proxy with file-based config (Docker socket doesn't work on macOS)
   traefik:
     image: traefik:v3.0
@@ -33,7 +55,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_DB: postgres
-      KC_DB_URL_HOST: keycloak-postgres
+      KC_DB_URL_HOST: postgres
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
@@ -45,19 +67,7 @@ services:
     networks:
       - prod-network
     depends_on:
-      - keycloak-postgres
-    restart: unless-stopped
-
-  keycloak-postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: ${KEYCLOAK_DB_USER}
-      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
-      POSTGRES_DB: ${KEYCLOAK_DB_NAME}
-    volumes:
-      - keycloak-prod-data:/var/lib/postgresql/data
-    networks:
-      - prod-network
+      - postgres
     restart: unless-stopped
 
   # Ticketing System API + Frontend (Production)
@@ -71,7 +81,7 @@ services:
     environment:
       PORT: "8080"
       BASE_PATH: "/"
-      DATABASE_URL: postgres://${TICKETING_DB_USER}:${TICKETING_DB_PASSWORD}@ticketing-postgres-prod:5432/${TICKETING_DB_NAME}?sslmode=disable
+      DATABASE_URL: postgres://${TICKETING_DB_USER}:${TICKETING_DB_PASSWORD}@postgres:5432/${TICKETING_DB_NAME}?sslmode=disable
       KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_REALM: ${KEYCLOAK_REALM}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
@@ -85,21 +95,9 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-ticketing-attachments}
       MINIO_USE_SSL: "false"
     depends_on:
-      - ticketing-postgres-prod
+      - postgres
       - keycloak
       - minio
-    networks:
-      - prod-network
-    restart: unless-stopped
-
-  ticketing-postgres-prod:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: ${TICKETING_DB_USER}
-      POSTGRES_PASSWORD: ${TICKETING_DB_PASSWORD}
-      POSTGRES_DB: ${TICKETING_DB_NAME}
-    volumes:
-      - ticketing-prod-data:/var/lib/postgresql/data
     networks:
       - prod-network
     restart: unless-stopped
@@ -130,7 +128,7 @@ services:
       - WEBHOOK_URL=${PUBLIC_BASE_URL}/n8n/
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
       - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=n8n-postgres
+      - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_DATABASE=${N8N_DB_NAME}
       - DB_POSTGRESDB_USER=${N8N_DB_USER}
@@ -138,19 +136,7 @@ services:
     volumes:
       - n8n-prod-data:/home/node/.n8n
     depends_on:
-      - n8n-postgres
-    networks:
-      - prod-network
-    restart: unless-stopped
-
-  n8n-postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: ${N8N_DB_USER}
-      POSTGRES_PASSWORD: ${N8N_DB_PASSWORD}
-      POSTGRES_DB: ${N8N_DB_NAME}
-    volumes:
-      - n8n-prod-postgres-data:/var/lib/postgresql/data
+      - postgres
     networks:
       - prod-network
     restart: unless-stopped
@@ -160,8 +146,6 @@ networks:
     driver: bridge
 
 volumes:
-  keycloak-prod-data:
-  ticketing-prod-data:
+  postgres-prod-data:
   minio-prod-data:
   n8n-prod-data:
-  n8n-prod-postgres-data:
