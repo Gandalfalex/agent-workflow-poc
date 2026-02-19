@@ -10,6 +10,8 @@ const sessionStore = useSessionStore();
 
 const stats = computed(() => boardStore.dashboardStats);
 const loading = computed(() => boardStore.dashboardLoading);
+const activities = computed(() => boardStore.projectActivities);
+const activitiesLoading = computed(() => boardStore.projectActivitiesLoading);
 
 const totalTickets = computed(
     () => (stats.value?.totalOpen ?? 0) + (stats.value?.totalClosed ?? 0),
@@ -53,6 +55,25 @@ const typeTrack: Record<string, string> = {
     bug: "bg-rose-400/15",
 };
 
+import type { ProjectActivity } from "@/lib/api";
+
+const activityLabel = (a: ProjectActivity): string => {
+    switch (a.action) {
+        case "state_changed":
+            return `changed state to ${a.newValue}`;
+        case "priority_changed":
+            return `changed priority to ${a.newValue}`;
+        case "assignee_changed":
+            return a.newValue ? `assigned to ${a.newValue}` : "removed assignee";
+        case "type_changed":
+            return `changed type to ${a.newValue}`;
+        case "title_changed":
+            return "renamed ticket";
+        default:
+            return a.action;
+    }
+};
+
 const handleAuthError = (err: unknown) => {
     const error = err as Error & { status?: number };
     if (error.status === 401 || error.status === 403) {
@@ -65,7 +86,10 @@ const handleAuthError = (err: unknown) => {
 const loadStats = async () => {
     if (!props.projectId) return;
     try {
-        await boardStore.loadDashboardStats(props.projectId);
+        await Promise.all([
+            boardStore.loadDashboardStats(props.projectId),
+            boardStore.loadProjectActivities(props.projectId),
+        ]);
     } catch (err) {
         handleAuthError(err);
     }
@@ -342,6 +366,39 @@ watch(() => props.projectId, loadStats);
                         class="w-6 shrink-0 text-right text-xs font-semibold tabular-nums"
                         >{{ item.value }}</span
                     >
+                </div>
+            </div>
+        </section>
+
+        <!-- Recent Activity -->
+        <section data-testid="dashboard.recent-activity" class="rounded-2xl border border-border bg-card/70 px-5 py-5">
+            <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                Recent Activity
+            </p>
+            <div v-if="activitiesLoading" class="mt-4 space-y-3">
+                <div v-for="i in 5" :key="i" class="h-4 rounded bg-muted animate-pulse" />
+            </div>
+            <div v-else-if="activities.length === 0" class="mt-4 text-xs text-muted-foreground">
+                No activity yet.
+            </div>
+            <div v-else class="mt-4 flex flex-col gap-3">
+                <div
+                    v-for="activity in activities"
+                    :key="activity.id"
+                    class="flex items-start gap-3 text-xs"
+                >
+                    <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[8px] font-bold text-primary">
+                        {{ activity.actorName.slice(0, 2).toUpperCase() }}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <span class="font-medium text-foreground">{{ activity.actorName }}</span>
+                        <span class="text-muted-foreground"> {{ activityLabel(activity) }} on </span>
+                        <span class="font-medium text-foreground">{{ activity.ticketKey }}</span>
+                        <span class="text-muted-foreground truncate"> · {{ activity.ticketTitle }}</span>
+                    </div>
+                    <span class="shrink-0 text-muted-foreground/60">
+                        {{ new Date(activity.createdAt).toLocaleString() }}
+                    </span>
                 </div>
             </div>
         </section>

@@ -42,11 +42,14 @@ e2e-frontend-build:
 	cd frontend && npm ci && npm run build
 
 # Run backend E2E browser tests.
+# -parallel 16 lets Go schedule up to 16 concurrent t.Parallel tests;
+# the E2E_MAX_PARALLEL semaphore in the harness (default 4) is the real throttle.
+# -timeout is set generously because a single shared container is started in TestMain.
 e2e:
 	$(MAKE) e2e-contract
 	@set -o pipefail; \
 	log_file=$$(mktemp -t ticketing-e2e-XXXX.log); \
-	if cd backend && go test -tags=e2e ./e2e -v 2>&1 | tee "$$log_file"; then \
+	if cd backend && go test -tags=e2e -parallel 16 -timeout 20m ./e2e -v 2>&1 | tee "$$log_file"; then \
 		rm -f "$$log_file"; \
 	else \
 		echo ""; \

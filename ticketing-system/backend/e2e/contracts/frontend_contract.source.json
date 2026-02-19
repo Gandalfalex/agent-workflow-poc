@@ -14,6 +14,12 @@
       "params": [
         "projectId"
       ]
+    },
+    "dashboard": {
+      "routeName": "dashboard",
+      "params": [
+        "projectId"
+      ]
     }
   },
   "selectorKeys": {
@@ -67,7 +73,9 @@
     "workflow.save_button": "workflow.save-button",
     "workflow.error": "workflow.error",
     "ticket.activity_timeline": "ticket.activity-timeline",
-    "ticket.activity_item": "ticket.activity-item"
+    "ticket.activity_item": "ticket.activity-item",
+    "nav.dashboard_tab": "nav.dashboard-tab",
+    "dashboard.recent_activity": "dashboard.recent-activity"
   },
   "flows": {
     "smoke_login_screen": {

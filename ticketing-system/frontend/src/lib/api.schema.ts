@@ -463,6 +463,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List recent project activity */
+        get: operations["listProjectActivities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/my-role": {
         parameters: {
             query?: never;
@@ -942,6 +959,26 @@ export interface components {
         };
         AttachmentListResponse: {
             items: components["schemas"]["Attachment"][];
+        };
+        ProjectActivity: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ticketId: string;
+            ticketKey: string;
+            ticketTitle: string;
+            /** Format: uuid */
+            actorId: string;
+            actorName: string;
+            action: string;
+            field?: string;
+            oldValue?: string;
+            newValue?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ProjectActivityListResponse: {
+            items: components["schemas"]["ProjectActivity"][];
         };
         StatCount: {
             label: string;
@@ -1996,6 +2033,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectStats"];
+                };
+            };
+        };
+    };
+    listProjectActivities: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project activity list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectActivityListResponse"];
                 };
             };
         };

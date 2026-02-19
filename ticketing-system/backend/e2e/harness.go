@@ -22,9 +22,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/playwright-community/playwright-go"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"ticketing-system/backend/internal/auth"
 	"ticketing-system/backend/internal/blob"
@@ -49,10 +46,10 @@ type Harness struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	server    *httptest.Server
-	store     *store.Store
-	container *postgres.PostgresContainer
-	blobStore *blob.MemoryStore
+	server     *httptest.Server
+	store      *store.Store
+	schemaName string
+	blobStore  *blob.MemoryStore
 
 	playwright     *playwright.Playwright
 	browser        playwright.Browser
@@ -292,11 +289,11 @@ func (h *Harness) Close() {
 	if h.store != nil {
 		h.store.Close()
 	}
-	if h.container != nil {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if h.schemaName != "" {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := h.container.Terminate(cleanupCtx); err != nil {
-			h.t.Logf("terminate postgres container: %v", err)
+		if err := dropTestSchema(cleanupCtx, h.schemaName); err != nil {
+			h.t.Logf("drop test schema %s: %v", h.schemaName, err)
 		}
 	}
 
@@ -357,20 +354,7 @@ func (h *Harness) APIRequest(method, path string, body io.Reader) (*http.Respons
 }
 
 func (h *Harness) ExpectSelectorHidden(selector string) error {
-	count, err := h.page.Locator(selector).Count()
-	if err != nil {
-		return fmt.Errorf("count selector %q: %w", selector, err)
-	}
-	if count > 0 {
-		visible, err := h.page.Locator(selector).First().IsVisible()
-		if err != nil {
-			return fmt.Errorf("check visibility of %q: %w", selector, err)
-		}
-		if visible {
-			return fmt.Errorf("selector %q is still visible", selector)
-		}
-	}
-	return nil
+	return h.WaitHidden(selector)
 }
 
 func (h *Harness) ExpectSelectorHiddenKey(selectorKey string) error {
@@ -672,32 +656,18 @@ func (h *Harness) failStep(step string, err error) {
 }
 
 func (h *Harness) start() error {
-	container, err := runPostgresContainer(h.ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("ticketing"),
-		postgres.WithUsername("ticketing"),
-		postgres.WithPassword("ticketing"),
-		postgres.WithSQLDriver("pgx"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(90*time.Second),
-		),
-	)
-	if err != nil {
-		return fmt.Errorf("start postgres container: %w", err)
-	}
-	h.container = container
+	schemaName := "test_" + strings.ReplaceAll(uuid.New().String(), "-", "")[:16]
+	h.schemaName = schemaName
 
-	dbURL, err := container.ConnectionString(h.ctx, "sslmode=disable")
-	if err != nil {
-		return fmt.Errorf("postgres connection string: %w", err)
+	if err := createTestSchema(h.ctx, schemaName); err != nil {
+		return fmt.Errorf("create test schema %s: %w", schemaName, err)
 	}
 
-	st, err := store.New(h.ctx, dbURL)
+	pool, err := newTestStore(h.ctx, schemaName)
 	if err != nil {
 		return fmt.Errorf("connect store: %w", err)
 	}
+	st := store.NewFromPool(pool)
 	h.store = st
 
 	if err := migrate.Apply(h.ctx, st.DB(), migrationsDir(h.t)); err != nil {
@@ -917,7 +887,7 @@ func envInt(key string, fallback int) int {
 
 func acquireHarnessSlot() func() {
 	harnessParallelOnce.Do(func() {
-		maxParallel := envInt("E2E_MAX_PARALLEL", 2)
+		maxParallel := envInt("E2E_MAX_PARALLEL", 4)
 		if maxParallel < 1 {
 			maxParallel = 1
 		}
@@ -927,15 +897,6 @@ func acquireHarnessSlot() func() {
 	return func() {
 		<-harnessParallelSlots
 	}
-}
-
-func runPostgresContainer(ctx context.Context, image string, opts ...testcontainers.ContainerCustomizer) (container *postgres.PostgresContainer, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("testcontainers panic: %v", r)
-		}
-	}()
-	return postgres.Run(ctx, image, opts...)
 }
 
 func migrationsDir(t *testing.T) string {

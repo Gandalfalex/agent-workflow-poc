@@ -13,6 +13,7 @@ import {
   getWorkflow,
   listStories,
   listTicketAttachments,
+  getProjectActivities,
   listTicketActivities,
   listTicketComments,
   listWebhookDeliveries,
@@ -24,6 +25,7 @@ import {
   type Attachment,
   type ProjectRole,
   type Story,
+  type ProjectActivity,
   type TicketActivity,
   type TicketComment,
   type TicketCreateRequest,
@@ -208,6 +210,8 @@ export const useBoardStore = defineStore("board", {
     webhookDeliveriesLoading: false,
     dashboardStats: null as ProjectStats | null,
     dashboardLoading: false,
+    projectActivities: [] as ProjectActivity[],
+    projectActivitiesLoading: false,
     currentUserRole: null as ProjectRole | null,
     workflowEditorStates: [] as WorkflowState[],
     workflowEditorLoading: false,
@@ -250,6 +254,8 @@ export const useBoardStore = defineStore("board", {
       this.webhookDeliveriesLoading = false;
       this.dashboardStats = null;
       this.dashboardLoading = false;
+      this.projectActivities = [];
+      this.projectActivitiesLoading = false;
       this.currentUserRole = null;
       this.workflowEditorStates = [];
       this.workflowEditorLoading = false;
@@ -500,6 +506,20 @@ export const useBoardStore = defineStore("board", {
         this.dashboardStats = null;
       } finally {
         this.dashboardLoading = false;
+      }
+    },
+    async loadProjectActivities(projectId: string) {
+      this.projectActivitiesLoading = true;
+      try {
+        const result = await getProjectActivities(projectId);
+        this.projectActivities = result.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.projectActivities = [];
+      } finally {
+        this.projectActivitiesLoading = false;
       }
     },
     async loadCurrentUserRole(projectId: string) {

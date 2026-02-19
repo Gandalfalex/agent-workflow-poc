@@ -50,3 +50,5 @@ type webhookDeliveryResponse = WebhookDelivery
 type webhookDeliveryListResponse = WebhookDeliveryListResponse
 type ticketActivityResponse = TicketActivity
 type ticketActivityListResponse = TicketActivityListResponse
+type projectActivityResponse = ProjectActivity
+type projectActivityListResponse = ProjectActivityListResponse

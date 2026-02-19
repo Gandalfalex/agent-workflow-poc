@@ -10,6 +10,13 @@
         "projectId"
       ]
     },
+    "dashboard": {
+      "name": "dashboard",
+      "path": "/projects/:projectId/dashboard",
+      "params": [
+        "projectId"
+      ]
+    },
     "home": {
       "name": "home",
       "path": "/",
@@ -26,12 +33,14 @@
   "selectors": {
     "board.add_ticket_button": "[data-testid=\"board.add-ticket-button\"]",
     "board.create_story_button": "[data-testid=\"board.create-story-button\"]",
+    "dashboard.recent_activity": "[data-testid=\"dashboard.recent-activity\"]",
     "login.error": "[data-testid=\"login.error\"]",
     "login.identifier_input": "[data-testid=\"login.identifier-input\"]",
     "login.password_input": "[data-testid=\"login.password-input\"]",
     "login.submit_button": "[data-testid=\"login.submit-button\"]",
     "login.view": "[data-testid=\"login.view\"]",
     "nav.board_tab": "[data-testid=\"nav.board-tab\"]",
+    "nav.dashboard_tab": "[data-testid=\"nav.dashboard-tab\"]",
     "nav.logout_button": "[data-testid=\"nav.logout-button\"]",
     "nav.project_select": "[data-testid=\"nav.project-select\"]",
     "nav.refresh_button": "[data-testid=\"nav.refresh-button\"]",

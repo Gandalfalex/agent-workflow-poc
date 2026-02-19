@@ -18,6 +18,10 @@ func New(ctx context.Context, databaseURL string) (*Store, error) {
 	return &Store{db: pool}, nil
 }
 
+func NewFromPool(pool *pgxpool.Pool) *Store {
+	return &Store{db: pool}
+}
+
 func (s *Store) Close() {
 	if s.db != nil {
 		s.db.Close()

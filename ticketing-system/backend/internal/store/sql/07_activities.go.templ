@@ -5,6 +5,15 @@ WHERE ticket_id = $1
 ORDER BY created_at ASC
 {{end}}
 
+{{define "activities_list_by_project.sql"}}
+SELECT ta.id, ta.ticket_id, t.key, t.title, ta.actor_id, ta.actor_name, ta.action, ta.field, ta.old_value, ta.new_value, ta.created_at
+FROM ticket_activities ta
+JOIN tickets t ON t.id = ta.ticket_id
+WHERE t.project_id = $1
+ORDER BY ta.created_at DESC
+LIMIT $2
+{{end}}
+
 {{define "activities_insert.sql"}}
 INSERT INTO ticket_activities (ticket_id, actor_id, actor_name, action, field, old_value, new_value)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

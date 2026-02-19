@@ -1,6 +1,6 @@
 # Feature Roadmap
 
-Date: February 17, 2026
+Date: February 19, 2026
 Source baseline: `.documentation/current_features.md`
 
 ## Completed
@@ -57,11 +57,13 @@ Source baseline: `.documentation/current_features.md`
 - Complete remaining gaps in webhooks and RBAC.
 - Add high-impact product features for planning, visibility, and usability.
 - Improve frontend polish and self-service administration.
+- Introduce automation and intelligence features for high-scale teams.
 
 ## Prioritization
 - `P0` Remaining gaps that affect reliability or security.
 - `P1` High-value features with clear user benefit.
 - `P2` Nice-to-have enhancements after core features land.
+- `P3` Experimental and moonshot ideas with high upside.
 
 ---
 
@@ -93,7 +95,7 @@ Source baseline: `.documentation/current_features.md`
 ### ~~6. Dashboard and project overview page~~ ✓ Completed (TKT-012)
 - ~~Project-level dashboard showing: open ticket count by state, ticket count by priority, recent activity.~~
 - Implemented: Stats API endpoint, dashboard page with summary cards and bar charts by state/priority/type/assignee.
-- Remaining: Recent activity feed (depends on TKT-009 activity timeline).
+- Remaining gap closed: Recent activity feed added (February 19, 2026) — project-scoped feed with ticket context on dashboard.
 
 ## Phase 3 (P1-P2): Collaboration and Productivity
 
@@ -138,19 +140,78 @@ Source baseline: `.documentation/current_features.md`
 - Per-user notification preferences.
 - Why: Not everyone watches the app in real time.
 
+## Phase 5 (P2-P3): Automation, Intelligence, and Scale
+
+### 14. Dependency graph and blocked-work detection
+- Add explicit ticket dependencies (`blocks`, `blocked_by`, `related`).
+- Visual graph view and automatic "blocked" badge on board cards.
+- Cross-story and cross-project dependency links.
+- Why: Teams lose time when hidden dependencies stall delivery.
+
+### 15. Rule-based automation engine
+- If/then automation rules at project scope (e.g., "when moved to Done, assign QA group").
+- Actions: set state, set assignee, set priority, add comment, call webhook.
+- Dry-run mode and execution history for auditability.
+- Why: Repetitive triage and handoff work should be automated.
+
+### 16. Sprint planner with capacity simulation
+- Plan a sprint by dragging tickets into a candidate sprint bucket.
+- Team member capacity settings and workload heatmap.
+- Forecast commit confidence with simple Monte Carlo simulation.
+- Why: Better planning quality and fewer overcommitted sprints.
+
+### 17. AI-assisted triage copilot
+- Suggest priority, assignee, and workflow state from title/description/context.
+- Auto-summarize long ticket threads and produce "next best action".
+- Provide confidence score and require explicit user confirmation.
+- Why: Speeds up intake while preserving human control.
+
+### 18. Live collaboration mode
+- Presence indicators in board/ticket views.
+- Soft locks and conflict hints during concurrent editing.
+- Real-time comment and activity updates without refresh.
+- Why: Reduces accidental overwrites and stale decision-making.
+
+### 19. Incident bridge integration
+- Convert tickets to incidents with severity, timeline, and owner.
+- Integrate with on-call channels (webhook/Slack/Pager workflows).
+- Auto-generate postmortem draft from activity and comments.
+- Why: Unifies planned work and unplanned operational incidents.
+
+### 20. Portfolio command center
+- Multi-project dashboard with roll-up KPIs and risk scoring.
+- Cross-project milestone tracking with drill-down.
+- Objective/OKR linkage to stories and tickets.
+- Why: Leadership needs portfolio visibility, not just project-level views.
+
+### 21. Plugin marketplace and app extensions
+- Safe extension points for custom panels, commands, and automation actions.
+- Scoped API keys and permission model for third-party apps.
+- In-app install/update flow for vetted plugins.
+- Why: Enables domain-specific workflows without forking the core product.
+
+### 22. Time-travel board replay
+- Replay board evolution over a selected date range.
+- Highlight transitions, churn hotspots, and bottlenecks.
+- Export replay snapshots for sprint review.
+- Why: Makes process issues visible and measurable.
+
 ---
 
 ## Recommended Next 5 Tickets
-1. ~~Webhook retry logic and delivery log table (P0).~~ ✓ Done (TKT-007)
-2. ~~Granular per-operation RBAC enforcement (P0, TKT-008).~~ ✓ Done
-3. ~~Ticket activity timeline - backend + UI (P1, TKT-009).~~ ✓ Done
-4. ~~Workflow editor UI with drag-and-drop states (P1, TKT-010).~~ ✓ Done
-5. ~~Project dashboard overview page (P1, TKT-012).~~ ✓ Done
+1. Saved board filters with persistence + share links (P1)
+2. Bulk ticket operations with permission-safe multi-select (P1)
+3. @mention notifications and unified inbox (P1)
+4. Dependency graph with blocked-work highlighting (P2)
+5. Rule-based automation engine (P2)
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.
 - Notification features depend on a notification infrastructure decision (polling vs WebSocket).
 - Feature throughput depends on maintaining OpenAPI-first workflow and generated type sync.
+- AI-assisted features require prompt/version governance and careful data privacy boundaries.
+- Real-time collaboration features require transport decisions (SSE vs WebSocket) and presence state model.
+- Automation engine needs strong guardrails to avoid rule loops and privilege escalation.
 
 ## Definition of Done
 - API behavior implemented and covered by automated tests.

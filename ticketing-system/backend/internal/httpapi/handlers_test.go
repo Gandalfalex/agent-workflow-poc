@@ -353,6 +353,10 @@ func (f *fakeStore) ListActivities(ctx context.Context, ticketID uuid.UUID) ([]s
 	return nil, nil
 }
 
+func (f *fakeStore) ListProjectActivities(ctx context.Context, projectID uuid.UUID, limit int) ([]store.ProjectActivity, error) {
+	return nil, nil
+}
+
 func (f *fakeStore) CreateActivity(ctx context.Context, ticketID uuid.UUID, input store.ActivityCreateInput) error {
 	return nil
 }

@@ -69,6 +69,7 @@ func TestCreateTicketWithoutStoryButtonDisabled(t *testing.T) {
 		WhenISelectProjectByID(seed.ProjectID).
 		ThenURLContains("/projects/" + seed.ProjectID + "/board").
 		WhenIClickRefresh().
+		ThenISeeSelectorKey("board.add_ticket_button").
 		// Press N to open new ticket modal (no pre-selected story)
 		When("I press N to open new ticket modal", func(s *Scenario) error {
 			return s.Harness().page.Keyboard().Press("n")

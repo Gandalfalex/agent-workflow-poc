@@ -163,6 +163,26 @@ type Project struct {
 	UpdatedAt time.Time  `json:"updatedAt"`
 }
 
+// ProjectActivity defines model for ProjectActivity.
+type ProjectActivity struct {
+	Action      string             `json:"action"`
+	ActorId     openapi_types.UUID `json:"actorId"`
+	ActorName   string             `json:"actorName"`
+	CreatedAt   time.Time          `json:"createdAt"`
+	Field       *string            `json:"field,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+	NewValue    *string            `json:"newValue,omitempty"`
+	OldValue    *string            `json:"oldValue,omitempty"`
+	TicketId    openapi_types.UUID `json:"ticketId"`
+	TicketKey   string             `json:"ticketKey"`
+	TicketTitle string             `json:"ticketTitle"`
+}
+
+// ProjectActivityListResponse defines model for ProjectActivityListResponse.
+type ProjectActivityListResponse struct {
+	Items []ProjectActivity `json:"items"`
+}
+
 // ProjectCreateRequest defines model for ProjectCreateRequest.
 type ProjectCreateRequest struct {
 	Description *string `json:"description,omitempty"`
@@ -489,6 +509,11 @@ type WorkflowUpdateRequest struct {
 	States []WorkflowStateInput `json:"states"`
 }
 
+// ListProjectActivitiesParams defines parameters for ListProjectActivities.
+type ListProjectActivitiesParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListTicketsParams defines parameters for ListTickets.
 type ListTicketsParams struct {
 	StateId    *openapi_types.UUID `form:"stateId,omitempty" json:"stateId,omitempty"`
@@ -619,6 +644,9 @@ type ServerInterface interface {
 	// Update project
 	// (PATCH /projects/{projectId})
 	UpdateProject(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// List recent project activity
+	// (GET /projects/{projectId}/activities)
+	ListProjectActivities(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListProjectActivitiesParams)
 	// Kanban board snapshot
 	// (GET /projects/{projectId}/board)
 	GetBoard(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -835,6 +863,12 @@ func (_ Unimplemented) GetProject(w http.ResponseWriter, r *http.Request, projec
 // Update project
 // (PATCH /projects/{projectId})
 func (_ Unimplemented) UpdateProject(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List recent project activity
+// (GET /projects/{projectId}/activities)
+func (_ Unimplemented) ListProjectActivities(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListProjectActivitiesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1504,6 +1538,48 @@ func (siw *ServerInterfaceWrapper) UpdateProject(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateProject(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListProjectActivities operation middleware
+func (siw *ServerInterfaceWrapper) ListProjectActivities(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListProjectActivitiesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProjectActivities(w, r, projectId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2935,6 +3011,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/projects/{projectId}", wrapper.UpdateProject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/activities", wrapper.ListProjectActivities)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/board", wrapper.GetBoard)

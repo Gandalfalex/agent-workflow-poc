@@ -962,6 +962,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProjectStats"
 
+  /projects/{projectId}/activities:
+    get:
+      summary: List recent project activity
+      operationId: listProjectActivities
+      tags: [dashboard]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Project activity list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectActivityListResponse"
+
   /projects/{projectId}/my-role:
     get:
       summary: Get the current user's role on this project
@@ -1972,6 +1998,46 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Attachment"
+      required: [items]
+
+    ProjectActivity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        ticketKey:
+          type: string
+        ticketTitle:
+          type: string
+        actorId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        action:
+          type: string
+        field:
+          type: string
+        oldValue:
+          type: string
+        newValue:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, ticketKey, ticketTitle, actorId, actorName, action, createdAt]
+
+    ProjectActivityListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectActivity"
       required: [items]
 
     StatCount:

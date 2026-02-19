@@ -63,6 +63,9 @@ export type ProjectGroupCreateRequest =
   components["schemas"]["ProjectGroupCreateRequest"];
 export type StatCount = components["schemas"]["StatCount"];
 export type ProjectStats = components["schemas"]["ProjectStats"];
+export type ProjectActivity = components["schemas"]["ProjectActivity"];
+export type ProjectActivityListResponse =
+  components["schemas"]["ProjectActivityListResponse"];
 export type ProjectGroupUpdateRequest =
   components["schemas"]["ProjectGroupUpdateRequest"];
 
@@ -448,6 +451,16 @@ export async function getProjectStats(
 ): Promise<ProjectStats> {
   const id = resolveProjectId(projectId);
   return request<ProjectStats>(`/projects/${id}/stats`);
+}
+
+export async function getProjectActivities(
+  projectId: string,
+  limit = 20,
+): Promise<ProjectActivityListResponse> {
+  const id = resolveProjectId(projectId);
+  return request<ProjectActivityListResponse>(
+    `/projects/${id}/activities?limit=${limit}`,
+  );
 }
 
 export async function listTicketAttachments(

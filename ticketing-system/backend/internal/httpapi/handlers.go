@@ -69,6 +69,7 @@ type Store interface {
 	DeleteAttachment(ctx context.Context, id uuid.UUID) error
 	GetProjectRoleForUser(ctx context.Context, projectID, userID uuid.UUID) (string, error)
 	ListActivities(ctx context.Context, ticketID uuid.UUID) ([]store.Activity, error)
+	ListProjectActivities(ctx context.Context, projectID uuid.UUID, limit int) ([]store.ProjectActivity, error)
 	CreateActivity(ctx context.Context, ticketID uuid.UUID, input store.ActivityCreateInput) error
 }
 
@@ -1310,6 +1311,19 @@ func (h *API) SyncUsers(w http.ResponseWriter, r *http.Request) {
 		Synced: synced,
 		Total:  len(keycloakUsers),
 	})
+}
+
+func (h *API) ListProjectActivities(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ListProjectActivitiesParams) {
+	projectID := uuid.UUID(projectId)
+	limit := 20
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	activities, err := h.store.ListProjectActivities(r.Context(), projectID, limit)
+	if handleListError(w, r, err, "activities", "project_activity_list") {
+		return
+	}
+	writeJSON(w, http.StatusOK, projectActivityListResponse{Items: mapSlice(activities, mapProjectActivity)})
 }
 
 func (h *API) ListTicketActivities(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {

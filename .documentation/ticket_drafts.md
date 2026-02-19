@@ -1,6 +1,6 @@
 # Ticket Drafts (Roadmap Batch 2)
 
-Date: February 17, 2026
+Date: February 19, 2026
 Source: `.documentation/feature_roadmap.md`
 
 ## Previously Completed (Batch 1)
@@ -86,7 +86,15 @@ Source: `.documentation/feature_roadmap.md`
   - 2 E2E tests (upload+list, delete).
 - Not yet shipped: Nginx CDN caching layer (downloads go through backend).
 
-### TKT-012: Add Project Dashboard Overview Page — **DONE**
+### TKT-012: Add Project Dashboard Overview Page — **DONE** (fully closed)
+- Recent activity feed added (February 19, 2026):
+  - `GET /projects/{projectId}/activities?limit=N` endpoint with project-scoped SQL JOIN on tickets.
+  - `ProjectActivity` schema with `ticketKey` + `ticketTitle` for feed context.
+  - Dashboard page loads activities in parallel with stats.
+  - Feed renders actor avatar, human-readable label, ticket key + title, timestamp.
+  - Loading skeleton and empty state.
+
+### TKT-012: Add Project Dashboard Overview Page — **DONE** (original)
 - Priority: `P1`
 - Status: **Completed** (February 17, 2026)
 - What shipped:
@@ -106,3 +114,106 @@ Source: `.documentation/feature_roadmap.md`
 ## Suggested Milestone Split
 1. **Milestone A (Harden):** ~~TKT-007~~, ~~TKT-008~~ — **Complete**
 2. **Milestone B (Core Features):** TKT-009, ~~TKT-010~~, ~~TKT-011~~, ~~TKT-012~~
+
+---
+
+## Roadmap Batch 3 (New Ideas)
+
+### TKT-013: Saved Filters and Shareable Board Views
+- Priority: `P1`
+- Scope:
+  - Persist personal filter presets (assignee, state, priority, type, search text).
+  - Add quick-select dropdown in board toolbar.
+  - Add share link token for a preset (read-only for viewers).
+- Acceptance criteria:
+  - User can save, rename, delete, and apply presets.
+  - Reload preserves last active preset.
+  - Shared link opens board with preset applied.
+
+### TKT-014: Bulk Ticket Operations
+- Priority: `P1`
+- Scope:
+  - Multi-select mode on board cards with count badge.
+  - Bulk actions: move state, assign user, set priority, delete.
+  - Server-side permission checks per ticket.
+- Acceptance criteria:
+  - Mixed-permission batches return per-ticket success/error summary.
+  - Optimistic UI updates with rollback on partial failures.
+  - E2E coverage for contributor/viewer/admin role behavior.
+
+### TKT-015: Mentions and Notification Inbox
+- Priority: `P1`
+- Scope:
+  - Parse `@username` in comments and ticket description updates.
+  - Add `notifications` table and unread count endpoint.
+  - Header inbox panel with mark-read/mark-all-read actions.
+- Acceptance criteria:
+  - Mentioned users receive in-app notifications within 5 seconds.
+  - Assignment changes generate notifications.
+  - Notification preferences support mention-only and assignment-only.
+
+### TKT-016: Dependency Graph and Blocked Work
+- Priority: `P2`
+- Scope:
+  - Add ticket dependency relations (`blocks`, `blocked_by`, `related`).
+  - Graph visualization in ticket modal and project dashboard.
+  - Board badge and filter for blocked tickets.
+- Acceptance criteria:
+  - Cyclic dependencies are prevented with clear API error.
+  - Blocked tickets are highlighted on board and in stats.
+  - Graph view supports at least 2-hop expansion.
+
+### TKT-017: Rule-Based Automation Engine
+- Priority: `P2`
+- Scope:
+  - Project-level trigger/action rules (event + condition + actions).
+  - Actions: set fields, add comment, trigger webhook.
+  - Execution log with run status, latency, and error output.
+- Acceptance criteria:
+  - Rule execution is idempotent and loop-safe.
+  - Dry-run mode shows intended changes without persisting.
+  - Admin-only CRUD and audit trail for rule changes.
+
+### TKT-018: Sprint Planner and Capacity Forecast
+- Priority: `P2`
+- Scope:
+  - Sprint entity with date range, goal, and selected tickets.
+  - Capacity settings per user/team and projected load calculation.
+  - Confidence forecast using historical throughput simulation.
+- Acceptance criteria:
+  - Planner warns on over-capacity with explicit delta.
+  - Forecast can run with configurable iteration count.
+  - Dashboard shows committed vs projected completion.
+
+### TKT-019: AI Triage Copilot
+- Priority: `P3`
+- Scope:
+  - Suggest assignee, priority, and initial state on ticket creation.
+  - Auto-generate concise summary for long descriptions/comments.
+  - Confidence score and "apply suggestion" UX (never auto-apply by default).
+- Acceptance criteria:
+  - Suggestions can be accepted/rejected field-by-field.
+  - Prompt/version metadata logged for each AI suggestion.
+  - Feature can be disabled per project via settings.
+
+### TKT-020: Incident Bridge and Postmortem Assistant
+- Priority: `P2`
+- Scope:
+  - Incident mode for tickets (severity, impact, incident commander).
+  - Timeline aggregation from comments, activities, and webhook events.
+  - Generate postmortem draft (impact, timeline, root cause placeholders).
+- Acceptance criteria:
+  - Incident timeline is exportable as Markdown.
+  - Severity changes are audited and visible in activity feed.
+  - Integration hooks for Slack/Pager workflows via webhooks.
+
+### TKT-021: Portfolio Command Center
+- Priority: `P2`
+- Scope:
+  - Cross-project roll-up dashboard for open risk, throughput, and SLA breaches.
+  - Milestone tracking across projects with confidence indicators.
+  - Filters by group, owner, and objective/OKR.
+- Acceptance criteria:
+  - Supports at least 50 projects without timing out.
+  - Drill-down from portfolio KPI to project/ticket details.
+  - Snapshot export endpoint for weekly leadership reporting.

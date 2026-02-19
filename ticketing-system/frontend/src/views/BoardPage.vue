@@ -281,12 +281,11 @@ const saveTicket = async () => {
     };
 
     try {
-        const updated = await boardStore.updateTicket(
+        await boardStore.updateTicket(
             selectedTicket.value.id,
             payload,
         );
-        selectedTicket.value = updated;
-        await boardStore.loadTicketActivities(updated.id);
+        closeTicket();
     } catch (err) {
         if (!handleAuthError(err)) {
             ticketError.value = "Unable to update ticket.";
