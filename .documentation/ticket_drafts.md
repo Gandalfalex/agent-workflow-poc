@@ -119,93 +119,120 @@ Source: `.documentation/feature_roadmap.md`
 
 ## Roadmap Batch 3 (New Ideas)
 
-### TKT-013: Saved Filters and Shareable Board Views
+### TKT-013: Saved Filters and Shareable Board Views — **DONE**
 - Priority: `P1`
 - Scope:
   - Persist personal filter presets (assignee, state, priority, type, search text).
   - Add quick-select dropdown in board toolbar.
   - Add share link token for a preset (read-only for viewers).
 - Acceptance criteria:
-  - User can save, rename, delete, and apply presets.
-  - Reload preserves last active preset.
-  - Shared link opens board with preset applied.
+  - ✅ User can save, rename, delete, and apply presets.
+  - ✅ Reload preserves last active preset.
+  - ✅ Shared link opens board with preset applied.
+  - ✅ E2E suite remains green via `make -C ticketing-system e2e`.
 
-### TKT-014: Bulk Ticket Operations
+### TKT-014: Bulk Ticket Operations — **DONE**
 - Priority: `P1`
 - Scope:
   - Multi-select mode on board cards with count badge.
   - Bulk actions: move state, assign user, set priority, delete.
   - Server-side permission checks per ticket.
 - Acceptance criteria:
-  - Mixed-permission batches return per-ticket success/error summary.
-  - Optimistic UI updates with rollback on partial failures.
-  - E2E coverage for contributor/viewer/admin role behavior.
+  - ✅ Mixed-permission batches return per-ticket success/error summary.
+  - ✅ Optimistic UI updates with rollback on partial failures.
+  - ✅ E2E coverage for admin/viewer role behavior + backend RBAC tests for contributor/viewer.
 
-### TKT-015: Mentions and Notification Inbox
+### TKT-015: Mentions and Notification Inbox — **DONE**
 - Priority: `P1`
 - Scope:
   - Parse `@username` in comments and ticket description updates.
   - Add `notifications` table and unread count endpoint.
   - Header inbox panel with mark-read/mark-all-read actions.
 - Acceptance criteria:
-  - Mentioned users receive in-app notifications within 5 seconds.
-  - Assignment changes generate notifications.
-  - Notification preferences support mention-only and assignment-only.
+  - ✅ Mentioned users receive in-app notifications within 5 seconds (polling + immediate server writes).
+  - ✅ Assignment changes generate notifications.
+  - ✅ Notification preferences support mention-only and assignment-only.
 
-### TKT-016: Dependency Graph and Blocked Work
+### TKT-016: Dependency Graph and Blocked Work — **DONE**
 - Priority: `P2`
 - Scope:
   - Add ticket dependency relations (`blocks`, `blocked_by`, `related`).
   - Graph visualization in ticket modal and project dashboard.
   - Board badge and filter for blocked tickets.
 - Acceptance criteria:
-  - Cyclic dependencies are prevented with clear API error.
-  - Blocked tickets are highlighted on board and in stats.
-  - Graph view supports at least 2-hop expansion.
+  - ✅ Cyclic dependencies are prevented with clear API error (`dependency_cycle`, HTTP 409).
+  - ✅ Blocked tickets are highlighted on board and in stats (blocked badge/filter + dashboard blocked-open metric).
+  - ✅ Graph view supports at least 2-hop expansion (ticket modal and dashboard graph sections).
 
-### TKT-017: Rule-Based Automation Engine
-- Priority: `P2`
+### TKT-017: WebSocket Live Updates with Polling Fallback — **DONE**
+- Priority: `P1-P2`
 - Scope:
-  - Project-level trigger/action rules (event + condition + actions).
-  - Actions: set fields, add comment, trigger webhook.
-  - Execution log with run status, latency, and error output.
+  - Add authenticated project-scoped WebSocket endpoint for live UI update signals.
+  - Push event types for:
+    - notifications unread-count changes
+    - notifications list changes (mention/assignment/new-read-state)
+    - board refresh cues on ticket/story mutations
+    - activity feed refresh cues on ticket/story mutations
+  - Frontend WebSocket subscription manager with reconnect and backoff.
+  - Feature flag to keep polling fallback (`VITE_USE_WS_LIVE_UPDATES=false` disables WS).
 - Acceptance criteria:
-  - Rule execution is idempotent and loop-safe.
-  - Dry-run mode shows intended changes without persisting.
-  - Admin-only CRUD and audit trail for rule changes.
+  - ✅ When WS is connected, unread badge updates without periodic polling.
+  - ✅ On disconnect/failure, app resumes polling automatically within one retry interval.
+  - ✅ Ticket/story mutations emit live refresh events to other active sessions in the same project.
+  - ✅ Existing notification APIs and polling behavior remain backward compatible.
+  - ✅ E2E coverage includes WS live-event delivery and 426-upgrade fallback with polling endpoint verification.
+  - ✅ Inbox-open optimization: `notifications.changed` refreshes list only when inbox panel is open.
 
-### TKT-018: Sprint Planner and Capacity Forecast
+### TKT-018: Sprint Planner and Capacity Forecast — **DONE**
 - Priority: `P2`
-- Scope:
-  - Sprint entity with date range, goal, and selected tickets.
-  - Capacity settings per user/team and projected load calculation.
-  - Confidence forecast using historical throughput simulation.
-- Acceptance criteria:
-  - Planner warns on over-capacity with explicit delta.
-  - Forecast can run with configurable iteration count.
-  - Dashboard shows committed vs projected completion.
+- Status: **Completed** (February 19, 2026)
+- What shipped:
+  - Sprint planner data model (`sprints`, `sprint_tickets`, `capacity_settings`) via `016_sprint_planner.sql`.
+  - OpenAPI-first endpoints:
+    - `GET/POST /projects/{projectId}/sprints`
+    - `GET/PUT /projects/{projectId}/capacity-settings`
+    - `GET /projects/{projectId}/sprint-forecast`
+  - Forecast simulation based on historical daily throughput sampling from ticket activity history.
+  - Configurable simulation iteration count (`iterations`, clamped 10..5000).
+  - Explicit over-capacity delta in forecast response.
+  - Dashboard sprint forecast panel showing committed, projected completion, capacity, and over-capacity values.
+  - E2E coverage for sprint creation, capacity replacement, forecast API assertions, and dashboard panel visibility.
 
-### TKT-019: AI Triage Copilot
+### TKT-019: AI Triage Copilot — **DONE**
 - Priority: `P3`
-- Scope:
-  - Suggest assignee, priority, and initial state on ticket creation.
-  - Auto-generate concise summary for long descriptions/comments.
-  - Confidence score and "apply suggestion" UX (never auto-apply by default).
-- Acceptance criteria:
-  - Suggestions can be accepted/rejected field-by-field.
-  - Prompt/version metadata logged for each AI suggestion.
-  - Feature can be disabled per project via settings.
+- Status: **Completed** (February 19, 2026)
+- What shipped:
+  - OpenAPI-first AI triage endpoints:
+    - `GET/PATCH /projects/{projectId}/ai-triage/settings`
+    - `POST /projects/{projectId}/ai-triage/suggestions`
+    - `POST /projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision`
+  - Backend persistence:
+    - `ai_triage_settings`
+    - `ai_triage_suggestions`
+    - `ai_triage_suggestion_decisions`
+  - Suggestion engine (heuristic local model) returning:
+    - summary, priority, state, optional assignee
+    - per-field confidence
+    - prompt/version metadata
+  - Field-by-field decision logging for accepted vs rejected suggestion fields.
+  - Project settings toggle in Settings UI to enable/disable AI triage per project.
+  - New Ticket modal AI suggestion panel with per-field apply checkboxes.
+  - E2E coverage for toggle + suggestion panel + API suggestion/decision flow.
 
-### TKT-020: Incident Bridge and Postmortem Assistant
+### TKT-020: Incident Bridge and Postmortem Assistant — **DONE**
 - Priority: `P2`
-- Scope:
-  - Incident mode for tickets (severity, impact, incident commander).
-  - Timeline aggregation from comments, activities, and webhook events.
-  - Generate postmortem draft (impact, timeline, root cause placeholders).
-- Acceptance criteria:
-  - Incident timeline is exportable as Markdown.
-  - Severity changes are audited and visible in activity feed.
-  - Integration hooks for Slack/Pager workflows via webhooks.
+- Status: **Completed** (February 19, 2026)
+- What shipped:
+  - OpenAPI-first incident APIs:
+    - `GET /tickets/{id}/incident-timeline`
+    - `GET /tickets/{id}/incident-postmortem` (`text/markdown`)
+  - Incident mode fields on tickets:
+    - `incidentEnabled`, `incidentSeverity`, `incidentImpact`, `incidentCommanderId`
+  - Timeline aggregation from ticket comments, ticket activities, and webhook-trigger events.
+  - Postmortem markdown draft generation with summary, timeline, root-cause placeholder, and action-item placeholder.
+  - Severity change auditing added to ticket activity feed (`incident_severity_changed`).
+  - Ticket modal incident controls + incident timeline + postmortem export button.
+  - E2E coverage for severity change audit visibility + incident timeline API + markdown export API.
 
 ### TKT-021: Portfolio Command Center
 - Priority: `P2`
@@ -217,3 +244,39 @@ Source: `.documentation/feature_roadmap.md`
   - Supports at least 50 projects without timing out.
   - Drill-down from portfolio KPI to project/ticket details.
   - Snapshot export endpoint for weekly leadership reporting.
+
+### TKT-022: Board UI Clarity and Density Refresh — **HIGH PRIORITY**
+- Priority: `P0`
+- Status: **Planned**
+- Source: UX review (February 20, 2026)
+- Scope:
+  - Information density and typography:
+    - Truncate long numeric IDs in card titles; keep descriptive text first and move full IDs to metadata/tooltip.
+    - Keep monospace for IDs only; use sans-serif emphasis for card titles.
+    - Reduce story column width target from current wide layout to approximately 15% (or support collapse).
+  - Visual hierarchy and layout:
+    - Replace always-visible bulk action row with a contextual floating bottom action bar shown only when tickets are selected.
+    - Soften empty-state drop zones (lower contrast/opacity and reveal stronger affordance on hover).
+    - Improve first column distinction by renaming to `Story Group` and styling it differently from workflow state columns.
+  - Color and contrast:
+    - Add stronger priority scanning cues via card edge/stripe color coding (especially medium/high/urgent).
+    - Strengthen selected card state beyond checkmark (visible tint/glow + border).
+    - Raise metadata/subtext contrast for readability on dark theme.
+  - Interaction:
+    - Add hover quick actions for common edits (assign, priority, move state).
+    - Improve shortcut discoverability (`/`, `N`) with a help affordance/tooltips.
+    - Add explicit drag handle (`⋮⋮`) to indicate draggable cards.
+  - Data presentation:
+    - Consolidate filter/preset controls into a single `Views` model to reduce toolbar rows.
+    - Use clearer ticket-type iconography for fast scanning (with accessible labels/tooltips).
+    - Ensure assignee avatars are consistently visible in card footer.
+  - Micro-fixes:
+    - Move selection checkboxes to the left edge of cards.
+    - Add mini per-story progress indicator across states (not just total count).
+    - Hide preset name input until save/create preset action is invoked.
+- Acceptance criteria:
+  - Board top chrome is reduced to a single primary toolbar in default (non-selection) mode.
+  - Bulk actions only appear contextually when one or more tickets are selected.
+  - Card readability improves for long identifiers without loss of traceability.
+  - Dark-theme contrast meets accessible readability for metadata and selection states.
+  - E2E selectors and tests are updated for any changed toolbar/selection interactions.

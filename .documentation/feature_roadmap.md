@@ -99,25 +99,42 @@ Source baseline: `.documentation/current_features.md`
 
 ## Phase 3 (P1-P2): Collaboration and Productivity
 
-### 7. @mention notifications
-- Parse `@username` in comments and trigger in-app notifications.
-- Notification list accessible from header with unread count.
-- Notification on ticket assignment changes.
-- Why: Increases responsiveness without needing external integrations.
+### ~~7. @mention notifications~~ ✓ Completed (TKT-015)
+- Implemented: notification inbox in header with unread badge, per-item list, mark-read APIs, and mark-all-read support.
+- Triggers: `@username` mentions in ticket comments and ticket description updates, plus assignment change notifications.
+- Preferences: current-user notification preferences support mention-only / assignment-only behavior.
+- API:
+  - `GET /projects/{projectId}/notifications`
+  - `GET /projects/{projectId}/notifications/unread-count`
+  - `POST /projects/{projectId}/notifications/{notificationId}/read`
+  - `POST /projects/{projectId}/notifications/read-all`
+  - `GET/PATCH /projects/{projectId}/notification-preferences`
 
-### 8. Saved board filters
-- Save named filter presets (assignee, type, priority, state combinations).
-- Quick-switch between personal filter presets.
-- Filter state persists across page refresh.
-- Why: Existing search resets on every page load.
+### ~~8. Saved board filters~~ ✓ Completed (TKT-013)
+- Implemented: personal board filter presets with save/rename/delete/apply, quick-select toolbar controls, share-token links, and persisted active preset on reload.
+- API: `GET/POST /projects/{projectId}/board-filters`, `PATCH/DELETE /projects/{projectId}/board-filters/{presetId}`, `GET /projects/{projectId}/board-filters/shared/{token}`.
 
-### 9. Bulk ticket operations
-- Multi-select tickets on the board.
-- Bulk actions: move to state, assign user, change priority, delete.
-- Permission checks applied per operation.
-- Why: Managing larger backlogs one ticket at a time is slow.
+### ~~9. Bulk ticket operations~~ ✓ Completed (TKT-014)
+- Implemented: board multi-select mode with selected-count badge, bulk action toolbar, and optimistic update UX with per-ticket rollback on partial failures.
+- Actions: `move_state`, `assign`, `set_priority`, `delete`.
+- API: `POST /projects/{projectId}/tickets/bulk` with per-ticket success/error results.
+- E2E: admin UI bulk flow (move/assign/priority/delete) and viewer per-ticket permission-failure summary coverage.
 
-### ~~10. Markdown editor upgrade~~ ✓ Completed
+### ~~10. Dependency graph and blocked work~~ ✓ Completed (TKT-016)
+- Implemented: ticket dependencies with relation types (`blocks`, `blocked_by`, `related`) and cycle-safe creation.
+- API:
+  - `GET /projects/{projectId}/dependency-graph?rootTicketId=&depth=`
+  - `GET /tickets/{id}/dependencies`
+  - `POST /tickets/{id}/dependencies`
+  - `DELETE /tickets/{id}/dependencies/{dependencyId}`
+- UI:
+  - Ticket modal dependency manager + 2-hop graph summary.
+  - Dashboard dependency graph panel.
+  - Board blocked badge and blocked-only filter.
+  - Dashboard `blockedOpen` metric in stats cards.
+- E2E: dependency creation, cycle rejection, blocked filter behavior, and dashboard graph visibility.
+
+### ~~11. Markdown editor upgrade~~ ✓ Completed
 - ~~Replace plain textarea with a toolbar-equipped markdown editor.~~
 - Implemented: Reusable `MarkdownEditor.vue` component with toolbar (bold, italic, code, link, lists, quote, heading), keyboard shortcuts (Ctrl+B/I/E/K, Tab/Shift+Tab), edit/preview toggle. Applied to TicketModal (description + comments), NewTicketModal, and StoryModal. Zero new dependencies.
 - Remaining: image paste support.
@@ -130,15 +147,20 @@ Source baseline: `.documentation/current_features.md`
 - Optional per-event-type subscription granularity.
 - Why: Integrators need stable, documented contracts.
 
-### 12. Lightweight project reporting
-- Basic metrics: ticket throughput, average cycle time, open-by-state over time.
-- Read-only reporting endpoint and settings page panel.
-- Why: Teams need sprint/project health without external BI tools.
+### ~~12. Lightweight project reporting~~ ✓ Completed
+- Implemented: reporting summary endpoint, settings reporting tab, and export endpoint (`json`/`csv`) with E2E coverage.
+- API:
+  - `GET /projects/{projectId}/reporting/summary`
+  - `GET /projects/{projectId}/reporting/export?format=json|csv`
 
-### 13. Email and Slack notification channels
-- Configurable notification delivery: in-app, email, Slack webhook.
-- Per-user notification preferences.
-- Why: Not everyone watches the app in real time.
+### 13. Real-time live updates (WebSocket transport)
+- Replace periodic polling with WebSocket push for notification unread count, inbox updates, board refresh cues, and activity feed updates.
+- Keep polling as fallback behind a feature flag until rollout is stable.
+- Why: Lower latency and lower request overhead than fixed-interval polling.
+
+Deferred (later): Multi-channel notifications (Slack/Teams/email)
+- Defer channel-specific delivery until channel strategy is finalized.
+- Keep current in-app notifications as primary channel for now.
 
 ## Phase 5 (P2-P3): Automation, Intelligence, and Scale
 
@@ -172,11 +194,8 @@ Source baseline: `.documentation/current_features.md`
 - Real-time comment and activity updates without refresh.
 - Why: Reduces accidental overwrites and stale decision-making.
 
-### 19. Incident bridge integration
-- Convert tickets to incidents with severity, timeline, and owner.
-- Integrate with on-call channels (webhook/Slack/Pager workflows).
-- Auto-generate postmortem draft from activity and comments.
-- Why: Unifies planned work and unplanned operational incidents.
+### ~~19. Incident bridge integration~~ ✓ Completed (TKT-020)
+- Implemented: incident-mode ticket fields, aggregated incident timeline endpoint, markdown postmortem export endpoint, severity-change audit activity, and ticket-modal incident controls/export UX.
 
 ### 20. Portfolio command center
 - Multi-project dashboard with roll-up KPIs and risk scoring.
@@ -199,18 +218,19 @@ Source baseline: `.documentation/current_features.md`
 ---
 
 ## Recommended Next 5 Tickets
-1. Saved board filters with persistence + share links (P1)
-2. Bulk ticket operations with permission-safe multi-select (P1)
-3. @mention notifications and unified inbox (P1)
-4. Dependency graph with blocked-work highlighting (P2)
-5. Rule-based automation engine (P2)
+1. TKT-022: Board UI clarity and density refresh (P0)
+2. WebSocket live-update transport with polling fallback (P1-P2)
+3. Webhook payload versioning (`v1` envelope + idempotency key) (P2)
+4. Attachment download caching layer (Nginx/CDN fronting backend) (P2)
+5. RBAC/admin audit trail for sensitive actions (P2)
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.
-- Notification features depend on a notification infrastructure decision (polling vs WebSocket).
+- WebSocket rollout needs connection lifecycle handling (reconnect, auth refresh, backpressure, and graceful fallback to polling).
+- Channel integrations (Slack/Teams/email) are intentionally deferred pending product/channel decisions.
 - Feature throughput depends on maintaining OpenAPI-first workflow and generated type sync.
 - AI-assisted features require prompt/version governance and careful data privacy boundaries.
-- Real-time collaboration features require transport decisions (SSE vs WebSocket) and presence state model.
+- Real-time collaboration features will build on the same transport layer and still need a presence/conflict state model.
 - Automation engine needs strong guardrails to avoid rule loops and privilege escalation.
 
 ## Definition of Done

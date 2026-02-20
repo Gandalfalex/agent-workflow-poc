@@ -1,0 +1,39 @@
+{{define "board_filter_preset_fields"}}
+id, project_id, owner_id, name, filters, share_token, created_at, updated_at
+{{end}}
+
+{{define "board_filter_presets_list.sql"}}
+SELECT {{template "board_filter_preset_fields" .}}
+FROM board_filter_presets
+WHERE project_id = $1 AND owner_id = $2
+ORDER BY created_at DESC
+{{end}}
+
+{{define "board_filter_presets_get.sql"}}
+SELECT {{template "board_filter_preset_fields" .}}
+FROM board_filter_presets
+WHERE project_id = $1 AND owner_id = $2 AND id = $3
+{{end}}
+
+{{define "board_filter_presets_get_shared.sql"}}
+SELECT {{template "board_filter_preset_fields" .}}
+FROM board_filter_presets
+WHERE project_id = $1 AND share_token = $2
+{{end}}
+
+{{define "board_filter_presets_insert.sql"}}
+INSERT INTO board_filter_presets (project_id, owner_id, name, filters, share_token)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+{{end}}
+
+{{define "board_filter_presets_update.sql"}}
+UPDATE board_filter_presets
+SET {{ .Updates }}
+WHERE project_id = ${{ .ProjectArg }} AND owner_id = ${{ .OwnerArg }} AND id = ${{ .IDArg }}
+{{end}}
+
+{{define "board_filter_presets_delete.sql"}}
+DELETE FROM board_filter_presets
+WHERE project_id = $1 AND owner_id = $2 AND id = $3
+{{end}}

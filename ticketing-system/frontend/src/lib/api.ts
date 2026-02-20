@@ -6,9 +6,31 @@ export type WorkflowResponse = components["schemas"]["WorkflowResponse"];
 export type TicketResponse = components["schemas"]["Ticket"];
 export type TicketPriority = components["schemas"]["TicketPriority"];
 export type TicketType = components["schemas"]["TicketType"];
+export type TicketIncidentSeverity =
+  components["schemas"]["TicketIncidentSeverity"];
 export type BoardResponse = components["schemas"]["BoardResponse"];
 export type TicketCreateRequest = components["schemas"]["TicketCreateRequest"];
 export type TicketUpdateRequest = components["schemas"]["TicketUpdateRequest"];
+export type BulkTicketAction = components["schemas"]["BulkTicketAction"];
+export type BulkTicketOperationRequest =
+  components["schemas"]["BulkTicketOperationRequest"];
+export type BulkTicketOperationResult =
+  components["schemas"]["BulkTicketOperationResult"];
+export type BulkTicketOperationResponse =
+  components["schemas"]["BulkTicketOperationResponse"];
+export type DependencyRelationType =
+  components["schemas"]["DependencyRelationType"];
+export type TicketDependency = components["schemas"]["TicketDependency"];
+export type TicketDependencyCreateRequest =
+  components["schemas"]["TicketDependencyCreateRequest"];
+export type TicketDependencyListResponse =
+  components["schemas"]["TicketDependencyListResponse"];
+export type TicketDependencyGraphNode =
+  components["schemas"]["TicketDependencyGraphNode"];
+export type TicketDependencyGraphEdge =
+  components["schemas"]["TicketDependencyGraphEdge"];
+export type TicketDependencyGraphResponse =
+  components["schemas"]["TicketDependencyGraphResponse"];
 export type Story = components["schemas"]["Story"];
 export type StoryListResponse = components["schemas"]["StoryListResponse"];
 export type StoryCreateRequest = components["schemas"]["StoryCreateRequest"];
@@ -21,6 +43,9 @@ export type TicketCommentCreateRequest =
 export type TicketActivity = components["schemas"]["TicketActivity"];
 export type TicketActivityListResponse =
   components["schemas"]["TicketActivityListResponse"];
+export type IncidentTimelineItem = components["schemas"]["IncidentTimelineItem"];
+export type IncidentTimelineResponse =
+  components["schemas"]["IncidentTimelineResponse"];
 export type AuthUser = components["schemas"]["User"];
 export type UserSummary = components["schemas"]["UserSummary"];
 export type UserListResponse = components["schemas"]["UserListResponse"];
@@ -66,8 +91,60 @@ export type ProjectStats = components["schemas"]["ProjectStats"];
 export type ProjectActivity = components["schemas"]["ProjectActivity"];
 export type ProjectActivityListResponse =
   components["schemas"]["ProjectActivityListResponse"];
+export type DateValuePoint = components["schemas"]["DateValuePoint"];
+export type StateOpenPoint = components["schemas"]["StateOpenPoint"];
+export type ProjectReportingSummary =
+  components["schemas"]["ProjectReportingSummary"];
+export type ProjectReportingExportJson =
+  components["schemas"]["ProjectReportingExportJson"];
+export type Sprint = components["schemas"]["Sprint"];
+export type SprintListResponse = components["schemas"]["SprintListResponse"];
+export type SprintCreateRequest = components["schemas"]["SprintCreateRequest"];
+export type CapacitySetting = components["schemas"]["CapacitySetting"];
+export type CapacitySettingInput =
+  components["schemas"]["CapacitySettingInput"];
+export type CapacitySettingsResponse =
+  components["schemas"]["CapacitySettingsResponse"];
+export type CapacitySettingsReplaceRequest =
+  components["schemas"]["CapacitySettingsReplaceRequest"];
+export type SprintForecastSummary =
+  components["schemas"]["SprintForecastSummary"];
+export type AiTriageField = components["schemas"]["AiTriageField"];
+export type AiTriageConfidence = components["schemas"]["AiTriageConfidence"];
+export type AiTriageSettings = components["schemas"]["AiTriageSettings"];
+export type AiTriageSettingsUpdateRequest =
+  components["schemas"]["AiTriageSettingsUpdateRequest"];
+export type AiTriageSuggestion = components["schemas"]["AiTriageSuggestion"];
+export type AiTriageSuggestionCreateRequest =
+  components["schemas"]["AiTriageSuggestionCreateRequest"];
+export type AiTriageSuggestionDecision =
+  components["schemas"]["AiTriageSuggestionDecision"];
+export type AiTriageSuggestionDecisionRequest =
+  components["schemas"]["AiTriageSuggestionDecisionRequest"];
+export type ProjectLiveEventType =
+  components["schemas"]["ProjectLiveEventType"];
+export type ProjectLiveEvent = components["schemas"]["ProjectLiveEvent"];
+export type Notification = components["schemas"]["Notification"];
+export type NotificationListResponse =
+  components["schemas"]["NotificationListResponse"];
+export type NotificationPreferences =
+  components["schemas"]["NotificationPreferences"];
+export type NotificationPreferencesUpdateRequest =
+  components["schemas"]["NotificationPreferencesUpdateRequest"];
+export type NotificationUnreadCountResponse =
+  components["schemas"]["NotificationUnreadCountResponse"];
+export type NotificationMarkAllResponse =
+  components["schemas"]["NotificationMarkAllResponse"];
 export type ProjectGroupUpdateRequest =
   components["schemas"]["ProjectGroupUpdateRequest"];
+export type BoardFilter = components["schemas"]["BoardFilter"];
+export type BoardFilterPreset = components["schemas"]["BoardFilterPreset"];
+export type BoardFilterPresetCreateRequest =
+  components["schemas"]["BoardFilterPresetCreateRequest"];
+export type BoardFilterPresetUpdateRequest =
+  components["schemas"]["BoardFilterPresetUpdateRequest"];
+export type BoardFilterPresetListResponse =
+  components["schemas"]["BoardFilterPresetListResponse"];
 
 const API_BASE = (
   import.meta.env.VITE_API_BASE ||
@@ -110,6 +187,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   return (await res.json()) as T;
 }
+
+async function requestText(path: string, options: RequestInit = {}): Promise<string> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
+    headers: {
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+  if (!res.ok) {
+    const message = await res.text().catch(() => "");
+    const error = new Error(message || res.statusText);
+    (error as Error & { status?: number }).status = res.status;
+    throw error;
+  }
+  return res.text();
+}
+
+export type ReportingExportFormat = "json" | "csv";
+
+export type ReportingExportFile = {
+  blob: Blob;
+  contentType: string;
+  filename: string;
+};
 
 export async function getBoard(projectId?: string): Promise<BoardResponse> {
   const id = resolveProjectId(projectId);
@@ -315,6 +417,18 @@ export async function listTicketActivities(
   );
 }
 
+export async function listTicketIncidentTimeline(
+  ticketId: string,
+): Promise<IncidentTimelineResponse> {
+  return request<IncidentTimelineResponse>(`/tickets/${ticketId}/incident-timeline`);
+}
+
+export async function getTicketIncidentPostmortem(
+  ticketId: string,
+): Promise<string> {
+  return requestText(`/tickets/${ticketId}/incident-postmortem`);
+}
+
 export async function listTicketComments(
   ticketId: string,
 ): Promise<TicketCommentListResponse> {
@@ -364,6 +478,56 @@ export async function updateTicket(
 export async function deleteTicket(id: string): Promise<void> {
   await request<void>(`/tickets/${id}`, {
     method: "DELETE",
+  });
+}
+
+export async function listTicketDependencies(
+  ticketId: string,
+): Promise<TicketDependencyListResponse> {
+  return request<TicketDependencyListResponse>(`/tickets/${ticketId}/dependencies`);
+}
+
+export async function createTicketDependency(
+  ticketId: string,
+  payload: TicketDependencyCreateRequest,
+): Promise<TicketDependency> {
+  return request<TicketDependency>(`/tickets/${ticketId}/dependencies`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTicketDependency(
+  ticketId: string,
+  dependencyId: string,
+): Promise<void> {
+  await request<void>(`/tickets/${ticketId}/dependencies/${dependencyId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getProjectDependencyGraph(
+  projectId: string,
+  opts: { rootTicketId?: string; depth?: number } = {},
+): Promise<TicketDependencyGraphResponse> {
+  const id = resolveProjectId(projectId);
+  const q = new URLSearchParams();
+  if (opts.rootTicketId) q.set("rootTicketId", opts.rootTicketId);
+  if (typeof opts.depth === "number") q.set("depth", String(opts.depth));
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  return request<TicketDependencyGraphResponse>(
+    `/projects/${id}/dependency-graph${suffix}`,
+  );
+}
+
+export async function bulkTicketOperation(
+  projectId: string | undefined,
+  payload: BulkTicketOperationRequest,
+): Promise<BulkTicketOperationResponse> {
+  const id = resolveProjectId(projectId);
+  return request<BulkTicketOperationResponse>(`/projects/${id}/tickets/bulk`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -446,6 +610,59 @@ export async function getMyProjectRole(
   return request<{ role: ProjectRole }>(`/projects/${id}/my-role`);
 }
 
+export async function listBoardFilterPresets(
+  projectId: string,
+): Promise<BoardFilterPresetListResponse> {
+  const id = resolveProjectId(projectId);
+  return request<BoardFilterPresetListResponse>(`/projects/${id}/board-filters`);
+}
+
+export async function createBoardFilterPreset(
+  projectId: string,
+  payload: BoardFilterPresetCreateRequest,
+): Promise<BoardFilterPreset> {
+  const id = resolveProjectId(projectId);
+  return request<BoardFilterPreset>(`/projects/${id}/board-filters`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateBoardFilterPreset(
+  projectId: string,
+  presetId: string,
+  payload: BoardFilterPresetUpdateRequest,
+): Promise<BoardFilterPreset> {
+  const id = resolveProjectId(projectId);
+  return request<BoardFilterPreset>(
+    `/projects/${id}/board-filters/${presetId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteBoardFilterPreset(
+  projectId: string,
+  presetId: string,
+): Promise<void> {
+  const id = resolveProjectId(projectId);
+  await request<void>(`/projects/${id}/board-filters/${presetId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getSharedBoardFilterPreset(
+  projectId: string,
+  token: string,
+): Promise<BoardFilterPreset> {
+  const id = resolveProjectId(projectId);
+  return request<BoardFilterPreset>(
+    `/projects/${id}/board-filters/shared/${encodeURIComponent(token)}`,
+  );
+}
+
 export async function getProjectStats(
   projectId: string,
 ): Promise<ProjectStats> {
@@ -460,6 +677,223 @@ export async function getProjectActivities(
   const id = resolveProjectId(projectId);
   return request<ProjectActivityListResponse>(
     `/projects/${id}/activities?limit=${limit}`,
+  );
+}
+
+export async function getProjectReportingSummary(
+  projectId: string,
+  opts: { from?: string; to?: string } = {},
+): Promise<ProjectReportingSummary> {
+  const id = resolveProjectId(projectId);
+  const q = new URLSearchParams();
+  if (opts.from) q.set("from", opts.from);
+  if (opts.to) q.set("to", opts.to);
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  return request<ProjectReportingSummary>(
+    `/projects/${id}/reporting/summary${suffix}`,
+  );
+}
+
+export async function listProjectSprints(
+  projectId: string,
+): Promise<SprintListResponse> {
+  const id = resolveProjectId(projectId);
+  return request<SprintListResponse>(`/projects/${id}/sprints`);
+}
+
+export async function createProjectSprint(
+  projectId: string,
+  payload: SprintCreateRequest,
+): Promise<Sprint> {
+  const id = resolveProjectId(projectId);
+  return request<Sprint>(`/projects/${id}/sprints`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listProjectCapacitySettings(
+  projectId: string,
+): Promise<CapacitySettingsResponse> {
+  const id = resolveProjectId(projectId);
+  return request<CapacitySettingsResponse>(`/projects/${id}/capacity-settings`);
+}
+
+export async function replaceProjectCapacitySettings(
+  projectId: string,
+  payload: CapacitySettingsReplaceRequest,
+): Promise<CapacitySettingsResponse> {
+  const id = resolveProjectId(projectId);
+  return request<CapacitySettingsResponse>(`/projects/${id}/capacity-settings`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getProjectSprintForecast(
+  projectId: string,
+  opts: { sprintId?: string; iterations?: number } = {},
+): Promise<SprintForecastSummary> {
+  const id = resolveProjectId(projectId);
+  const q = new URLSearchParams();
+  if (opts.sprintId) q.set("sprintId", opts.sprintId);
+  if (typeof opts.iterations === "number") {
+    q.set("iterations", String(opts.iterations));
+  }
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  return request<SprintForecastSummary>(
+    `/projects/${id}/sprint-forecast${suffix}`,
+  );
+}
+
+export async function getProjectAiTriageSettings(
+  projectId: string,
+): Promise<AiTriageSettings> {
+  const id = resolveProjectId(projectId);
+  return request<AiTriageSettings>(`/projects/${id}/ai-triage/settings`);
+}
+
+export async function updateProjectAiTriageSettings(
+  projectId: string,
+  payload: AiTriageSettingsUpdateRequest,
+): Promise<AiTriageSettings> {
+  const id = resolveProjectId(projectId);
+  return request<AiTriageSettings>(`/projects/${id}/ai-triage/settings`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createAiTriageSuggestion(
+  projectId: string,
+  payload: AiTriageSuggestionCreateRequest,
+): Promise<AiTriageSuggestion> {
+  const id = resolveProjectId(projectId);
+  return request<AiTriageSuggestion>(`/projects/${id}/ai-triage/suggestions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function recordAiTriageSuggestionDecision(
+  projectId: string,
+  suggestionId: string,
+  payload: AiTriageSuggestionDecisionRequest,
+): Promise<AiTriageSuggestionDecision> {
+  const id = resolveProjectId(projectId);
+  return request<AiTriageSuggestionDecision>(
+    `/projects/${id}/ai-triage/suggestions/${suggestionId}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function exportProjectReportingSnapshot(
+  projectId: string,
+  opts: { from?: string; to?: string; format?: ReportingExportFormat } = {},
+): Promise<ReportingExportFile> {
+  const id = resolveProjectId(projectId);
+  const q = new URLSearchParams();
+  if (opts.from) q.set("from", opts.from);
+  if (opts.to) q.set("to", opts.to);
+  if (opts.format) q.set("format", opts.format);
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  const res = await fetch(`${API_BASE}/projects/${id}/reporting/export${suffix}`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const message = await res.text().catch(() => "");
+    const error = new Error(message || res.statusText);
+    (error as Error & { status?: number }).status = res.status;
+    throw error;
+  }
+
+  const contentType = res.headers.get("Content-Type") || "application/octet-stream";
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const fallbackExt = opts.format === "csv" ? "csv" : "json";
+  const filename = match?.[1] || `project-reporting-export.${fallbackExt}`;
+
+  return {
+    blob: await res.blob(),
+    contentType,
+    filename,
+  };
+}
+
+export function buildProjectEventsWebSocketUrl(projectId: string): string {
+  const id = resolveProjectId(projectId);
+  const basePath = API_BASE || "";
+  const url = new URL(`${basePath}/projects/${id}/events/ws`, window.location.origin);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+
+export async function listNotifications(
+  projectId: string,
+  opts: { limit?: number; unreadOnly?: boolean } = {},
+): Promise<NotificationListResponse> {
+  const id = resolveProjectId(projectId);
+  const q = new URLSearchParams();
+  if (typeof opts.limit === "number") q.set("limit", String(opts.limit));
+  if (typeof opts.unreadOnly === "boolean") {
+    q.set("unreadOnly", String(opts.unreadOnly));
+  }
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  return request<NotificationListResponse>(
+    `/projects/${id}/notifications${suffix}`,
+  );
+}
+
+export async function getNotificationUnreadCount(
+  projectId: string,
+): Promise<NotificationUnreadCountResponse> {
+  const id = resolveProjectId(projectId);
+  return request<NotificationUnreadCountResponse>(
+    `/projects/${id}/notifications/unread-count`,
+  );
+}
+
+export async function markNotificationRead(
+  projectId: string,
+  notificationId: string,
+): Promise<Notification> {
+  const id = resolveProjectId(projectId);
+  return request<Notification>(
+    `/projects/${id}/notifications/${notificationId}/read`,
+    { method: "POST" },
+  );
+}
+
+export async function markAllNotificationsRead(
+  projectId: string,
+): Promise<NotificationMarkAllResponse> {
+  const id = resolveProjectId(projectId);
+  return request<NotificationMarkAllResponse>(
+    `/projects/${id}/notifications/read-all`,
+    { method: "POST" },
+  );
+}
+
+export async function getNotificationPreferences(
+  projectId: string,
+): Promise<NotificationPreferences> {
+  const id = resolveProjectId(projectId);
+  return request<NotificationPreferences>(
+    `/projects/${id}/notification-preferences`,
+  );
+}
+
+export async function updateNotificationPreferences(
+  projectId: string,
+  payload: NotificationPreferencesUpdateRequest,
+): Promise<NotificationPreferences> {
+  const id = resolveProjectId(projectId);
+  return request<NotificationPreferences>(
+    `/projects/${id}/notification-preferences`,
+    { method: "PATCH", body: JSON.stringify(payload) },
   );
 }
 

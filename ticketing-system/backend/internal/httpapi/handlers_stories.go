@@ -44,6 +44,14 @@ func (h *API) CreateStory(w http.ResponseWriter, r *http.Request, projectId open
 	if handleDBErrorWithCode(w, r, err, "story", "story_create", "story_create_failed") {
 		return
 	}
+	h.publishProjectLiveEvent(projectID, projectEventBoardRefresh, map[string]any{
+		"reason": "story.created",
+		"id":     story.ID.String(),
+	})
+	h.publishProjectLiveEvent(projectID, projectEventActivityChanged, map[string]any{
+		"reason": "story.created",
+		"id":     story.ID.String(),
+	})
 
 	writeJSON(w, http.StatusCreated, mapStory(story))
 }
@@ -86,6 +94,14 @@ func (h *API) UpdateStory(w http.ResponseWriter, r *http.Request, id openapi_typ
 	if handleDBErrorWithCode(w, r, err, "story", "story_update", "story_update_failed") {
 		return
 	}
+	h.publishProjectLiveEvent(story.ProjectID, projectEventBoardRefresh, map[string]any{
+		"reason": "story.updated",
+		"id":     story.ID.String(),
+	})
+	h.publishProjectLiveEvent(story.ProjectID, projectEventActivityChanged, map[string]any{
+		"reason": "story.updated",
+		"id":     story.ID.String(),
+	})
 
 	writeJSON(w, http.StatusOK, mapStory(story))
 }
@@ -104,6 +120,14 @@ func (h *API) DeleteStory(w http.ResponseWriter, r *http.Request, id openapi_typ
 	if err := h.store.DeleteStory(r.Context(), storyID); handleDeleteError(w, r, err, "story", "story_delete") {
 		return
 	}
+	h.publishProjectLiveEvent(story.ProjectID, projectEventBoardRefresh, map[string]any{
+		"reason": "story.deleted",
+		"id":     storyID.String(),
+	})
+	h.publishProjectLiveEvent(story.ProjectID, projectEventActivityChanged, map[string]any{
+		"reason": "story.deleted",
+		"id":     storyID.String(),
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -156,6 +180,8 @@ func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openap
 	if handleDBErrorWithCode(w, r, err, "comment", "comment_create", "comment_create_failed") {
 		return
 	}
+
+	h.notifyMentions(r, ticket.ProjectID, ticket, authorID, user.Name, req.Message)
 
 	writeJSON(w, http.StatusCreated, mapComment(comment))
 }

@@ -1,0 +1,67 @@
+{{define "sprints_list.sql"}}
+SELECT s.id, s.project_id, s.name, s.goal, s.start_date, s.end_date, s.created_at, s.updated_at,
+       COUNT(st.ticket_id)::int AS committed_tickets
+FROM sprints s
+LEFT JOIN sprint_tickets st ON st.sprint_id = s.id
+WHERE s.project_id = $1
+GROUP BY s.id
+ORDER BY s.start_date DESC, s.created_at DESC
+{{end}}
+
+{{define "sprint_tickets_list.sql"}}
+SELECT ticket_id
+FROM sprint_tickets
+WHERE sprint_id = $1
+ORDER BY created_at ASC
+{{end}}
+
+{{define "sprints_insert.sql"}}
+INSERT INTO sprints (project_id, name, goal, start_date, end_date)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+{{end}}
+
+{{define "sprint_tickets_insert.sql"}}
+INSERT INTO sprint_tickets (sprint_id, ticket_id)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+{{end}}
+
+{{define "capacity_settings_list.sql"}}
+SELECT id, project_id, scope, user_id, label, capacity, created_at, updated_at
+FROM capacity_settings
+WHERE project_id = $1
+ORDER BY scope ASC, label ASC, created_at ASC
+{{end}}
+
+{{define "capacity_settings_delete_for_project.sql"}}
+DELETE FROM capacity_settings
+WHERE project_id = $1
+{{end}}
+
+{{define "capacity_settings_insert.sql"}}
+INSERT INTO capacity_settings (project_id, scope, user_id, label, capacity)
+VALUES ($1, $2, $3, $4, $5)
+{{end}}
+
+{{define "forecast_daily_throughput_history.sql"}}
+WITH closed_states AS (
+  SELECT name
+  FROM workflow_states
+  WHERE project_id = $1 AND is_closed = true
+),
+daily AS (
+  SELECT date_trunc('day', a.created_at)::date AS day,
+         COUNT(*)::int AS value
+  FROM ticket_activities a
+  JOIN tickets t ON t.id = a.ticket_id
+  WHERE t.project_id = $1
+    AND a.action = 'state_changed'
+    AND a.new_value IN (SELECT name FROM closed_states)
+    AND a.created_at >= now() - interval '60 days'
+  GROUP BY 1
+)
+SELECT day, value
+FROM daily
+ORDER BY day ASC
+{{end}}

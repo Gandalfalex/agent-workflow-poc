@@ -5,9 +5,16 @@ import { Button } from "@/components/ui/button";
 import { useAdminStore } from "@/stores/admin";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
+import {
+    exportProjectReportingSnapshot,
+    getProjectAiTriageSettings,
+    updateProjectAiTriageSettings,
+} from "@/lib/api";
 import type {
+    AiTriageSettings,
     Group,
     ProjectRole,
+    ReportingExportFormat,
     WebhookDelivery,
     WebhookEvent,
     WebhookResponse,
@@ -21,7 +28,9 @@ const adminStore = useAdminStore();
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
 
-const settingsTab = ref<"projects" | "webhooks" | "workflow">("projects");
+const settingsTab = ref<"projects" | "webhooks" | "workflow" | "reporting">(
+    "projects",
+);
 const selectedProjectId = ref(props.projectId || "");
 const selectedGroupId = ref("");
 const actionNotice = ref<{ tone: "success" | "error"; message: string } | null>(
@@ -66,6 +75,13 @@ const workflowSaving = computed(() => boardStore.workflowEditorSaving);
 const workflowError = computed(() => boardStore.workflowEditorError);
 const workflowValidationError = ref("");
 const dragIndex = ref<number | null>(null);
+const reportingSummary = computed(() => boardStore.projectReportingSummary);
+const reportingLoading = computed(() => boardStore.projectReportingLoading);
+const reportingFrom = ref("");
+const reportingTo = ref("");
+const reportingExporting = ref<ReportingExportFormat | null>(null);
+const aiTriageSettings = ref<AiTriageSettings>({ enabled: false });
+const aiTriageSettingsLoading = ref(false);
 
 const projects = computed(() => adminStore.projects);
 const groups = computed(() => adminStore.groups);
@@ -232,6 +248,38 @@ const loadWebhooks = async (projectId?: string) => {
     }
 };
 
+const loadAiTriageSettings = async (projectId?: string) => {
+    const id = projectId || selectedProjectId.value;
+    if (!id) return;
+    aiTriageSettingsLoading.value = true;
+    try {
+        aiTriageSettings.value = await getProjectAiTriageSettings(id);
+    } catch (err) {
+        if (handleAuthError(err)) return;
+        aiTriageSettings.value = { enabled: false };
+    } finally {
+        aiTriageSettingsLoading.value = false;
+    }
+};
+
+const toggleAiTriage = async (value: boolean) => {
+    const id = selectedProjectId.value;
+    if (!id) return;
+    aiTriageSettingsLoading.value = true;
+    try {
+        aiTriageSettings.value = await updateProjectAiTriageSettings(id, {
+            enabled: value,
+        });
+        setNotice("success", `AI triage ${value ? "enabled" : "disabled"}.`);
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to update AI triage setting.");
+        }
+    } finally {
+        aiTriageSettingsLoading.value = false;
+    }
+};
+
 const resetNewWebhook = () => {
     newWebhook.value = {
         url: "",
@@ -343,6 +391,71 @@ const timeAgo = (dateStr: string): string => {
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
+};
+
+const toISODate = (date: Date) => {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+};
+
+const loadReporting = async () => {
+    if (!selectedProjectId.value) return;
+    if (!reportingFrom.value || !reportingTo.value) {
+        const end = new Date();
+        const start = new Date(end);
+        start.setUTCDate(end.getUTCDate() - 13);
+        reportingFrom.value = toISODate(start);
+        reportingTo.value = toISODate(end);
+    }
+    try {
+        await boardStore.loadProjectReportingSummary(selectedProjectId.value, {
+            from: reportingFrom.value,
+            to: reportingTo.value,
+        });
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const downloadBlob = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+};
+
+const exportReporting = async (format: ReportingExportFormat) => {
+    if (!selectedProjectId.value) return;
+    if (!reportingFrom.value || !reportingTo.value) {
+        await loadReporting();
+    }
+    reportingExporting.value = format;
+    try {
+        const file = await exportProjectReportingSnapshot(selectedProjectId.value, {
+            from: reportingFrom.value,
+            to: reportingTo.value,
+            format,
+        });
+        downloadBlob(file.blob, file.filename);
+        setNotice(
+            "success",
+            format === "csv"
+                ? "Reporting CSV exported."
+                : "Reporting JSON exported.",
+        );
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to export reporting snapshot.");
+        }
+    } finally {
+        reportingExporting.value = null;
+    }
 };
 
 const createProjectSubmit = async () => {
@@ -651,6 +764,7 @@ onMounted(async () => {
     if (selectedProjectId.value) {
         await loadProjectGroups(selectedProjectId.value);
         await loadWebhooks(selectedProjectId.value);
+        await loadAiTriageSettings(selectedProjectId.value);
     }
     if (selectedGroupId.value) {
         await loadGroupMembers();
@@ -670,6 +784,10 @@ watch(
         }
         await loadProjectGroups(value);
         await loadWebhooks(value);
+        await loadAiTriageSettings(value);
+        if (settingsTab.value === "reporting") {
+            await loadReporting();
+        }
     },
 );
 
@@ -715,6 +833,15 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'workflow'; loadWorkflow()"
             >
                 Workflow
+            </Button>
+            <Button
+                data-testid="settings.reporting-tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'reporting'"
+                @click="settingsTab = 'reporting'; loadReporting()"
+            >
+                Reporting
             </Button>
         </div>
     </section>
@@ -789,6 +916,22 @@ watch(selectedGroupId, async () => {
                 <p v-else class="text-xs text-muted-foreground">
                     Active: {{ selectedProjectLabel }}
                 </p>
+                <label
+                    class="mt-2 inline-flex items-center gap-2 text-xs text-muted-foreground"
+                >
+                    <input
+                        data-testid="settings.ai-triage-toggle"
+                        type="checkbox"
+                        :checked="aiTriageSettings.enabled"
+                        :disabled="!selectedProjectId || aiTriageSettingsLoading"
+                        @change="
+                            toggleAiTriage(
+                                ($event.target as HTMLInputElement).checked,
+                            )
+                        "
+                    />
+                    Enable AI triage copilot for this project
+                </label>
             </div>
         </div>
         <div class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm">
@@ -1751,6 +1894,152 @@ watch(selectedGroupId, async () => {
             >
                 {{ workflowSaving ? "Saving..." : "Save workflow" }}
             </Button>
+        </div>
+    </section>
+
+    <section
+        v-if="settingsTab === 'reporting'"
+        data-testid="reporting.view"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                    Reporting
+                </p>
+                <h2 class="text-2xl font-semibold">Project summary</h2>
+                <p class="mt-2 text-sm text-muted-foreground">
+                    Read-only throughput, cycle-time, and open-by-state trend.
+                </p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                    Target project: {{ selectedProjectLabel }}
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <input
+                    data-testid="reporting.from-input"
+                    v-model="reportingFrom"
+                    type="date"
+                    class="rounded-lg border border-input bg-background px-2 py-1.5 text-xs"
+                />
+                <input
+                    data-testid="reporting.to-input"
+                    v-model="reportingTo"
+                    type="date"
+                    class="rounded-lg border border-input bg-background px-2 py-1.5 text-xs"
+                />
+                <Button
+                    data-testid="reporting.reload-button"
+                    variant="ghost"
+                    size="sm"
+                    :disabled="reportingLoading"
+                    @click="loadReporting"
+                >
+                    {{ reportingLoading ? "Loading..." : "Reload" }}
+                </Button>
+                <Button
+                    data-testid="reporting.export-json-button"
+                    variant="outline"
+                    size="sm"
+                    :disabled="reportingLoading || reportingExporting !== null"
+                    @click="exportReporting('json')"
+                >
+                    {{
+                        reportingExporting === "json"
+                            ? "Exporting JSON..."
+                            : "Export JSON"
+                    }}
+                </Button>
+                <Button
+                    data-testid="reporting.export-csv-button"
+                    variant="outline"
+                    size="sm"
+                    :disabled="reportingLoading || reportingExporting !== null"
+                    @click="exportReporting('csv')"
+                >
+                    {{
+                        reportingExporting === "csv"
+                            ? "Exporting CSV..."
+                            : "Export CSV"
+                    }}
+                </Button>
+            </div>
+        </div>
+
+        <div v-if="reportingLoading" class="mt-6 text-sm text-muted-foreground">
+            Loading reporting summary...
+        </div>
+
+        <div
+            v-else-if="!reportingSummary"
+            class="mt-6 rounded-2xl border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground"
+        >
+            No reporting data available.
+        </div>
+
+        <div v-else class="mt-6 space-y-5">
+            <div class="grid gap-4 md:grid-cols-3">
+                <div class="rounded-2xl border border-border bg-background px-4 py-3">
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Range</p>
+                    <p class="mt-2 text-sm font-semibold">
+                        {{ reportingSummary.from }} to {{ reportingSummary.to }}
+                    </p>
+                </div>
+                <div class="rounded-2xl border border-border bg-background px-4 py-3">
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Avg Cycle Time</p>
+                    <p class="mt-2 text-2xl font-semibold">
+                        {{ Number(reportingSummary.averageCycleTimeHours || 0).toFixed(1) }}h
+                    </p>
+                </div>
+                <div class="rounded-2xl border border-border bg-background px-4 py-3">
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Days</p>
+                    <p class="mt-2 text-2xl font-semibold">
+                        {{ reportingSummary.throughputByDay.length }}
+                    </p>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-border bg-background px-4 py-3">
+                <p class="text-xs font-semibold text-foreground">Throughput by Day</p>
+                <div
+                    data-testid="reporting.throughput-list"
+                    class="mt-3 max-h-56 overflow-y-auto space-y-1.5"
+                >
+                    <div
+                        v-for="point in reportingSummary.throughputByDay"
+                        :key="point.date"
+                        class="flex items-center justify-between rounded-lg border border-border/70 px-3 py-1.5 text-xs"
+                    >
+                        <span class="text-muted-foreground">{{ point.date }}</span>
+                        <span class="font-semibold text-foreground">{{ point.value }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-border bg-background px-4 py-3">
+                <p class="text-xs font-semibold text-foreground">Open by State (Daily)</p>
+                <div
+                    data-testid="reporting.open-by-state-list"
+                    class="mt-3 max-h-64 overflow-y-auto space-y-2"
+                >
+                    <div
+                        v-for="point in reportingSummary.openByState"
+                        :key="point.date"
+                        class="rounded-lg border border-border/70 px-3 py-2 text-xs"
+                    >
+                        <p class="font-semibold text-muted-foreground">{{ point.date }}</p>
+                        <div class="mt-1 flex flex-wrap gap-2">
+                            <span
+                                v-for="count in point.counts"
+                                :key="count.label"
+                                class="rounded-md border border-border bg-muted/30 px-2 py-0.5"
+                            >
+                                {{ count.label }}: {{ count.value }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 </template>

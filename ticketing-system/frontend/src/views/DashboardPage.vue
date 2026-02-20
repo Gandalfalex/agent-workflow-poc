@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
 
@@ -12,6 +12,17 @@ const stats = computed(() => boardStore.dashboardStats);
 const loading = computed(() => boardStore.dashboardLoading);
 const activities = computed(() => boardStore.projectActivities);
 const activitiesLoading = computed(() => boardStore.projectActivitiesLoading);
+const dependencyGraph = computed(() => boardStore.ticketDependencyGraph);
+const dependencyGraphLoading = computed(
+    () => boardStore.ticketDependencyGraphLoading,
+);
+const sprints = computed(() => boardStore.sprints);
+const sprintsLoading = computed(() => boardStore.sprintsLoading);
+const capacitySettings = computed(() => boardStore.capacitySettings);
+const sprintForecast = computed(() => boardStore.sprintForecastSummary);
+const sprintForecastLoading = computed(() => boardStore.sprintForecastLoading);
+const selectedSprintId = ref<string>("");
+const forecastIterations = ref<number>(250);
 
 const totalTickets = computed(
     () => (stats.value?.totalOpen ?? 0) + (stats.value?.totalClosed ?? 0),
@@ -89,20 +100,39 @@ const loadStats = async () => {
         await Promise.all([
             boardStore.loadDashboardStats(props.projectId),
             boardStore.loadProjectActivities(props.projectId),
+            boardStore.loadDependencyGraph(props.projectId, { depth: 2 }),
+            boardStore.loadSprints(props.projectId),
+            boardStore.loadCapacitySettings(props.projectId),
         ]);
+        if (!selectedSprintId.value && boardStore.sprints.length > 0) {
+            selectedSprintId.value = boardStore.sprints[0]!.id;
+        }
+        await boardStore.loadSprintForecast(props.projectId, {
+            sprintId: selectedSprintId.value || undefined,
+            iterations: forecastIterations.value,
+        });
     } catch (err) {
         handleAuthError(err);
     }
 };
 
+const reloadForecast = async () => {
+    if (!props.projectId) return;
+    await boardStore.loadSprintForecast(props.projectId, {
+        sprintId: selectedSprintId.value || undefined,
+        iterations: forecastIterations.value,
+    });
+};
+
 onMounted(loadStats);
 watch(() => props.projectId, loadStats);
+watch(selectedSprintId, reloadForecast);
 </script>
 
 <template>
     <!-- Loading skeleton -->
     <div v-if="loading" class="flex flex-col gap-5 animate-pulse">
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-4 gap-4">
             <div
                 v-for="i in 3"
                 :key="i"
@@ -181,6 +211,18 @@ watch(() => props.projectId, loadStats);
                     {{ stats.totalClosed }}
                 </p>
             </div>
+            <div
+                class="rounded-2xl border border-border bg-card/70 px-5 py-5"
+            >
+                <p
+                    class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
+                >
+                    Blocked Open
+                </p>
+                <p class="mt-2 text-3xl font-bold tabular-nums text-rose-300">
+                    {{ stats.blockedOpen }}
+                </p>
+            </div>
         </div>
 
         <!-- By State -->
@@ -218,6 +260,47 @@ watch(() => props.projectId, loadStats);
                         class="w-8 shrink-0 text-right text-xs font-semibold tabular-nums"
                         >{{ item.value }}</span
                     >
+                </div>
+            </div>
+        </section>
+
+        <section data-testid="dashboard.dependency-graph" class="rounded-2xl border border-border bg-card/70 px-5 py-5">
+            <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                Dependency Graph
+            </p>
+            <div v-if="dependencyGraphLoading" class="mt-4 text-xs text-muted-foreground">
+                Loading dependency graph...
+            </div>
+            <div v-else class="mt-4 space-y-2">
+                <p class="text-xs text-muted-foreground">
+                    {{ dependencyGraph.nodes.length }} nodes · {{ dependencyGraph.edges.length }} edges (up to 2-hop expansion)
+                </p>
+                <div
+                    v-if="dependencyGraph.edges.length === 0"
+                    class="text-xs text-muted-foreground"
+                >
+                    No dependencies yet.
+                </div>
+                <div v-else class="max-h-56 space-y-1 overflow-y-auto">
+                    <div
+                        v-for="edge in dependencyGraph.edges"
+                        :key="edge.id"
+                        class="rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs"
+                    >
+                        <span class="font-medium text-foreground">
+                            {{
+                                dependencyGraph.nodes.find((n) => n.ticket.id === edge.sourceTicketId)?.ticket.key ||
+                                edge.sourceTicketId
+                            }}
+                        </span>
+                        <span class="mx-2 text-muted-foreground">{{ edge.relationType }}</span>
+                        <span class="font-medium text-foreground">
+                            {{
+                                dependencyGraph.nodes.find((n) => n.ticket.id === edge.targetTicketId)?.ticket.key ||
+                                edge.targetTicketId
+                            }}
+                        </span>
+                    </div>
                 </div>
             </div>
         </section>
@@ -400,6 +483,76 @@ watch(() => props.projectId, loadStats);
                         {{ new Date(activity.createdAt).toLocaleString() }}
                     </span>
                 </div>
+            </div>
+        </section>
+
+        <section data-testid="dashboard.sprint-forecast" class="rounded-2xl border border-border bg-card/70 px-5 py-5">
+            <div class="flex flex-wrap items-end gap-3">
+                <div class="min-w-52">
+                    <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                        Sprint Forecast
+                    </p>
+                    <select
+                        data-testid="dashboard.sprint-select"
+                        class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        :disabled="sprintsLoading"
+                        v-model="selectedSprintId"
+                    >
+                        <option value="">Latest sprint</option>
+                        <option
+                            v-for="sprint in sprints"
+                            :key="sprint.id"
+                            :value="sprint.id"
+                        >
+                            {{ sprint.name }} ({{ sprint.startDate }} - {{ sprint.endDate }})
+                        </option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Iterations</label>
+                    <input
+                        data-testid="dashboard.sprint-iterations-input"
+                        type="number"
+                        min="10"
+                        max="5000"
+                        class="mt-2 w-28 rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        v-model.number="forecastIterations"
+                    />
+                </div>
+                <button
+                    data-testid="dashboard.sprint-forecast-reload"
+                    class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                    @click="reloadForecast"
+                >
+                    Recalculate
+                </button>
+            </div>
+            <div v-if="sprintForecastLoading" class="mt-4 text-xs text-muted-foreground">
+                Running forecast simulation...
+            </div>
+            <div v-else-if="sprintForecast" class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div data-testid="dashboard.sprint-committed" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Committed</p>
+                    <p class="mt-1 text-xl font-bold">{{ sprintForecast.committedTickets }}</p>
+                </div>
+                <div data-testid="dashboard.sprint-projected" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Projected</p>
+                    <p class="mt-1 text-xl font-bold">{{ sprintForecast.projectedCompletion }}</p>
+                </div>
+                <div data-testid="dashboard.sprint-capacity" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Capacity</p>
+                    <p class="mt-1 text-xl font-bold">{{ sprintForecast.capacity }}</p>
+                </div>
+                <div data-testid="dashboard.sprint-delta" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Over Capacity</p>
+                    <p class="mt-1 text-xl font-bold">{{ sprintForecast.overCapacityDelta }}</p>
+                </div>
+                <div class="col-span-2 md:col-span-4 text-xs text-muted-foreground">
+                    Confidence: {{ Math.round(sprintForecast.confidence * 100) }}% · Iterations: {{ sprintForecast.iterations }} · Capacity entries: {{ capacitySettings.length }}
+                </div>
+            </div>
+            <div v-else class="mt-4 text-xs text-muted-foreground">
+                No sprint forecast available yet.
             </div>
         </section>
     </div>

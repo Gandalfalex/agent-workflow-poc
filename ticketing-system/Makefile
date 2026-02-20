@@ -9,13 +9,15 @@ generate: generate-backend generate-frontend
 
 # Generate Go server/types from OpenAPI
 generate-backend:
-	go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1 \
-		--config $(CURDIR)/backend/oapi-codegen.yaml \
-		$(OPENAPI_SPEC)
+	cd backend && go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen \
+		--package httpapi \
+		--generate chi-server,models \
+		-o internal/httpapi/generated.gen.go \
+		../openapi.yaml
 
 # Generate TypeScript schema from OpenAPI
 generate-frontend:
-	cd frontend && npx --yes openapi-typescript $(OPENAPI_SPEC) --output src/lib/api.schema.ts
+	cd frontend && npm run -s generate:api
 
 # Run database migrations
 migrate:

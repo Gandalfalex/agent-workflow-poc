@@ -1,0 +1,7 @@
+interface:
+  display_name: "OpenAPI First Delivery"
+  short_description: "OpenAPI-first workflow with Makefile, E2E, docs"
+  default_prompt: "Use $openapi-first-delivery to implement this feature end-to-end in ticketing-system."
+
+policy:
+  allow_implicit_invocation: true

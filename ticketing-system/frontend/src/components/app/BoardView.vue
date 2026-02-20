@@ -3,6 +3,7 @@ import type { StoryRow } from "@/lib/types";
 import type { TicketResponse, WorkflowState } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ref } from "vue";
+import { useI18n } from "@/lib/i18n";
 
 type DragHandler = (ticketId: string) => void;
 type DropHandler = (stateId: string, storyId: string) => void;
@@ -26,10 +27,15 @@ const props = defineProps<{
     workflowSetupBusy: boolean;
     workflowSetupError: string;
     canEditTickets: boolean;
+    bulkSelectMode: boolean;
+    selectedTicketIds: string[];
     hasActiveFilter: boolean;
     searchQuery: string;
     onInitializeWorkflow: () => void;
     onOpenStoryModal: () => void;
+    onToggleBulkSelectMode: () => void;
+    onToggleTicketSelection: (ticketId: string) => void;
+    onClearTicketSelection: () => void;
     onClearFilter: () => void;
     onDeleteStory: DeleteStoryHandler;
     onOpenTicket: OpenTicketHandler;
@@ -41,6 +47,7 @@ const props = defineProps<{
 }>();
 
 const openStoryMenu = ref<string | null>(null);
+const { t } = useI18n();
 
 const toggleStoryMenu = (storyId: string) => {
     openStoryMenu.value = openStoryMenu.value === storyId ? null : storyId;
@@ -88,7 +95,7 @@ const assigneeInitials = (name?: string) => {
         v-if="loading"
         class="rounded-3xl border border-border bg-card/80 p-6"
     >
-        <p class="text-sm text-muted-foreground">Loading board...</p>
+        <p class="text-sm text-muted-foreground">{{ t("board.view.loading") }}</p>
     </section>
 
     <section
@@ -96,12 +103,11 @@ const assigneeInitials = (name?: string) => {
         class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
     >
         <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-            Setup
+            {{ t("board.view.setup") }}
         </p>
-        <h2 class="mt-2 text-2xl font-semibold">Create your first workflow</h2>
+        <h2 class="mt-2 text-2xl font-semibold">{{ t("board.view.createWorkflow") }}</h2>
         <p class="mt-2 text-sm text-muted-foreground">
-            The board is empty because no workflow states exist yet. Initialize
-            a default board to start adding tickets.
+            {{ t("board.view.emptyWorkflow") }}
         </p>
         <div
             v-if="workflowSetupError"
@@ -114,43 +120,71 @@ const assigneeInitials = (name?: string) => {
                 :disabled="workflowSetupBusy"
                 @click="props.onInitializeWorkflow"
             >
-                {{ workflowSetupBusy ? "Creating..." : "Initialize board" }}
+                {{ workflowSetupBusy ? t("board.view.creating") : t("board.view.initialize") }}
             </Button>
         </div>
     </section>
 
     <section
         v-if="!loading && states.length > 0"
-        class="grid gap-4"
+        class="grid gap-6"
         :style="{ '--cols': states.length }"
     >
         <div
-            class="flex items-center justify-between rounded-3xl border border-border bg-card/70 px-4 py-3 text-xs text-muted-foreground"
+            class="flex items-center justify-between rounded-3xl border border-border bg-card/70 px-5 py-4 text-xs text-muted-foreground"
         >
             <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.3em]">
-                    Board stories
+                    {{ t("board.view.storySection") }}
                 </p>
                 <p class="mt-1 text-[11px]">
-                    Stories group tickets horizontally across workflow states.
+                    {{ t("board.view.storyHelp") }}
                 </p>
             </div>
             <div class="flex items-center gap-3">
                 <span
                     class="rounded-full bg-muted px-2 py-1 text-[10px] font-semibold"
                 >
-                    {{ storiesCount }} stories
+                    {{ t("board.view.storiesCount", { count: storiesCount }) }}
                 </span>
                 <span
                     class="rounded-full bg-muted px-2 py-1 text-[10px] font-semibold"
                 >
-                    {{ ticketsCount }} tickets
+                    {{ t("board.view.ticketsCount", { count: ticketsCount }) }}
                 </span>
+                <button
+                    v-if="props.canEditTickets"
+                    data-testid="board.bulk-toggle-button"
+                    class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                    @click="props.onToggleBulkSelectMode"
+                >
+                    {{
+                        props.bulkSelectMode
+                            ? t("board.view.exitSelect")
+                            : t("board.view.selectTickets")
+                    }}
+                </button>
+                <span
+                    v-if="props.bulkSelectMode"
+                    data-testid="board.bulk-selected-count"
+                    class="rounded-full bg-primary/15 px-2 py-1 text-[10px] font-semibold text-primary"
+                >
+                    {{ t("board.view.selectedCount", { count: props.selectedTicketIds.length }) }}
+                </span>
+                <button
+                    v-if="props.bulkSelectMode"
+                    data-testid="board.bulk-clear-selection-button"
+                    class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                    @click="props.onClearTicketSelection"
+                >
+                    Clear
+                </button>
                 <button
                     v-if="props.canEditTickets"
                     data-testid="board.create-story-button"
                     class="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-base font-semibold text-foreground transition hover:border-primary hover:text-primary"
                     @click="props.onOpenStoryModal"
+                    :title="t('board.view.addStory')"
                 >
                     +
                 </button>
@@ -161,9 +195,9 @@ const assigneeInitials = (name?: string) => {
             v-if="props.hasActiveFilter && props.storyRows.length === 0"
             class="rounded-3xl border border-border bg-card/70 p-6 text-sm text-muted-foreground"
         >
-            <p class="font-semibold text-foreground">No matching tickets</p>
+            <p class="font-semibold text-foreground">{{ t("board.view.noMatchingTitle") }}</p>
             <p class="mt-2">
-                Nothing matched
+                {{ t("board.view.noMatchingBody") }}
                 <span class="font-mono text-foreground">
                     "{{ props.searchQuery }}"
                 </span>
@@ -173,22 +207,22 @@ const assigneeInitials = (name?: string) => {
                 class="mt-4 rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition hover:border-primary hover:text-primary"
                 @click="props.onClearFilter"
             >
-                Clear filter
+                {{ t("board.view.clearFilter") }}
             </button>
         </div>
 
         <!-- Board grid -->
-        <div>
+        <div class="overflow-x-auto pb-2">
             <div
-                class="grid items-center gap-3 rounded-3xl border border-border bg-card/70 p-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+                class="grid min-w-max items-center gap-4 rounded-3xl border border-border bg-card/70 p-4 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
                 :style="{
                     'grid-template-columns':
-                        '200px repeat(' +
+                        '240px repeat(' +
                         states.length +
-                        ', minmax(220px, 1fr))',
+                        ', minmax(280px, 1fr))',
                 }"
             >
-                <div>Story</div>
+                <div>{{ t("board.view.story") }}</div>
                 <div
                     v-for="state in states"
                     :key="state.id"
@@ -201,12 +235,12 @@ const assigneeInitials = (name?: string) => {
             <div
                 v-for="row in storyRows"
                 :key="row.id"
-                class="mt-4 grid gap-3 rounded-2xl border-2 p-3 border-border/60 bg-card/50 shadow-sm"
+                class="mt-5 grid min-w-max gap-4 rounded-2xl border-2 p-4 border-border/60 bg-card/50 shadow-sm"
                 :style="{
                     'grid-template-columns':
-                        '200px repeat(' +
+                        '240px repeat(' +
                         states.length +
-                        ', minmax(220px, 1fr))',
+                        ', minmax(280px, 1fr))',
                 }"
             >
                 <div
@@ -216,7 +250,7 @@ const assigneeInitials = (name?: string) => {
                         <p
                             class="text-[10px] uppercase tracking-[0.3em] font-bold text-primary/80"
                         >
-                            Story
+                            {{ t("board.view.storyLabel") }}
                         </p>
                         <div class="relative">
                             <button
@@ -249,7 +283,7 @@ const assigneeInitials = (name?: string) => {
                                         props.onDeleteStory(row.id);
                                     "
                                 >
-                                    Delete story
+                                    {{ t("board.view.deleteStory") }}
                                 </button>
                             </div>
                         </div>
@@ -289,15 +323,15 @@ const assigneeInitials = (name?: string) => {
                                 class="text-[10px] font-semibold text-muted-foreground whitespace-nowrap"
                             >
                                 {{
-                                    states.reduce(
-                                        (sum, state) =>
-                                            sum +
-                                            (row.ticketsByState[state.id]
-                                                ?.length || 0),
-                                        0,
-                                    )
+                                    t("board.view.ticketCount", {
+                                        count: states.reduce(
+                                            (sum, state) =>
+                                                sum +
+                                                (row.ticketsByState[state.id]?.length || 0),
+                                            0,
+                                        ),
+                                    })
                                 }}
-                                tickets
                             </p>
                         </div>
                         <button
@@ -308,7 +342,7 @@ const assigneeInitials = (name?: string) => {
                                 props.onOpenNewTicket(states[0]?.id, row.id)
                             "
                         >
-                            + Add ticket
+                            {{ t("board.view.addTicket") }}
                         </button>
                     </div>
                 </div>
@@ -316,7 +350,7 @@ const assigneeInitials = (name?: string) => {
                 <div
                     v-for="state in states"
                     :key="state.id"
-                    class="flex min-h-[160px] flex-col rounded-2xl border border-border bg-card/40 p-2.5"
+                    class="flex min-h-[180px] flex-col rounded-2xl border border-border bg-card/40 p-3.5"
                     @dragover.prevent
                     @drop.prevent="props.onDropColumn(state.id, row.id)"
                 >
@@ -325,16 +359,41 @@ const assigneeInitials = (name?: string) => {
                         <div
                             v-for="ticket in row.ticketsByState[state.id]"
                             :key="ticket.id"
-                            class="group relative cursor-grab rounded-xl border-2 border-border bg-gradient-to-br from-background to-background/80 p-3.5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg hover:border-primary/40 hover:shadow-primary/5"
-                            draggable="true"
-                            @dragstart="props.onDragStart(ticket.id)"
+                            class="group relative cursor-grab rounded-xl border-2 border-border bg-gradient-to-br from-background to-background/80 p-4 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg hover:border-primary/40 hover:shadow-primary/5"
+                            :draggable="props.canEditTickets && !props.bulkSelectMode"
+                            @dragstart="
+                                props.bulkSelectMode
+                                    ? undefined
+                                    : props.onDragStart(ticket.id)
+                            "
                             @dragend="props.onDragEnd"
                             @dragover.prevent
                             @drop.prevent="
                                 props.onDropCard(ticket.id, state.id, row.id)
                             "
-                            @click="props.onOpenTicket(ticket)"
+                            @click="
+                                props.bulkSelectMode
+                                    ? props.onToggleTicketSelection(ticket.id)
+                                    : props.onOpenTicket(ticket)
+                            "
                         >
+                            <button
+                                v-if="props.bulkSelectMode"
+                                :data-testid="`board.ticket-select-${ticket.key}`"
+                                class="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border text-[10px] font-bold"
+                                :class="
+                                    props.selectedTicketIds.includes(ticket.id)
+                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        : 'border-border bg-background text-muted-foreground'
+                                "
+                                @click.stop="props.onToggleTicketSelection(ticket.id)"
+                            >
+                                {{
+                                    props.selectedTicketIds.includes(ticket.id)
+                                        ? "✓"
+                                        : ""
+                                }}
+                            </button>
                             <!-- Priority indicator bar -->
                             <div
                                 class="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
@@ -350,11 +409,20 @@ const assigneeInitials = (name?: string) => {
                             <div
                                 class="flex items-start justify-between gap-2 mb-2"
                             >
-                                <span
-                                    class="text-[10px] font-bold text-muted-foreground tracking-wider"
-                                >
-                                    {{ ticket.key }}
-                                </span>
+                                <div class="flex items-center gap-1.5">
+                                    <span
+                                        class="text-[10px] font-bold text-muted-foreground tracking-wider"
+                                    >
+                                        {{ ticket.key }}
+                                    </span>
+                                    <span
+                                        v-if="ticket.isBlocked"
+                                        data-testid="board.ticket-blocked-badge"
+                                        class="rounded-md border border-rose-400/40 bg-rose-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-rose-300"
+                                    >
+                                        {{ t("board.view.blocked", { count: ticket.blockedByCount }) }}
+                                    </span>
+                                </div>
                                 <div class="flex items-center gap-1.5">
                                     <span
                                         class="rounded-md px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider border"
@@ -409,7 +477,7 @@ const assigneeInitials = (name?: string) => {
                                     <span
                                         v-else
                                         class="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[9px] font-semibold text-muted-foreground border border-border"
-                                        title="Unassigned"
+                                        :title="t('board.view.unassigned')"
                                     >
                                         ?
                                     </span>
@@ -441,7 +509,7 @@ const assigneeInitials = (name?: string) => {
                             <p
                                 class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider"
                             >
-                                Drop here
+                                {{ t("board.view.dropHere") }}
                             </p>
                         </div>
                     </div>

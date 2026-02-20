@@ -286,6 +286,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/tickets/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Execute bulk ticket operation */
+        post: operations["bulkTicketOperation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/dependency-graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get project dependency graph */
+        get: operations["getProjectDependencyGraph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tickets/{id}": {
         parameters: {
             query?: never;
@@ -303,6 +337,41 @@ export interface paths {
         head?: never;
         /** Update ticket */
         patch: operations["updateTicket"];
+        trace?: never;
+    };
+    "/tickets/{id}/dependencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List dependencies for ticket */
+        get: operations["listTicketDependencies"];
+        put?: never;
+        /** Create dependency for ticket */
+        post: operations["createTicketDependency"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/dependencies/{dependencyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete dependency for ticket */
+        delete: operations["deleteTicketDependency"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/projects/{projectId}/stories": {
@@ -369,6 +438,40 @@ export interface paths {
         };
         /** List ticket activities */
         get: operations["listTicketActivities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/incident-timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List incident timeline events for ticket */
+        get: operations["listTicketIncidentTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{id}/incident-postmortem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export incident postmortem draft as Markdown */
+        get: operations["getTicketIncidentPostmortem"];
         put?: never;
         post?: never;
         delete?: never;
@@ -463,6 +566,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/sprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List project sprints */
+        get: operations["listProjectSprints"];
+        put?: never;
+        /** Create a project sprint */
+        post: operations["createProjectSprint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/capacity-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List project capacity settings */
+        get: operations["listProjectCapacitySettings"];
+        /** Replace project capacity settings */
+        put: operations["replaceProjectCapacitySettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/sprint-forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get sprint forecast summary */
+        get: operations["getProjectSprintForecast"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/ai-triage/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get AI triage settings for project */
+        get: operations["getProjectAiTriageSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update AI triage settings for project */
+        patch: operations["updateProjectAiTriageSettings"];
+        trace?: never;
+    };
+    "/projects/{projectId}/ai-triage/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate AI triage suggestion for ticket draft */
+        post: operations["createAiTriageSuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record field-by-field acceptance or rejection for an AI triage suggestion */
+        post: operations["recordAiTriageSuggestionDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/reporting/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get lightweight project reporting summary */
+        get: operations["getProjectReportingSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/reporting/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export project reporting snapshot */
+        get: operations["exportProjectReportingSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/events/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open project live updates stream (WebSocket) */
+        get: operations["streamProjectEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/activities": {
         parameters: {
             query?: never;
@@ -480,6 +739,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List current user notifications for project */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current user unread notification count for project */
+        get: operations["getNotificationUnreadCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/notifications/{notificationId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a notification as read */
+        post: operations["markNotificationRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark all project notifications as read for current user */
+        post: operations["markAllNotificationsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current user notification preferences */
+        get: operations["getNotificationPreferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update current user notification preferences */
+        patch: operations["updateNotificationPreferences"];
+        trace?: never;
+    };
     "/projects/{projectId}/my-role": {
         parameters: {
             query?: never;
@@ -489,6 +834,59 @@ export interface paths {
         };
         /** Get the current user's role on this project */
         get: operations["getMyProjectRole"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/board-filters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List personal board filter presets */
+        get: operations["listBoardFilterPresets"];
+        put?: never;
+        /** Create personal board filter preset */
+        post: operations["createBoardFilterPreset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/board-filters/{presetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete personal board filter preset */
+        delete: operations["deleteBoardFilterPreset"];
+        options?: never;
+        head?: never;
+        /** Update personal board filter preset */
+        patch: operations["updateBoardFilterPreset"];
+        trace?: never;
+    };
+    "/projects/{projectId}/board-filters/shared/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve shared board filter preset token */
+        get: operations["getSharedBoardFilterPreset"];
         put?: never;
         post?: never;
         delete?: never;
@@ -754,6 +1152,48 @@ export interface components {
         TicketPriority: "low" | "medium" | "high" | "urgent";
         /** @enum {string} */
         TicketType: "feature" | "bug";
+        /** @enum {string} */
+        TicketIncidentSeverity: "sev1" | "sev2" | "sev3" | "sev4";
+        BoardFilter: {
+            /** Format: uuid */
+            assigneeId?: string;
+            /** Format: uuid */
+            stateId?: string;
+            priority?: components["schemas"]["TicketPriority"];
+            type?: components["schemas"]["TicketType"];
+            q?: string;
+            blocked?: boolean;
+        };
+        /** @enum {string} */
+        DependencyRelationType: "blocks" | "blocked_by" | "related";
+        BoardFilterPreset: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            ownerId: string;
+            name: string;
+            filters: components["schemas"]["BoardFilter"];
+            shareToken?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        BoardFilterPresetCreateRequest: {
+            name: string;
+            filters: components["schemas"]["BoardFilter"];
+            generateShareToken?: boolean;
+        };
+        BoardFilterPresetUpdateRequest: {
+            name?: string;
+            filters?: components["schemas"]["BoardFilter"];
+            generateShareToken?: boolean;
+        };
+        BoardFilterPresetListResponse: {
+            items: components["schemas"]["BoardFilterPreset"][];
+        };
         Story: {
             /** Format: uuid */
             id: string;
@@ -835,12 +1275,59 @@ export interface components {
             assigneeId?: string | null;
             assignee?: components["schemas"]["UserSummary"];
             priority: components["schemas"]["TicketPriority"];
+            incidentEnabled: boolean;
+            incidentSeverity?: components["schemas"]["TicketIncidentSeverity"];
+            incidentImpact?: string | null;
+            /** Format: uuid */
+            incidentCommanderId?: string | null;
+            incidentCommander?: components["schemas"]["UserSummary"];
             /** Format: float */
             position: number;
+            blockedByCount: number;
+            isBlocked: boolean;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        TicketDependency: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            ticketId: string;
+            /** Format: uuid */
+            relatedTicketId: string;
+            relationType: components["schemas"]["DependencyRelationType"];
+            relatedTicket?: components["schemas"]["Ticket"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TicketDependencyCreateRequest: {
+            /** Format: uuid */
+            relatedTicketId: string;
+            relationType: components["schemas"]["DependencyRelationType"];
+        };
+        TicketDependencyListResponse: {
+            items: components["schemas"]["TicketDependency"][];
+        };
+        TicketDependencyGraphNode: {
+            ticket: components["schemas"]["Ticket"];
+            depth: number;
+        };
+        TicketDependencyGraphEdge: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            sourceTicketId: string;
+            /** Format: uuid */
+            targetTicketId: string;
+            relationType: components["schemas"]["DependencyRelationType"];
+        };
+        TicketDependencyGraphResponse: {
+            nodes: components["schemas"]["TicketDependencyGraphNode"][];
+            edges: components["schemas"]["TicketDependencyGraphEdge"][];
         };
         TicketCreateRequest: {
             title: string;
@@ -853,6 +1340,11 @@ export interface components {
             /** Format: uuid */
             assigneeId?: string | null;
             priority?: components["schemas"]["TicketPriority"];
+            incidentEnabled?: boolean;
+            incidentSeverity?: components["schemas"]["TicketIncidentSeverity"];
+            incidentImpact?: string | null;
+            /** Format: uuid */
+            incidentCommanderId?: string | null;
         };
         TicketUpdateRequest: {
             title?: string;
@@ -865,12 +1357,58 @@ export interface components {
             /** Format: uuid */
             assigneeId?: string | null;
             priority?: components["schemas"]["TicketPriority"];
+            incidentEnabled?: boolean;
+            incidentSeverity?: components["schemas"]["TicketIncidentSeverity"];
+            incidentImpact?: string | null;
+            /** Format: uuid */
+            incidentCommanderId?: string | null;
             /** Format: float */
             position?: number;
+        };
+        /** @enum {string} */
+        IncidentTimelineItemType: "activity" | "comment" | "webhook";
+        IncidentTimelineItem: {
+            id: string;
+            /** Format: uuid */
+            ticketId: string;
+            type: components["schemas"]["IncidentTimelineItemType"];
+            title: string;
+            body?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        IncidentTimelineResponse: {
+            items: components["schemas"]["IncidentTimelineItem"][];
         };
         TicketListResponse: {
             items: components["schemas"]["Ticket"][];
             total: number;
+        };
+        /** @enum {string} */
+        BulkTicketAction: "move_state" | "assign" | "set_priority" | "delete";
+        BulkTicketOperationRequest: {
+            action: components["schemas"]["BulkTicketAction"];
+            ticketIds: string[];
+            /** Format: uuid */
+            stateId?: string;
+            /** Format: uuid */
+            assigneeId?: string | null;
+            priority?: components["schemas"]["TicketPriority"];
+        };
+        BulkTicketOperationResult: {
+            /** Format: uuid */
+            ticketId: string;
+            success: boolean;
+            errorCode?: string;
+            message?: string;
+            ticket?: components["schemas"]["Ticket"];
+        };
+        BulkTicketOperationResponse: {
+            action: components["schemas"]["BulkTicketAction"];
+            total: number;
+            successCount: number;
+            errorCount: number;
+            results: components["schemas"]["BulkTicketOperationResult"][];
         };
         BoardResponse: {
             project: components["schemas"]["Project"];
@@ -980,6 +1518,55 @@ export interface components {
         ProjectActivityListResponse: {
             items: components["schemas"]["ProjectActivity"][];
         };
+        /** @enum {string} */
+        ProjectLiveEventType: "heartbeat" | "notifications.unread_count" | "notifications.changed" | "board.refresh" | "activity.changed";
+        ProjectLiveEvent: {
+            type: components["schemas"]["ProjectLiveEventType"];
+            /** Format: uuid */
+            projectId: string;
+            /** Format: date-time */
+            timestamp: string;
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @enum {string} */
+        NotificationType: "mention" | "assignment";
+        Notification: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            userId: string;
+            /** Format: uuid */
+            ticketId: string;
+            ticketKey: components["schemas"]["TicketKey"];
+            ticketTitle: string;
+            type: components["schemas"]["NotificationType"];
+            message: string;
+            /** Format: date-time */
+            readAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        NotificationListResponse: {
+            items: components["schemas"]["Notification"][];
+        };
+        NotificationUnreadCountResponse: {
+            count: number;
+        };
+        NotificationMarkAllResponse: {
+            updated: number;
+        };
+        NotificationPreferences: {
+            mentionEnabled: boolean;
+            assignmentEnabled: boolean;
+        };
+        NotificationPreferencesUpdateRequest: {
+            mentionEnabled?: boolean;
+            assignmentEnabled?: boolean;
+        };
         StatCount: {
             label: string;
             value: number;
@@ -987,10 +1574,164 @@ export interface components {
         ProjectStats: {
             totalOpen: number;
             totalClosed: number;
+            blockedOpen: number;
             byState: components["schemas"]["StatCount"][];
             byPriority: components["schemas"]["StatCount"][];
             byType: components["schemas"]["StatCount"][];
             byAssignee: components["schemas"]["StatCount"][];
+        };
+        Sprint: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            goal?: string;
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate: string;
+            ticketIds: string[];
+            committedTickets: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SprintListResponse: {
+            items: components["schemas"]["Sprint"][];
+        };
+        SprintCreateRequest: {
+            name: string;
+            goal?: string;
+            /** Format: date */
+            startDate: string;
+            /** Format: date */
+            endDate: string;
+            ticketIds?: string[];
+        };
+        /** @enum {string} */
+        CapacitySettingScope: "team" | "user";
+        CapacitySetting: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            scope: components["schemas"]["CapacitySettingScope"];
+            /** Format: uuid */
+            userId?: string | null;
+            label: string;
+            capacity: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CapacitySettingInput: {
+            scope: components["schemas"]["CapacitySettingScope"];
+            /** Format: uuid */
+            userId?: string | null;
+            label: string;
+            capacity: number;
+        };
+        CapacitySettingsReplaceRequest: {
+            items: components["schemas"]["CapacitySettingInput"][];
+        };
+        CapacitySettingsResponse: {
+            items: components["schemas"]["CapacitySetting"][];
+        };
+        SprintForecastSummary: {
+            sprint?: components["schemas"]["Sprint"];
+            committedTickets: number;
+            capacity: number;
+            projectedCompletion: number;
+            overCapacityDelta: number;
+            /** Format: float */
+            confidence: number;
+            iterations: number;
+        };
+        AiTriageSettings: {
+            enabled: boolean;
+        };
+        AiTriageSettingsUpdateRequest: {
+            enabled: boolean;
+        };
+        /** @enum {string} */
+        AiTriageField: "summary" | "priority" | "state" | "assignee";
+        AiTriageConfidence: {
+            /** Format: float */
+            summary: number;
+            /** Format: float */
+            priority: number;
+            /** Format: float */
+            state: number;
+            /** Format: float */
+            assignee: number;
+        };
+        AiTriageSuggestion: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            summary: string;
+            priority: components["schemas"]["TicketPriority"];
+            /** Format: uuid */
+            stateId: string;
+            /** Format: uuid */
+            assigneeId?: string | null;
+            promptVersion: string;
+            model: string;
+            confidence: components["schemas"]["AiTriageConfidence"];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AiTriageSuggestionCreateRequest: {
+            title: string;
+            description?: string;
+            type?: components["schemas"]["TicketType"];
+        };
+        AiTriageSuggestionDecisionRequest: {
+            acceptedFields: components["schemas"]["AiTriageField"][];
+            rejectedFields: components["schemas"]["AiTriageField"][];
+        };
+        AiTriageSuggestionDecision: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            suggestionId: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            actorId: string;
+            acceptedFields: components["schemas"]["AiTriageField"][];
+            rejectedFields: components["schemas"]["AiTriageField"][];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        DateValuePoint: {
+            /** Format: date */
+            date: string;
+            value: number;
+        };
+        StateOpenPoint: {
+            /** Format: date */
+            date: string;
+            counts: components["schemas"]["StatCount"][];
+        };
+        ProjectReportingSummary: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            throughputByDay: components["schemas"]["DateValuePoint"][];
+            /** Format: float */
+            averageCycleTimeHours: number;
+            openByState: components["schemas"]["StateOpenPoint"][];
+        };
+        ProjectReportingExportJson: {
+            /** Format: date-time */
+            generatedAt: string;
+            summary: components["schemas"]["ProjectReportingSummary"];
         };
         ErrorResponse: {
             error: string;
@@ -1575,6 +2316,7 @@ export interface operations {
                 stateId?: string;
                 assigneeId?: string;
                 q?: string;
+                blocked?: boolean;
                 limit?: number;
                 offset?: number;
             };
@@ -1619,6 +2361,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ticket"];
+                };
+            };
+        };
+    };
+    bulkTicketOperation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTicketOperationRequest"];
+            };
+        };
+        responses: {
+            /** @description Bulk operation completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkTicketOperationResponse"];
+                };
+            };
+        };
+    };
+    getProjectDependencyGraph: {
+        parameters: {
+            query?: {
+                rootTicketId?: string;
+                depth?: number;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dependency graph */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketDependencyGraphResponse"];
                 };
             };
         };
@@ -1697,6 +2490,75 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Ticket"];
                 };
+            };
+        };
+    };
+    listTicketDependencies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dependency list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketDependencyListResponse"];
+                };
+            };
+        };
+    };
+    createTicketDependency: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketDependencyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Dependency created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketDependency"];
+                };
+            };
+        };
+    };
+    deleteTicketDependency: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                dependencyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -1886,6 +2748,50 @@ export interface operations {
             };
         };
     };
+    listTicketIncidentTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Incident timeline events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentTimelineResponse"];
+                };
+            };
+        };
+    };
+    getTicketIncidentPostmortem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Markdown postmortem draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+        };
+    };
     deleteTicketComment: {
         parameters: {
             query?: never;
@@ -2037,6 +2943,318 @@ export interface operations {
             };
         };
     };
+    listProjectSprints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project sprint list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SprintListResponse"];
+                };
+            };
+        };
+    };
+    createProjectSprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SprintCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created sprint */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sprint"];
+                };
+            };
+        };
+    };
+    listProjectCapacitySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capacity settings list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapacitySettingsResponse"];
+                };
+            };
+        };
+    };
+    replaceProjectCapacitySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CapacitySettingsReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Capacity settings list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapacitySettingsResponse"];
+                };
+            };
+        };
+    };
+    getProjectSprintForecast: {
+        parameters: {
+            query?: {
+                sprintId?: string;
+                iterations?: number;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sprint forecast summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SprintForecastSummary"];
+                };
+            };
+        };
+    };
+    getProjectAiTriageSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project AI triage settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiTriageSettings"];
+                };
+            };
+        };
+    };
+    updateProjectAiTriageSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiTriageSettingsUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated project AI triage settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiTriageSettings"];
+                };
+            };
+        };
+    };
+    createAiTriageSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiTriageSuggestionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description AI triage suggestion generated */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiTriageSuggestion"];
+                };
+            };
+        };
+    };
+    recordAiTriageSuggestionDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiTriageSuggestionDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Decision recorded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiTriageSuggestionDecision"];
+                };
+            };
+        };
+    };
+    getProjectReportingSummary: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Project reporting summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectReportingSummary"];
+                };
+            };
+        };
+    };
+    exportProjectReportingSnapshot: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                format?: "json" | "csv";
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporting export */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectReportingExportJson"];
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    streamProjectEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching Protocols (WebSocket upgrade) */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listProjectActivities: {
         parameters: {
             query?: {
@@ -2061,6 +3279,146 @@ export interface operations {
             };
         };
     };
+    listNotifications: {
+        parameters: {
+            query?: {
+                limit?: number;
+                unreadOnly?: boolean;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationListResponse"];
+                };
+            };
+        };
+    };
+    getNotificationUnreadCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unread count */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationUnreadCountResponse"];
+                };
+            };
+        };
+    };
+    markNotificationRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                notificationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated notification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Notification"];
+                };
+            };
+        };
+    };
+    markAllNotificationsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Number of notifications updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationMarkAllResponse"];
+                };
+            };
+        };
+    };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+        };
+    };
+    updateNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferencesUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated notification preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+        };
+    };
     getMyProjectRole: {
         parameters: {
             query?: never;
@@ -2081,6 +3439,134 @@ export interface operations {
                     "application/json": {
                         role: components["schemas"]["ProjectRole"];
                     };
+                };
+            };
+        };
+    };
+    listBoardFilterPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preset list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardFilterPresetListResponse"];
+                };
+            };
+        };
+    };
+    createBoardFilterPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoardFilterPresetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Preset created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardFilterPreset"];
+                };
+            };
+        };
+    };
+    deleteBoardFilterPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateBoardFilterPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                presetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BoardFilterPresetUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Preset updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardFilterPreset"];
+                };
+            };
+        };
+    };
+    getSharedBoardFilterPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Shared preset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoardFilterPreset"];
+                };
+            };
+            /** @description Shared preset not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

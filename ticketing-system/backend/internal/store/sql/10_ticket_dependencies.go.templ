@@ -1,0 +1,165 @@
+{{define "ticket_dependencies_insert.sql"}}
+INSERT INTO ticket_dependencies (project_id, from_ticket_id, to_ticket_id, relation_type, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+{{end}}
+
+{{define "ticket_dependencies_delete_for_ticket.sql"}}
+DELETE FROM ticket_dependencies
+WHERE id = $1
+  AND project_id = $2
+  AND (from_ticket_id = $3 OR to_ticket_id = $3)
+{{end}}
+
+{{define "ticket_dependencies_list_for_ticket.sql"}}
+SELECT id, project_id, ticket_id, related_ticket_id, relation_type, created_at
+FROM (
+  SELECT
+    td.id,
+    td.project_id,
+    td.from_ticket_id AS ticket_id,
+    td.to_ticket_id AS related_ticket_id,
+    td.relation_type,
+    td.created_at
+  FROM ticket_dependencies td
+  WHERE td.project_id = $1
+    AND td.from_ticket_id = $2
+    AND td.relation_type IN ('blocks', 'related')
+
+  UNION ALL
+
+  SELECT
+    td.id,
+    td.project_id,
+    td.to_ticket_id AS ticket_id,
+    td.from_ticket_id AS related_ticket_id,
+    'blocked_by'::text AS relation_type,
+    td.created_at
+  FROM ticket_dependencies td
+  WHERE td.project_id = $1
+    AND td.to_ticket_id = $2
+    AND td.relation_type = 'blocks'
+
+  UNION ALL
+
+  SELECT
+    td.id,
+    td.project_id,
+    td.to_ticket_id AS ticket_id,
+    td.from_ticket_id AS related_ticket_id,
+    td.relation_type,
+    td.created_at
+  FROM ticket_dependencies td
+  WHERE td.project_id = $1
+    AND td.to_ticket_id = $2
+    AND td.relation_type = 'related'
+) deps
+ORDER BY created_at DESC
+{{end}}
+
+{{define "ticket_dependencies_get_for_ticket.sql"}}
+SELECT id, project_id, ticket_id, related_ticket_id, relation_type, created_at
+FROM (
+  SELECT
+    td.id,
+    td.project_id,
+    td.from_ticket_id AS ticket_id,
+    td.to_ticket_id AS related_ticket_id,
+    td.relation_type,
+    td.created_at
+  FROM ticket_dependencies td
+  WHERE td.id = $1
+    AND td.project_id = $2
+    AND td.from_ticket_id = $3
+    AND td.relation_type IN ('blocks', 'related')
+
+  UNION ALL
+
+  SELECT
+    td.id,
+    td.project_id,
+    td.to_ticket_id AS ticket_id,
+    td.from_ticket_id AS related_ticket_id,
+    'blocked_by'::text AS relation_type,
+    td.created_at
+  FROM ticket_dependencies td
+  WHERE td.id = $1
+    AND td.project_id = $2
+    AND td.to_ticket_id = $3
+    AND td.relation_type = 'blocks'
+
+  UNION ALL
+
+  SELECT
+    td.id,
+    td.project_id,
+    td.to_ticket_id AS ticket_id,
+    td.from_ticket_id AS related_ticket_id,
+    td.relation_type,
+    td.created_at
+  FROM ticket_dependencies td
+  WHERE td.id = $1
+    AND td.project_id = $2
+    AND td.to_ticket_id = $3
+    AND td.relation_type = 'related'
+) deps
+LIMIT 1
+{{end}}
+
+{{define "ticket_dependencies_blocks_path_exists.sql"}}
+WITH RECURSIVE walk(ticket_id) AS (
+  SELECT td.to_ticket_id
+  FROM ticket_dependencies td
+  WHERE td.project_id = $1
+    AND td.relation_type = 'blocks'
+    AND td.from_ticket_id = $2
+
+  UNION
+
+  SELECT td.to_ticket_id
+  FROM ticket_dependencies td
+  JOIN walk w ON td.from_ticket_id = w.ticket_id
+  WHERE td.project_id = $1
+    AND td.relation_type = 'blocks'
+)
+SELECT EXISTS(SELECT 1 FROM walk WHERE ticket_id = $3)
+{{end}}
+
+{{define "ticket_dependencies_nodes_from_root.sql"}}
+WITH RECURSIVE walk(ticket_id, depth) AS (
+  SELECT $2::uuid, 0
+
+  UNION
+
+  SELECT
+    CASE
+      WHEN td.from_ticket_id = walk.ticket_id THEN td.to_ticket_id
+      ELSE td.from_ticket_id
+    END AS ticket_id,
+    walk.depth + 1
+  FROM walk
+  JOIN ticket_dependencies td
+    ON td.project_id = $1
+   AND (td.from_ticket_id = walk.ticket_id OR td.to_ticket_id = walk.ticket_id)
+  WHERE walk.depth < $3
+)
+SELECT ticket_id, MIN(depth) AS depth
+FROM walk
+GROUP BY ticket_id
+{{end}}
+
+{{define "ticket_dependencies_edges_for_nodes.sql"}}
+SELECT id, project_id, from_ticket_id, to_ticket_id, relation_type, created_at
+FROM ticket_dependencies
+WHERE project_id = $1
+  AND from_ticket_id = ANY($2)
+  AND to_ticket_id = ANY($2)
+ORDER BY created_at ASC
+{{end}}
+
+{{define "ticket_dependencies_edges_for_project.sql"}}
+SELECT id, project_id, from_ticket_id, to_ticket_id, relation_type, created_at
+FROM ticket_dependencies
+WHERE project_id = $1
+ORDER BY created_at ASC
+{{end}}

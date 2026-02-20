@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import BoardView from "@/components/app/BoardView.vue";
 import NewTicketModal from "@/components/app/NewTicketModal.vue";
 import StoryModal from "@/components/app/StoryModal.vue";
@@ -7,18 +8,58 @@ import TicketModal from "@/components/app/TicketModal.vue";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
 import { useAdminStore } from "@/stores/admin";
+import { useI18n } from "@/lib/i18n";
+import {
+    createAiTriageSuggestion,
+    getProjectAiTriageSettings,
+    getTicketIncidentPostmortem,
+    listTicketIncidentTimeline,
+    recordAiTriageSuggestionDecision,
+} from "@/lib/api";
 import type { StoryRow } from "@/lib/types";
-import type { TicketResponse, TicketPriority, TicketType } from "@/lib/api";
+import type {
+    AiTriageSuggestion,
+    BulkTicketAction,
+    BulkTicketOperationRequest,
+    BoardFilter,
+    BoardFilterPreset,
+    DependencyRelationType,
+    IncidentTimelineItem,
+    TicketPriority,
+    TicketIncidentSeverity,
+    TicketResponse,
+    TicketType,
+} from "@/lib/api";
 
 const props = defineProps<{ projectId: string }>();
 
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
 const adminStore = useAdminStore();
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
 
 const showNewTicket = ref(false);
 const showStoryModal = ref(false);
 const boardSearch = ref("");
+const filterStateId = ref("");
+const filterAssigneeId = ref("");
+const filterPriority = ref("");
+const filterType = ref("");
+const filterBlocked = ref(false);
+const presetName = ref("");
+const activePresetId = ref("");
+const presetBusy = ref(false);
+const presetMessage = ref("");
+const bulkSelectMode = ref(false);
+const selectedTicketIds = ref<string[]>([]);
+const bulkAction = ref<BulkTicketAction>("move_state");
+const bulkStateId = ref("");
+const bulkAssigneeId = ref("");
+const bulkPriority = ref<TicketPriority>("medium");
+const bulkBusy = ref(false);
+const bulkMessage = ref("");
 const boardSearchInput = ref<HTMLInputElement | null>(null);
 const selectedTicket = ref<TicketResponse | null>(null);
 const ticketEditor = ref({
@@ -27,9 +68,19 @@ const ticketEditor = ref({
     priority: "medium" as TicketPriority,
     stateId: "",
     type: "feature" as TicketType,
+    incidentEnabled: false,
+    incidentSeverity: undefined as TicketIncidentSeverity | undefined,
+    incidentImpact: "",
+    incidentCommanderId: "",
 });
+const incidentTimeline = ref<IncidentTimelineItem[]>([]);
+const incidentTimelineLoading = ref(false);
 const ticketSaving = ref(false);
 const ticketError = ref("");
+const dependencyRelationDraft = ref<DependencyRelationType>("blocks");
+const dependencyTicketIdDraft = ref("");
+const dependencySaving = ref(false);
+const dependencyError = ref("");
 const commentDraft = ref("");
 const newTicket = ref({
     title: "",
@@ -39,6 +90,17 @@ const newTicket = ref({
     storyId: "",
     assignee: "",
     stateId: "",
+});
+const aiTriageEnabled = ref(false);
+const aiTriageLoading = ref(false);
+const aiTriageBusy = ref(false);
+const aiTriageError = ref("");
+const aiTriageSuggestion = ref<AiTriageSuggestion | null>(null);
+const aiFieldSelection = ref({
+    summary: true,
+    priority: true,
+    state: true,
+    assignee: false,
 });
 const newStory = ref({
     title: "",
@@ -60,11 +122,28 @@ const ticketActivities = computed(() => boardStore.ticketActivities);
 const commentSaving = computed(() => boardStore.commentSaving);
 const commentError = computed(() => boardStore.commentError);
 const ticketAttachments = computed(() => boardStore.ticketAttachments);
+const ticketDependencies = computed(() => boardStore.ticketDependencies);
+const ticketDependenciesLoading = computed(
+    () => boardStore.ticketDependenciesLoading,
+);
+const ticketDependencyGraph = computed(() => boardStore.ticketDependencyGraph);
+const ticketDependencyGraphLoading = computed(
+    () => boardStore.ticketDependencyGraphLoading,
+);
 const attachmentUploading = computed(() => boardStore.attachmentUploading);
 const attachmentError = computed(() => boardStore.attachmentError);
 const storiesCount = computed(() => boardStore.stories.length);
 const groupMembers = computed(() => adminStore.groupMembers);
 const canEditTickets = computed(() => boardStore.canEditTickets);
+const boardFilterPresets = computed(() => boardStore.boardFilterPresets);
+const boardFilterPresetsLoading = computed(
+    () => boardStore.boardFilterPresetsLoading,
+);
+const boardFilterPresetsError = computed(() => boardStore.boardFilterPresetsError);
+
+const persistedPresetKey = computed(
+    () => `board.active-preset.${props.projectId || "unknown"}`,
+);
 
 const priorities: TicketPriority[] = ["low", "medium", "high", "urgent"];
 const ticketTypes: TicketType[] = ["feature", "bug"];
@@ -92,10 +171,41 @@ const refreshBoard = async () => {
         await boardStore.loadBoard(props.projectId);
         await boardStore.loadStories(props.projectId);
         await boardStore.loadWebhooks(props.projectId);
+        await boardStore.loadBoardFilterPresets(props.projectId);
     } catch (err) {
         handleAuthError(err);
     }
 };
+
+const assigneeOptions = computed(() => {
+    const seen = new Map<string, string>();
+    tickets.value.forEach((ticket) => {
+        if (!ticket.assignee?.id || !ticket.assignee.name) return;
+        if (!seen.has(ticket.assignee.id)) {
+            seen.set(ticket.assignee.id, ticket.assignee.name);
+        }
+    });
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+});
+
+const currentFilters = computed<BoardFilter>(() => ({
+    q: boardSearch.value.trim() || undefined,
+    stateId: filterStateId.value || undefined,
+    assigneeId: filterAssigneeId.value || undefined,
+    priority: (filterPriority.value as TicketPriority) || undefined,
+    type: (filterType.value as TicketType) || undefined,
+    blocked: filterBlocked.value || undefined,
+}));
+
+const hasActiveFilter = computed(
+    () =>
+        !!currentFilters.value.q ||
+        !!currentFilters.value.stateId ||
+        !!currentFilters.value.assigneeId ||
+        !!currentFilters.value.priority ||
+        !!currentFilters.value.type ||
+        !!currentFilters.value.blocked,
+);
 
 const initializeWorkflow = async () => {
     if (!props.projectId) return;
@@ -168,10 +278,27 @@ const storyRows = computed<StoryRow[]>(() => {
     return Array.from(rows.values());
 });
 
-const hasActiveSearch = computed(() => boardSearch.value.trim().length > 0);
 const filteredStoryRows = computed<StoryRow[]>(() => {
     const query = boardSearch.value.trim().toLowerCase();
-    if (!query) {
+    const hasAssigneeFilter = !!filterAssigneeId.value;
+    const hasStateFilter = !!filterStateId.value;
+    const hasPriorityFilter = !!filterPriority.value;
+    const hasTypeFilter = !!filterType.value;
+    const hasBlockedFilter = !!filterBlocked.value;
+    const hasStructuredFilter =
+        hasAssigneeFilter ||
+        hasStateFilter ||
+        hasPriorityFilter ||
+        hasTypeFilter ||
+        hasBlockedFilter;
+    if (
+        !query &&
+        !hasAssigneeFilter &&
+        !hasStateFilter &&
+        !hasPriorityFilter &&
+        !hasTypeFilter &&
+        !hasBlockedFilter
+    ) {
         return storyRows.value;
     }
 
@@ -187,17 +314,47 @@ const filteredStoryRows = computed<StoryRow[]>(() => {
 
             states.value.forEach((state) => {
                 const filtered = (row.ticketsByState[state.id] || []).filter(
-                    (ticket) =>
-                        contains(ticket.key) ||
-                        contains(ticket.title) ||
-                        contains(ticket.description) ||
-                        contains(ticket.assignee?.name),
+                    (ticket) => {
+                        if (
+                            hasStateFilter &&
+                            ticket.stateId !== filterStateId.value
+                        ) {
+                            return false;
+                        }
+                        if (
+                            hasAssigneeFilter &&
+                            ticket.assignee?.id !== filterAssigneeId.value
+                        ) {
+                            return false;
+                        }
+                        if (
+                            hasPriorityFilter &&
+                            ticket.priority !== filterPriority.value
+                        ) {
+                            return false;
+                        }
+                        if (hasTypeFilter && ticket.type !== filterType.value) {
+                            return false;
+                        }
+                        if (hasBlockedFilter && !ticket.isBlocked) {
+                            return false;
+                        }
+                        if (!query) {
+                            return true;
+                        }
+                        return (
+                            contains(ticket.key) ||
+                            contains(ticket.title) ||
+                            contains(ticket.description) ||
+                            contains(ticket.assignee?.name)
+                        );
+                    },
                 );
                 nextBuckets[state.id] = filtered;
                 ticketMatches += filtered.length;
             });
 
-            if (storyMatches && ticketMatches === 0) {
+            if (query && storyMatches && ticketMatches === 0 && !hasStructuredFilter) {
                 states.value.forEach((state) => {
                     nextBuckets[state.id] = row.ticketsByState[state.id] || [];
                 });
@@ -237,6 +394,15 @@ const canSubmit = computed(
         newTicket.value.storyId.length > 0,
 );
 const canCreateStory = computed(() => newStory.value.title.trim().length > 0);
+const dependencyOptions = computed(() =>
+    tickets.value
+        .filter((ticket) => ticket.id !== selectedTicket.value?.id)
+        .map((ticket) => ({
+            id: ticket.id,
+            key: ticket.key,
+            title: ticket.title,
+        })),
+);
 
 const openTicket = async (ticket: TicketResponse) => {
     selectedTicket.value = ticket;
@@ -246,25 +412,113 @@ const openTicket = async (ticket: TicketResponse) => {
         priority: ticket.priority,
         stateId: ticket.stateId,
         type: ticket.type,
+        incidentEnabled: !!ticket.incidentEnabled,
+        incidentSeverity: ticket.incidentSeverity || undefined,
+        incidentImpact: ticket.incidentImpact || "",
+        incidentCommanderId: ticket.incidentCommanderId || "",
     };
     ticketError.value = "";
+    dependencyError.value = "";
+    dependencyRelationDraft.value = "blocks";
+    dependencyTicketIdDraft.value = "";
     commentDraft.value = "";
     boardStore.clearComments();
+    incidentTimeline.value = [];
+    incidentTimelineLoading.value = true;
     if (apiMode.value !== "demo") {
-        if (stories.value.length === 0 && props.projectId) {
-            await boardStore.loadStories(props.projectId);
+        try {
+            if (stories.value.length === 0 && props.projectId) {
+                await boardStore.loadStories(props.projectId);
+            }
+            await boardStore.loadTicketComments(ticket.id);
+            await boardStore.loadTicketActivities(ticket.id);
+            if (ticket.incidentEnabled) {
+                const timeline = await listTicketIncidentTimeline(ticket.id);
+                incidentTimeline.value = timeline.items;
+            } else {
+                incidentTimeline.value = [];
+            }
+            await boardStore.loadTicketAttachments(props.projectId, ticket.id);
+            await boardStore.loadTicketDependencies(ticket.id);
+            if (props.projectId) {
+                await boardStore.loadDependencyGraph(props.projectId, {
+                    rootTicketId: ticket.id,
+                    depth: 2,
+                });
+            }
+        } catch (err) {
+            handleAuthError(err);
         }
-        await boardStore.loadTicketComments(ticket.id);
-        await boardStore.loadTicketActivities(ticket.id);
-        await boardStore.loadTicketAttachments(props.projectId, ticket.id);
     }
+    incidentTimelineLoading.value = false;
 };
 
 const closeTicket = () => {
     selectedTicket.value = null;
     ticketError.value = "";
+    dependencyError.value = "";
+    dependencyRelationDraft.value = "blocks";
+    dependencyTicketIdDraft.value = "";
     commentDraft.value = "";
     boardStore.clearComments();
+    incidentTimeline.value = [];
+    incidentTimelineLoading.value = false;
+};
+
+const addDependencySubmit = async () => {
+    if (!selectedTicket.value || !dependencyTicketIdDraft.value) return;
+    dependencySaving.value = true;
+    dependencyError.value = "";
+    try {
+        await boardStore.createTicketDependency(selectedTicket.value.id, {
+            relatedTicketId: dependencyTicketIdDraft.value,
+            relationType: dependencyRelationDraft.value,
+        });
+        dependencyTicketIdDraft.value = "";
+        await boardStore.loadTicketDependencies(selectedTicket.value.id);
+        if (props.projectId) {
+            await Promise.all([
+                boardStore.loadDependencyGraph(props.projectId, {
+                    rootTicketId: selectedTicket.value.id,
+                    depth: 2,
+                }),
+                boardStore.loadBoard(props.projectId),
+                boardStore.loadDashboardStats(props.projectId),
+            ]);
+        }
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            dependencyError.value = "Unable to add dependency.";
+        }
+    } finally {
+        dependencySaving.value = false;
+    }
+};
+
+const deleteDependencySubmit = async (dependencyId: string) => {
+    if (!selectedTicket.value) return;
+    dependencySaving.value = true;
+    dependencyError.value = "";
+    try {
+        await boardStore.removeTicketDependency(selectedTicket.value.id, dependencyId);
+        await boardStore.loadTicketDependencies(selectedTicket.value.id);
+        if (props.projectId) {
+            await Promise.all([
+                boardStore.loadDependencyGraph(props.projectId, {
+                    rootTicketId: selectedTicket.value.id,
+                    depth: 2,
+                }),
+                boardStore.loadBoard(props.projectId),
+                boardStore.loadDashboardStats(props.projectId),
+            ]);
+        }
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            dependencyError.value = "Unable to remove dependency.";
+        }
+    } finally {
+        dependencySaving.value = false;
+    }
 };
 
 const saveTicket = async () => {
@@ -278,6 +532,18 @@ const saveTicket = async () => {
         priority: ticketEditor.value.priority,
         stateId: ticketEditor.value.stateId,
         type: ticketEditor.value.type,
+        incidentEnabled: ticketEditor.value.incidentEnabled,
+        incidentSeverity: ticketEditor.value.incidentEnabled
+            ? ticketEditor.value.incidentSeverity
+            : undefined,
+        incidentImpact: ticketEditor.value.incidentEnabled
+            ? ticketEditor.value.incidentImpact.trim() || undefined
+            : undefined,
+        incidentCommanderId:
+            ticketEditor.value.incidentEnabled &&
+            ticketEditor.value.incidentCommanderId
+                ? ticketEditor.value.incidentCommanderId
+                : undefined,
     };
 
     try {
@@ -377,6 +643,14 @@ const openNewTicket = async (stateId?: string, storyId?: string) => {
         assignee: "",
         stateId: stateId || fallbackState,
     };
+    aiTriageSuggestion.value = null;
+    aiTriageError.value = "";
+    aiFieldSelection.value = {
+        summary: true,
+        priority: true,
+        state: true,
+        assignee: false,
+    };
     showNewTicket.value = true;
     if (apiMode.value !== "demo" && props.projectId) {
         await boardStore.loadStories(props.projectId);
@@ -404,11 +678,333 @@ const openNewTicket = async (stateId?: string, storyId?: string) => {
         } catch (err) {
             // Silently fail group loading, it's not critical
         }
+        aiTriageLoading.value = true;
+        try {
+            const settings = await getProjectAiTriageSettings(props.projectId);
+            aiTriageEnabled.value = settings.enabled;
+        } catch {
+            aiTriageEnabled.value = false;
+        } finally {
+            aiTriageLoading.value = false;
+        }
     }
 };
 
-const clearBoardSearch = () => {
+const applyAiSuggestionToDraft = () => {
+    const suggestion = aiTriageSuggestion.value;
+    if (!suggestion) return;
+    const patch: Partial<typeof newTicket.value> = {};
+    if (aiFieldSelection.value.summary && suggestion.summary?.trim()) {
+        patch.description = suggestion.summary;
+    }
+    if (aiFieldSelection.value.priority) {
+        patch.priority = suggestion.priority;
+    }
+    if (aiFieldSelection.value.state) {
+        patch.stateId = suggestion.stateId;
+    }
+    if (aiFieldSelection.value.assignee && suggestion.assigneeId) {
+        patch.assignee = suggestion.assigneeId;
+    }
+    newTicket.value = { ...newTicket.value, ...patch };
+};
+
+const requestAiTriageSuggestion = async () => {
+    if (!props.projectId || aiTriageBusy.value || !aiTriageEnabled.value) return;
+    aiTriageBusy.value = true;
+    aiTriageError.value = "";
+    try {
+        const suggestion = await createAiTriageSuggestion(props.projectId, {
+            title: newTicket.value.title.trim(),
+            description: newTicket.value.description.trim() || undefined,
+            type: newTicket.value.type,
+        });
+        aiTriageSuggestion.value = suggestion;
+        applyAiSuggestionToDraft();
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            aiTriageError.value = "Unable to generate AI triage suggestion.";
+        }
+    } finally {
+        aiTriageBusy.value = false;
+    }
+};
+
+const toggleAiField = (
+    field: "summary" | "priority" | "state" | "assignee",
+    value: boolean,
+) => {
+    aiFieldSelection.value = { ...aiFieldSelection.value, [field]: value };
+    applyAiSuggestionToDraft();
+};
+
+const clearBoardFilters = () => {
     boardSearch.value = "";
+    filterStateId.value = "";
+    filterAssigneeId.value = "";
+    filterPriority.value = "";
+    filterType.value = "";
+    filterBlocked.value = false;
+    activePresetId.value = "";
+    presetName.value = "";
+};
+
+const toggleBulkSelectMode = () => {
+    bulkSelectMode.value = !bulkSelectMode.value;
+    if (!bulkSelectMode.value) {
+        selectedTicketIds.value = [];
+        bulkMessage.value = "";
+    }
+};
+
+const toggleTicketSelection = (ticketId: string) => {
+    if (selectedTicketIds.value.includes(ticketId)) {
+        selectedTicketIds.value = selectedTicketIds.value.filter((id) => id !== ticketId);
+        return;
+    }
+    selectedTicketIds.value = [...selectedTicketIds.value, ticketId];
+};
+
+const clearTicketSelection = () => {
+    selectedTicketIds.value = [];
+};
+
+const applyBulkOptimistic = (payload: BulkTicketOperationRequest) => {
+    if (payload.action === "delete") {
+        boardStore.tickets = boardStore.tickets.filter(
+            (ticket) => !payload.ticketIds.includes(ticket.id),
+        );
+        return;
+    }
+    if (payload.action === "move_state" && payload.stateId) {
+        boardStore.tickets = boardStore.tickets.map((ticket) =>
+            payload.ticketIds.includes(ticket.id)
+                ? { ...ticket, stateId: payload.stateId as string }
+                : ticket,
+        );
+        return;
+    }
+    if (payload.action === "assign" && payload.assigneeId) {
+        const assigneeName = assigneeOptions.value.find(
+            (item) => item.id === payload.assigneeId,
+        )?.name;
+        boardStore.tickets = boardStore.tickets.map((ticket) =>
+            payload.ticketIds.includes(ticket.id)
+                ? {
+                      ...ticket,
+                      assigneeId: payload.assigneeId,
+                      assignee: assigneeName
+                          ? { id: payload.assigneeId as string, name: assigneeName }
+                          : ticket.assignee,
+                  }
+                : ticket,
+        );
+        return;
+    }
+    if (payload.action === "set_priority" && payload.priority) {
+        boardStore.tickets = boardStore.tickets.map((ticket) =>
+            payload.ticketIds.includes(ticket.id)
+                ? { ...ticket, priority: payload.priority as TicketPriority }
+                : ticket,
+        );
+    }
+};
+
+const applyBulkAction = async () => {
+    if (!props.projectId || bulkBusy.value) return;
+    if (!bulkSelectMode.value || selectedTicketIds.value.length === 0) {
+        bulkMessage.value = "Select at least one ticket.";
+        return;
+    }
+
+    const payload: BulkTicketOperationRequest = {
+        action: bulkAction.value,
+        ticketIds: [...selectedTicketIds.value],
+    };
+    if (bulkAction.value === "move_state") {
+        if (!bulkStateId.value) {
+            bulkMessage.value = "Choose a target state.";
+            return;
+        }
+        payload.stateId = bulkStateId.value;
+    } else if (bulkAction.value === "assign") {
+        if (!bulkAssigneeId.value) {
+            bulkMessage.value = "Choose an assignee.";
+            return;
+        }
+        payload.assigneeId = bulkAssigneeId.value;
+    } else if (bulkAction.value === "set_priority") {
+        payload.priority = bulkPriority.value;
+    }
+
+    const snapshot = boardStore.tickets.map((ticket) => ({ ...ticket })) as TicketResponse[];
+    bulkBusy.value = true;
+    bulkMessage.value = "";
+    applyBulkOptimistic(payload);
+
+    try {
+        const result = await boardStore.bulkTicketOperation(props.projectId, payload);
+        if (result.errorCount === 0) {
+            bulkMessage.value = `Updated ${result.successCount} ticket(s).`;
+            selectedTicketIds.value = [];
+            return;
+        }
+
+        const reconciled = [...snapshot];
+        for (const item of result.results) {
+            if (!item.success) continue;
+            if (result.action === "delete") {
+                const idx = reconciled.findIndex((ticket) => ticket.id === item.ticketId);
+                if (idx >= 0) reconciled.splice(idx, 1);
+                continue;
+            }
+            if (!item.ticket) continue;
+            const idx = reconciled.findIndex((ticket) => ticket.id === item.ticketId);
+            if (idx >= 0) {
+                reconciled[idx] = item.ticket;
+            }
+        }
+        boardStore.tickets = reconciled;
+        const failed = result.results
+            .filter((item) => !item.success)
+            .map((item) => item.ticketId);
+        selectedTicketIds.value = failed;
+        bulkMessage.value = `Updated ${result.successCount}/${result.total}. ${result.errorCount} failed.`;
+    } catch (err) {
+        boardStore.tickets = snapshot;
+        if (!handleAuthError(err)) {
+            bulkMessage.value = "Bulk operation failed.";
+        }
+    } finally {
+        bulkBusy.value = false;
+    }
+};
+
+const applyPreset = (preset: BoardFilterPreset) => {
+    presetName.value = preset.name;
+    activePresetId.value = preset.id;
+    boardSearch.value = preset.filters.q || "";
+    filterStateId.value = preset.filters.stateId || "";
+    filterAssigneeId.value = preset.filters.assigneeId || "";
+    filterPriority.value = preset.filters.priority || "";
+    filterType.value = preset.filters.type || "";
+    filterBlocked.value = !!preset.filters.blocked;
+    localStorage.setItem(persistedPresetKey.value, preset.id);
+};
+
+const onPresetChange = () => {
+    const preset = boardFilterPresets.value.find(
+        (item) => item.id === activePresetId.value,
+    );
+    if (!preset) return;
+    applyPreset(preset);
+};
+
+const savePreset = async () => {
+    if (!props.projectId || presetBusy.value) return;
+    const name = presetName.value.trim();
+    if (!name) {
+        presetMessage.value = "Enter a preset name.";
+        return;
+    }
+    presetBusy.value = true;
+    presetMessage.value = "";
+    try {
+        const created = await boardStore.createBoardFilterPreset(props.projectId, {
+            name,
+            filters: currentFilters.value,
+        });
+        applyPreset(created);
+        presetMessage.value = "Preset saved.";
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            presetMessage.value = "Unable to save preset.";
+        }
+    } finally {
+        presetBusy.value = false;
+    }
+};
+
+const renamePreset = async () => {
+    if (!props.projectId || !activePresetId.value || presetBusy.value) return;
+    const name = presetName.value.trim();
+    if (!name) {
+        presetMessage.value = "Enter a preset name.";
+        return;
+    }
+    presetBusy.value = true;
+    presetMessage.value = "";
+    try {
+        const updated = await boardStore.updateBoardFilterPreset(
+            props.projectId,
+            activePresetId.value,
+            { name, filters: currentFilters.value },
+        );
+        applyPreset(updated);
+        presetMessage.value = "Preset renamed.";
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            presetMessage.value = "Unable to rename preset.";
+        }
+    } finally {
+        presetBusy.value = false;
+    }
+};
+
+const deletePreset = async () => {
+    if (!props.projectId || !activePresetId.value || presetBusy.value) return;
+    presetBusy.value = true;
+    presetMessage.value = "";
+    try {
+        await boardStore.deleteBoardFilterPreset(props.projectId, activePresetId.value);
+        clearBoardFilters();
+        localStorage.removeItem(persistedPresetKey.value);
+        presetMessage.value = "Preset deleted.";
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            presetMessage.value = "Unable to delete preset.";
+        }
+    } finally {
+        presetBusy.value = false;
+    }
+};
+
+const sharePreset = async () => {
+    if (!props.projectId || !activePresetId.value || presetBusy.value) return;
+    presetBusy.value = true;
+    presetMessage.value = "";
+    try {
+        const updated = await boardStore.updateBoardFilterPreset(
+            props.projectId,
+            activePresetId.value,
+            { generateShareToken: true },
+        );
+        applyPreset(updated);
+        if (updated.shareToken) {
+            const origin = window.location.origin;
+            const url = `${origin}/projects/${props.projectId}/board?share=${encodeURIComponent(updated.shareToken)}`;
+            let copied = false;
+            try {
+                await navigator.clipboard.writeText(url);
+                copied = true;
+            } catch {
+                copied = false;
+            }
+            await router.replace({
+                path: `/projects/${props.projectId}/board`,
+                query: { share: updated.shareToken },
+            });
+            presetMessage.value = copied
+                ? "Share link copied."
+                : "Share link generated.";
+        }
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            presetMessage.value = "Unable to generate share link.";
+        }
+    } finally {
+        presetBusy.value = false;
+    }
 };
 
 const shouldHandleGlobalShortcut = (event: KeyboardEvent) => {
@@ -480,6 +1076,25 @@ const deleteStorySubmit = async (storyId: string) => {
 const createTicketSubmit = async () => {
     if (!canSubmit.value || !props.projectId) return;
     try {
+        if (aiTriageSuggestion.value) {
+            const accepted: Array<"summary" | "priority" | "state" | "assignee"> = [];
+            const rejected: Array<"summary" | "priority" | "state" | "assignee"> = [];
+            (["summary", "priority", "state", "assignee"] as const).forEach((field) => {
+                if (aiFieldSelection.value[field]) {
+                    accepted.push(field);
+                } else {
+                    rejected.push(field);
+                }
+            });
+            await recordAiTriageSuggestionDecision(
+                props.projectId,
+                aiTriageSuggestion.value.id,
+                {
+                    acceptedFields: accepted,
+                    rejectedFields: rejected,
+                },
+            );
+        }
         await boardStore.createTicket(props.projectId, {
             title: newTicket.value.title.trim(),
             description: newTicket.value.description.trim(),
@@ -573,13 +1188,62 @@ const updateCommentDraft = (value: string) => {
     commentDraft.value = value;
 };
 
+const exportIncidentPostmortem = async () => {
+    if (!selectedTicket.value) return;
+    const markdown = await getTicketIncidentPostmortem(selectedTicket.value.id);
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${selectedTicket.value.key}-postmortem.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
+const openDependencyTicketFromGraph = async (ticketId: string) => {
+    if (!ticketId) return;
+    const ticket = tickets.value.find((item) => item.id === ticketId);
+    if (ticket) {
+        await openTicket(ticket);
+    }
+};
+
 const updateNewStory = (value: typeof newStory.value) => {
     newStory.value = value;
 };
 
 onMounted(() => {
     window.addEventListener("keydown", onGlobalKeydown);
-    refreshBoard();
+    refreshBoard().then(async () => {
+        if (!props.projectId) return;
+        const shareToken =
+            typeof route.query.share === "string" ? route.query.share : "";
+        if (shareToken) {
+            try {
+                const shared = await boardStore.resolveSharedBoardFilterPreset(
+                    props.projectId,
+                    shareToken,
+                );
+                applyPreset(shared);
+                presetMessage.value = `Applied shared preset "${shared.name}".`;
+                return;
+            } catch (err) {
+                if (!handleAuthError(err)) {
+                    presetMessage.value = "Shared preset not found.";
+                }
+            }
+        }
+        const savedId = localStorage.getItem(persistedPresetKey.value);
+        if (!savedId) return;
+        const preset = boardFilterPresets.value.find((item) => item.id === savedId);
+        if (preset) {
+            applyPreset(preset);
+        } else {
+            localStorage.removeItem(persistedPresetKey.value);
+        }
+    });
 });
 
 onUnmounted(() => {
@@ -602,8 +1266,9 @@ watch(
                 <input
                     ref="boardSearchInput"
                     v-model="boardSearch"
+                    data-testid="board.filter-search-input"
                     type="text"
-                    placeholder="Filter tickets..."
+                    :placeholder="t('board.search.placeholder')"
                     class="w-full rounded-xl border border-input bg-background pl-3 pr-16 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
                 <div
@@ -620,13 +1285,194 @@ watch(
                 </div>
             </div>
             <button
-                v-if="hasActiveSearch"
+                v-if="hasActiveFilter"
+                data-testid="board.filter-clear-button"
                 class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground transition hover:border-foreground hover:text-foreground whitespace-nowrap"
-                @click="clearBoardSearch"
+                @click="clearBoardFilters"
             >
-                Clear
+                {{ t("common.clear") }}
             </button>
         </div>
+        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-5">
+            <select
+                v-model="filterStateId"
+                data-testid="board.filter-state-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option value="">{{ t("board.filter.allStates") }}</option>
+                <option v-for="state in states" :key="state.id" :value="state.id">
+                    {{ state.name }}
+                </option>
+            </select>
+            <select
+                v-model="filterAssigneeId"
+                data-testid="board.filter-assignee-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option value="">{{ t("board.filter.allAssignees") }}</option>
+                <option
+                    v-for="assignee in assigneeOptions"
+                    :key="assignee.id"
+                    :value="assignee.id"
+                >
+                    {{ assignee.name }}
+                </option>
+            </select>
+            <select
+                v-model="filterPriority"
+                data-testid="board.filter-priority-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option value="">{{ t("board.filter.allPriorities") }}</option>
+                <option v-for="priority in priorities" :key="priority" :value="priority">
+                    {{ priority }}
+                </option>
+            </select>
+            <select
+                v-model="filterType"
+                data-testid="board.filter-type-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option value="">{{ t("board.filter.allTypes") }}</option>
+                <option v-for="ticketType in ticketTypes" :key="ticketType" :value="ticketType">
+                    {{ ticketType }}
+                </option>
+            </select>
+            <label
+                class="flex items-center gap-2 rounded-xl border border-input bg-background px-3 py-2 text-sm"
+            >
+                <input
+                    v-model="filterBlocked"
+                    data-testid="board.filter-blocked-checkbox"
+                    type="checkbox"
+                />
+                {{ t("board.filter.blockedOnly") }}
+            </label>
+        </div>
+        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto_auto]">
+            <select
+                v-model="activePresetId"
+                data-testid="board.preset-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                @change="onPresetChange"
+            >
+                <option value="">{{ t("board.filter.selectPreset") }}</option>
+                <option
+                    v-for="preset in boardFilterPresets"
+                    :key="preset.id"
+                    :value="preset.id"
+                >
+                    {{ preset.name }}
+                </option>
+            </select>
+            <input
+                v-model="presetName"
+                type="text"
+                data-testid="board.preset-name-input"
+                :placeholder="t('board.filter.presetName')"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <button
+                data-testid="board.preset-save-button"
+                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                :disabled="presetBusy"
+                @click="savePreset"
+            >
+                {{ t("board.preset.save") }}
+            </button>
+            <button
+                data-testid="board.preset-rename-button"
+                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
+                :disabled="presetBusy || !activePresetId"
+                @click="renamePreset"
+            >
+                {{ t("board.preset.rename") }}
+            </button>
+            <button
+                data-testid="board.preset-delete-button"
+                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
+                :disabled="presetBusy || !activePresetId"
+                @click="deletePreset"
+            >
+                {{ t("board.preset.delete") }}
+            </button>
+            <button
+                data-testid="board.preset-share-button"
+                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
+                :disabled="presetBusy || !activePresetId"
+                @click="sharePreset"
+            >
+                {{ t("board.preset.share") }}
+            </button>
+        </div>
+        <p
+            v-if="presetMessage || boardFilterPresetsLoading || boardFilterPresetsError"
+            class="mt-2 text-xs text-muted-foreground"
+        >
+            {{ presetMessage || (boardFilterPresetsLoading ? t("board.filter.loadingPresets") : boardFilterPresetsError) }}
+        </p>
+        <div v-if="canEditTickets && bulkSelectMode" class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <select
+                v-model="bulkAction"
+                data-testid="board.bulk-action-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option value="move_state">{{ t("board.bulk.moveState") }}</option>
+                <option value="assign">{{ t("board.bulk.assignUser") }}</option>
+                <option value="set_priority">{{ t("board.bulk.setPriority") }}</option>
+                <option value="delete">{{ t("board.bulk.deleteTickets") }}</option>
+            </select>
+            <select
+                v-if="bulkAction === 'move_state'"
+                v-model="bulkStateId"
+                data-testid="board.bulk-state-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option value="">{{ t("board.bulk.selectState") }}</option>
+                <option v-for="state in states" :key="state.id" :value="state.id">
+                    {{ state.name }}
+                </option>
+            </select>
+            <select
+                v-else-if="bulkAction === 'assign'"
+                v-model="bulkAssigneeId"
+                data-testid="board.bulk-assignee-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option value="">{{ t("board.bulk.selectAssignee") }}</option>
+                <option
+                    v-for="assignee in assigneeOptions"
+                    :key="assignee.id"
+                    :value="assignee.id"
+                >
+                    {{ assignee.name }}
+                </option>
+            </select>
+            <select
+                v-else-if="bulkAction === 'set_priority'"
+                v-model="bulkPriority"
+                data-testid="board.bulk-priority-select"
+                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+                <option v-for="priority in priorities" :key="priority" :value="priority">
+                    {{ priority }}
+                </option>
+            </select>
+            <div v-else class="rounded-xl border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+                {{ t("board.bulk.deleteHint") }}
+            </div>
+            <button
+                data-testid="board.bulk-apply-button"
+                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
+                :disabled="bulkBusy || !bulkSelectMode || selectedTicketIds.length === 0"
+                @click="applyBulkAction"
+            >
+                {{ bulkBusy ? t("board.bulk.applying") : t("board.bulk.apply") }}
+            </button>
+        </div>
+        <p v-if="bulkMessage" data-testid="board.bulk-message" class="mt-2 text-xs text-muted-foreground">
+            {{ bulkMessage }}
+        </p>
     </section>
 
     <section
@@ -647,14 +1493,19 @@ watch(
         :workflow-setup-busy="workflowSetupBusy"
         :workflow-setup-error="workflowSetupError"
         :can-edit-tickets="canEditTickets"
-        :has-active-filter="hasActiveSearch"
+        :bulk-select-mode="bulkSelectMode"
+        :selected-ticket-ids="selectedTicketIds"
+        :has-active-filter="hasActiveFilter"
         :search-query="boardSearch"
         :on-initialize-workflow="initializeWorkflow"
         :on-open-story-modal="openStoryModal"
+        :on-toggle-bulk-select-mode="toggleBulkSelectMode"
+        :on-toggle-ticket-selection="toggleTicketSelection"
+        :on-clear-ticket-selection="clearTicketSelection"
         :on-delete-story="deleteStorySubmit"
         :on-open-ticket="openTicket"
         :on-open-new-ticket="openNewTicket"
-        :on-clear-filter="clearBoardSearch"
+        :on-clear-filter="clearBoardFilters"
         :on-drag-start="onDragStart"
         :on-drag-end="onDragEnd"
         :on-drop-column="onDropColumn"
@@ -671,9 +1522,17 @@ watch(
         :ticket-types="ticketTypes"
         :can-submit="canSubmit"
         :group-members="groupMembers"
+        :ai-triage-enabled="aiTriageEnabled"
+        :ai-triage-loading="aiTriageLoading"
+        :ai-triage-busy="aiTriageBusy"
+        :ai-triage-error="aiTriageError"
+        :ai-triage-suggestion="aiTriageSuggestion"
+        :ai-field-selection="aiFieldSelection"
         @update:ticket="updateNewTicket"
         @close="closeNewTicket"
         @create="createTicketSubmit"
+        @request-ai-triage="requestAiTriageSuggestion"
+        @toggle-ai-field="toggleAiField"
     />
 
     <StoryModal
@@ -706,15 +1565,33 @@ watch(
         :attachments="ticketAttachments"
         :attachment-uploading="attachmentUploading"
         :attachment-error="attachmentError"
+        :dependencies="ticketDependencies"
+        :dependencies-loading="ticketDependenciesLoading"
+        :dependency-graph="ticketDependencyGraph"
+        :dependency-graph-loading="ticketDependencyGraphLoading"
+        :dependency-options="dependencyOptions"
+        :dependency-relation-draft="dependencyRelationDraft"
+        :dependency-ticket-id-draft="dependencyTicketIdDraft"
+        :dependency-saving="dependencySaving"
+        :dependency-error="dependencyError"
+        :incident-timeline="incidentTimeline"
+        :incident-timeline-loading="incidentTimelineLoading"
+        :assignee-options="assigneeOptions"
         :project-id="props.projectId"
         :ticket-id="selectedTicket?.id || ''"
         :read-only="!canEditTickets"
         @update:editor="updateTicketEditor"
         @update:commentDraft="updateCommentDraft"
+        @update:dependencyRelationDraft="(value) => (dependencyRelationDraft = value)"
+        @update:dependencyTicketIdDraft="(value) => (dependencyTicketIdDraft = value)"
         @close="closeTicket"
         @save="saveTicket"
         @delete="deleteTicketSubmit"
         @add-comment="addCommentSubmit"
+        @add-dependency="addDependencySubmit"
+        @delete-dependency="deleteDependencySubmit"
+        @export-postmortem="exportIncidentPostmortem"
+        @open-dependency-ticket="openDependencyTicketFromGraph"
         @upload-attachment="uploadAttachmentHandler"
         @delete-attachment="deleteAttachmentHandler"
     />

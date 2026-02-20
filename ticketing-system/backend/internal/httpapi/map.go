@@ -31,6 +31,10 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 	projectKey := ProjectKey(ticket.ProjectKey)
 	var assigneeID *openapi_types.UUID
 	var assignee *userSummary
+	var incidentCommanderID *openapi_types.UUID
+	var incidentCommander *userSummary
+	var incidentSeverity *TicketIncidentSeverity
+	var incidentImpact *string
 	var description *string
 
 	if ticket.Description != "" {
@@ -43,6 +47,20 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 	}
 	if ticket.AssigneeID != nil && ticket.AssigneeName != nil {
 		assignee = &userSummary{Id: toOpenapiUUID(*ticket.AssigneeID), Name: *ticket.AssigneeName}
+	}
+	if ticket.IncidentCommanderID != nil {
+		value := toOpenapiUUID(*ticket.IncidentCommanderID)
+		incidentCommanderID = &value
+	}
+	if ticket.IncidentCommanderID != nil && ticket.IncidentCommanderName != nil {
+		incidentCommander = &userSummary{Id: toOpenapiUUID(*ticket.IncidentCommanderID), Name: *ticket.IncidentCommanderName}
+	}
+	if ticket.IncidentSeverity != nil {
+		sev := TicketIncidentSeverity(*ticket.IncidentSeverity)
+		incidentSeverity = &sev
+	}
+	if ticket.IncidentImpact != nil && *ticket.IncidentImpact != "" {
+		incidentImpact = ticket.IncidentImpact
 	}
 
 	state := workflowState{
@@ -65,24 +83,31 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 	}
 
 	return ticketResponse{
-		Id:          toOpenapiUUID(ticket.ID),
-		Key:         TicketKey(ticket.Key),
-		Number:      ticket.Number,
-		Type:        TicketType(ticket.Type),
-		ProjectId:   projectID,
-		ProjectKey:  projectKey,
-		StoryId:     storyOapiID,
-		Story:       story,
-		Title:       ticket.Title,
-		Description: description,
-		StateId:     toOpenapiUUID(ticket.StateID),
-		State:       &state,
-		AssigneeId:  assigneeID,
-		Assignee:    assignee,
-		Priority:    TicketPriority(ticket.Priority),
-		Position:    float32(ticket.Position),
-		CreatedAt:   ticket.CreatedAt,
-		UpdatedAt:   ticket.UpdatedAt,
+		Id:                  toOpenapiUUID(ticket.ID),
+		Key:                 TicketKey(ticket.Key),
+		Number:              ticket.Number,
+		Type:                TicketType(ticket.Type),
+		ProjectId:           projectID,
+		ProjectKey:          projectKey,
+		StoryId:             storyOapiID,
+		Story:               story,
+		Title:               ticket.Title,
+		Description:         description,
+		StateId:             toOpenapiUUID(ticket.StateID),
+		State:               &state,
+		AssigneeId:          assigneeID,
+		Assignee:            assignee,
+		Priority:            TicketPriority(ticket.Priority),
+		IncidentEnabled:     ticket.IncidentEnabled,
+		IncidentSeverity:    incidentSeverity,
+		IncidentImpact:      incidentImpact,
+		IncidentCommanderId: incidentCommanderID,
+		IncidentCommander:   incidentCommander,
+		Position:            float32(ticket.Position),
+		BlockedByCount:      ticket.BlockedByCount,
+		IsBlocked:           ticket.IsBlocked,
+		CreatedAt:           ticket.CreatedAt,
+		UpdatedAt:           ticket.UpdatedAt,
 	}
 }
 
@@ -154,7 +179,7 @@ func mapProjectGroup(group store.ProjectGroup) projectGroupResponse {
 
 func permissionsForRole(role ProjectRole) []ProjectPermission {
 	switch role {
-	case ProjectRoleAdmin:
+	case ProjectRole("admin"):
 		return []ProjectPermission{
 			ProjectPermissionAdmin,
 			ProjectPermissionRead,
@@ -162,7 +187,7 @@ func permissionsForRole(role ProjectRole) []ProjectPermission {
 			ProjectPermissionUpdate,
 			ProjectPermissionDelete,
 		}
-	case ProjectRoleContributor:
+	case ProjectRole("contributor"):
 		return []ProjectPermission{
 			ProjectPermissionRead,
 			ProjectPermissionCreate,
@@ -268,10 +293,140 @@ func mapProjectStats(stats store.ProjectStats) projectStatsResponse {
 	return projectStatsResponse{
 		TotalOpen:   stats.TotalOpen,
 		TotalClosed: stats.TotalClosed,
+		BlockedOpen: stats.BlockedOpen,
 		ByState:     mapStatCounts(stats.ByState),
 		ByPriority:  mapStatCounts(stats.ByPriority),
 		ByType:      mapStatCounts(stats.ByType),
 		ByAssignee:  mapStatCounts(stats.ByAssignee),
+	}
+}
+
+func mapSprint(item store.Sprint) sprintResponse {
+	out := sprintResponse{
+		Id:               toOpenapiUUID(item.ID),
+		ProjectId:        toOpenapiUUID(item.ProjectID),
+		Name:             item.Name,
+		StartDate:        openapi_types.Date{Time: item.StartDate},
+		EndDate:          openapi_types.Date{Time: item.EndDate},
+		TicketIds:        make([]openapi_types.UUID, 0, len(item.TicketIDs)),
+		CommittedTickets: item.CommittedTickets,
+		CreatedAt:        item.CreatedAt,
+		UpdatedAt:        item.UpdatedAt,
+	}
+	for _, id := range item.TicketIDs {
+		out.TicketIds = append(out.TicketIds, toOpenapiUUID(id))
+	}
+	if item.Goal != nil {
+		out.Goal = item.Goal
+	}
+	return out
+}
+
+func mapCapacitySetting(item store.CapacitySetting) capacitySettingResponse {
+	out := capacitySettingResponse{
+		Id:        toOpenapiUUID(item.ID),
+		ProjectId: toOpenapiUUID(item.ProjectID),
+		Scope:     CapacitySettingScope(item.Scope),
+		Label:     item.Label,
+		Capacity:  item.Capacity,
+		CreatedAt: item.CreatedAt,
+		UpdatedAt: item.UpdatedAt,
+	}
+	if item.UserID != nil {
+		value := toOpenapiUUID(*item.UserID)
+		out.UserId = &value
+	}
+	return out
+}
+
+func mapSprintForecastSummary(item store.SprintForecastSummary) sprintForecastSummaryResponse {
+	out := sprintForecastSummaryResponse{
+		CommittedTickets:    item.CommittedTickets,
+		Capacity:            item.Capacity,
+		ProjectedCompletion: item.ProjectedCompletion,
+		OverCapacityDelta:   item.OverCapacityDelta,
+		Confidence:          float32(item.Confidence),
+		Iterations:          item.Iterations,
+	}
+	if item.Sprint != nil {
+		mapped := mapSprint(*item.Sprint)
+		out.Sprint = &mapped
+	}
+	return out
+}
+
+func mapAiTriageSettings(item store.AiTriageSettings) aiTriageSettingsResponse {
+	return aiTriageSettingsResponse{
+		Enabled: item.Enabled,
+	}
+}
+
+func mapAiTriageSuggestion(item store.AiTriageSuggestion) aiTriageSuggestionResponse {
+	out := aiTriageSuggestionResponse{
+		Id:            toOpenapiUUID(item.ID),
+		ProjectId:     toOpenapiUUID(item.ProjectID),
+		Summary:       item.Summary,
+		Priority:      TicketPriority(item.Priority),
+		StateId:       toOpenapiUUID(item.StateID),
+		PromptVersion: item.PromptVersion,
+		Model:         item.Model,
+		Confidence: AiTriageConfidence{
+			Summary:  item.ConfidenceSummary,
+			Priority: item.ConfidencePriority,
+			State:    item.ConfidenceState,
+			Assignee: item.ConfidenceAssignee,
+		},
+		CreatedAt: item.CreatedAt,
+	}
+	if item.AssigneeID != nil {
+		value := toOpenapiUUID(*item.AssigneeID)
+		out.AssigneeId = &value
+	}
+	return out
+}
+
+func mapAiTriageSuggestionDecision(item store.AiTriageSuggestionDecision) aiTriageSuggestionDecisionResponse {
+	out := aiTriageSuggestionDecisionResponse{
+		Id:             toOpenapiUUID(item.ID),
+		SuggestionId:   toOpenapiUUID(item.SuggestionID),
+		ProjectId:      toOpenapiUUID(item.ProjectID),
+		ActorId:        toOpenapiUUID(item.ActorID),
+		AcceptedFields: make([]AiTriageField, 0, len(item.AcceptedFields)),
+		RejectedFields: make([]AiTriageField, 0, len(item.RejectedFields)),
+		CreatedAt:      item.CreatedAt,
+	}
+	for _, field := range item.AcceptedFields {
+		out.AcceptedFields = append(out.AcceptedFields, AiTriageField(field))
+	}
+	for _, field := range item.RejectedFields {
+		out.RejectedFields = append(out.RejectedFields, AiTriageField(field))
+	}
+	return out
+}
+
+func mapProjectReportingSummary(report store.ProjectReportingSummary) ProjectReportingSummary {
+	throughput := make([]DateValuePoint, 0, len(report.ThroughputByDay))
+	for _, point := range report.ThroughputByDay {
+		throughput = append(throughput, DateValuePoint{
+			Date:  openapi_types.Date{Time: point.Date},
+			Value: point.Value,
+		})
+	}
+
+	openByState := make([]StateOpenPoint, 0, len(report.OpenByState))
+	for _, point := range report.OpenByState {
+		openByState = append(openByState, StateOpenPoint{
+			Date:   openapi_types.Date{Time: point.Date},
+			Counts: mapStatCounts(point.Counts),
+		})
+	}
+
+	return ProjectReportingSummary{
+		From:                  openapi_types.Date{Time: report.From},
+		To:                    openapi_types.Date{Time: report.To},
+		ThroughputByDay:       throughput,
+		AverageCycleTimeHours: float32(report.AverageCycleTimeHours),
+		OpenByState:           openByState,
 	}
 }
 
@@ -293,5 +448,95 @@ func mapAttachment(att store.Attachment) attachmentResponse {
 		UploadedBy:     toOpenapiUUID(att.UploadedBy),
 		UploadedByName: att.UploadedByName,
 		CreatedAt:      att.CreatedAt,
+	}
+}
+
+func mapBoardFilter(filter store.BoardFilter) boardFilter {
+	out := boardFilter{}
+	if filter.AssigneeID != nil {
+		id := toOpenapiUUID(*filter.AssigneeID)
+		out.AssigneeId = &id
+	}
+	if filter.StateID != nil {
+		id := toOpenapiUUID(*filter.StateID)
+		out.StateId = &id
+	}
+	if filter.Priority != nil {
+		priority := TicketPriority(*filter.Priority)
+		out.Priority = &priority
+	}
+	if filter.Type != nil {
+		ticketType := TicketType(*filter.Type)
+		out.Type = &ticketType
+	}
+	if filter.Query != nil {
+		out.Q = filter.Query
+	}
+	if filter.Blocked != nil {
+		out.Blocked = filter.Blocked
+	}
+	return out
+}
+
+func mapStoreBoardFilter(filter boardFilter) store.BoardFilter {
+	out := store.BoardFilter{}
+	if filter.AssigneeId != nil {
+		id := uuid.UUID(*filter.AssigneeId)
+		out.AssigneeID = &id
+	}
+	if filter.StateId != nil {
+		id := uuid.UUID(*filter.StateId)
+		out.StateID = &id
+	}
+	if filter.Priority != nil {
+		value := string(*filter.Priority)
+		out.Priority = &value
+	}
+	if filter.Type != nil {
+		value := string(*filter.Type)
+		out.Type = &value
+	}
+	if filter.Q != nil {
+		out.Query = filter.Q
+	}
+	if filter.Blocked != nil {
+		out.Blocked = filter.Blocked
+	}
+	return out
+}
+
+func mapBoardFilterPreset(preset store.BoardFilterPreset) boardFilterPresetResponse {
+	return boardFilterPresetResponse{
+		Id:         toOpenapiUUID(preset.ID),
+		ProjectId:  toOpenapiUUID(preset.ProjectID),
+		OwnerId:    toOpenapiUUID(preset.OwnerID),
+		Name:       preset.Name,
+		Filters:    mapBoardFilter(preset.Filters),
+		ShareToken: preset.ShareToken,
+		CreatedAt:  preset.CreatedAt,
+		UpdatedAt:  preset.UpdatedAt,
+	}
+}
+
+func mapNotification(n store.Notification) notificationResponse {
+	typ := NotificationType(n.Type)
+	return notificationResponse{
+		Id:          toOpenapiUUID(n.ID),
+		ProjectId:   toOpenapiUUID(n.ProjectID),
+		UserId:      toOpenapiUUID(n.UserID),
+		TicketId:    toOpenapiUUID(n.TicketID),
+		TicketKey:   TicketKey(n.TicketKey),
+		TicketTitle: n.TicketTitle,
+		Type:        typ,
+		Message:     n.Message,
+		ReadAt:      n.ReadAt,
+		CreatedAt:   n.CreatedAt,
+	}
+}
+
+func mapNotificationPreferences(p store.NotificationPreferences) notificationPreferencesResponse {
+	return notificationPreferencesResponse{
+		MentionEnabled:    p.MentionEnabled,
+		AssignmentEnabled: p.AssignmentEnabled,
 	}
 }

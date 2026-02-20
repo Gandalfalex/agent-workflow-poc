@@ -17,6 +17,8 @@ tags:
   - name: webhooks
   - name: attachments
   - name: dashboard
+  - name: sprint-planner
+  - name: ai-triage
   - name: admin
 
 security:
@@ -518,6 +520,10 @@ paths:
           schema:
             type: string
         - in: query
+          name: blocked
+          schema:
+            type: boolean
+        - in: query
           name: limit
           schema:
             type: integer
@@ -561,6 +567,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Ticket"
+
+  /projects/{projectId}/tickets/bulk:
+    post:
+      summary: Execute bulk ticket operation
+      operationId: bulkTicketOperation
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkTicketOperationRequest"
+      responses:
+        "200":
+          description: Bulk operation completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkTicketOperationResponse"
+
+  /projects/{projectId}/dependency-graph:
+    get:
+      summary: Get project dependency graph
+      operationId: getProjectDependencyGraph
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: rootTicketId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: depth
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2
+            default: 2
+      responses:
+        "200":
+          description: Dependency graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDependencyGraphResponse"
 
   /tickets/{id}:
     get:
@@ -618,6 +682,72 @@ paths:
       parameters:
         - in: path
           name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /tickets/{id}/dependencies:
+    get:
+      summary: List dependencies for ticket
+      operationId: listTicketDependencies
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dependency list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDependencyListResponse"
+    post:
+      summary: Create dependency for ticket
+      operationId: createTicketDependency
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketDependencyCreateRequest"
+      responses:
+        "201":
+          description: Dependency created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDependency"
+
+  /tickets/{id}/dependencies/{dependencyId}:
+    delete:
+      summary: Delete dependency for ticket
+      operationId: deleteTicketDependency
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: dependencyId
           required: true
           schema:
             type: string
@@ -792,6 +922,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/TicketActivityListResponse"
 
+  /tickets/{id}/incident-timeline:
+    get:
+      summary: List incident timeline events for ticket
+      operationId: listTicketIncidentTimeline
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Incident timeline events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentTimelineResponse"
+
+  /tickets/{id}/incident-postmortem:
+    get:
+      summary: Export incident postmortem draft as Markdown
+      operationId: getTicketIncidentPostmortem
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Markdown postmortem draft
+          content:
+            text/markdown:
+              schema:
+                type: string
+
   /tickets/{id}/comments/{commentId}:
     delete:
       summary: Delete ticket comment
@@ -962,6 +1132,327 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProjectStats"
 
+  /projects/{projectId}/sprints:
+    get:
+      summary: List project sprints
+      operationId: listProjectSprints
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project sprint list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintListResponse"
+    post:
+      summary: Create a project sprint
+      operationId: createProjectSprint
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintCreateRequest"
+      responses:
+        "201":
+          description: Created sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+
+  /projects/{projectId}/capacity-settings:
+    get:
+      summary: List project capacity settings
+      operationId: listProjectCapacitySettings
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Capacity settings list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacitySettingsResponse"
+    put:
+      summary: Replace project capacity settings
+      operationId: replaceProjectCapacitySettings
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CapacitySettingsReplaceRequest"
+      responses:
+        "200":
+          description: Capacity settings list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacitySettingsResponse"
+
+  /projects/{projectId}/sprint-forecast:
+    get:
+      summary: Get sprint forecast summary
+      operationId: getProjectSprintForecast
+      tags: [sprint-planner, dashboard]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: sprintId
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: iterations
+          required: false
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 5000
+            default: 250
+      responses:
+        "200":
+          description: Sprint forecast summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintForecastSummary"
+
+  /projects/{projectId}/ai-triage/settings:
+    get:
+      summary: Get AI triage settings for project
+      operationId: getProjectAiTriageSettings
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project AI triage settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSettings"
+    patch:
+      summary: Update AI triage settings for project
+      operationId: updateProjectAiTriageSettings
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTriageSettingsUpdateRequest"
+      responses:
+        "200":
+          description: Updated project AI triage settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSettings"
+
+  /projects/{projectId}/ai-triage/suggestions:
+    post:
+      summary: Generate AI triage suggestion for ticket draft
+      operationId: createAiTriageSuggestion
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTriageSuggestionCreateRequest"
+      responses:
+        "201":
+          description: AI triage suggestion generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSuggestion"
+
+  /projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision:
+    post:
+      summary: Record field-by-field acceptance or rejection for an AI triage suggestion
+      operationId: recordAiTriageSuggestionDecision
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: suggestionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTriageSuggestionDecisionRequest"
+      responses:
+        "201":
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSuggestionDecision"
+
+  /projects/{projectId}/reporting/summary:
+    get:
+      summary: Get lightweight project reporting summary
+      operationId: getProjectReportingSummary
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Project reporting summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectReportingSummary"
+
+  /projects/{projectId}/reporting/export:
+    get:
+      summary: Export project reporting snapshot
+      operationId: exportProjectReportingSnapshot
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        "200":
+          description: Reporting export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectReportingExportJson"
+            text/csv:
+              schema:
+                type: string
+
+  /projects/{projectId}/events/ws:
+    get:
+      summary: Open project live updates stream (WebSocket)
+      operationId: streamProjectEvents
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket upgrade)
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/activities:
     get:
       summary: List recent project activity
@@ -988,6 +1479,150 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProjectActivityListResponse"
 
+  /projects/{projectId}/notifications:
+    get:
+      summary: List current user notifications for project
+      operationId: listNotifications
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: unreadOnly
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationListResponse"
+
+  /projects/{projectId}/notifications/unread-count:
+    get:
+      summary: Get current user unread notification count for project
+      operationId: getNotificationUnreadCount
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCountResponse"
+
+  /projects/{projectId}/notifications/{notificationId}/read:
+    post:
+      summary: Mark a notification as read
+      operationId: markNotificationRead
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: notificationId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /projects/{projectId}/notifications/read-all:
+    post:
+      summary: Mark all project notifications as read for current user
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Number of notifications updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationMarkAllResponse"
+
+  /projects/{projectId}/notification-preferences:
+    get:
+      summary: Get current user notification preferences
+      operationId: getNotificationPreferences
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+    patch:
+      summary: Update current user notification preferences
+      operationId: updateNotificationPreferences
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationPreferencesUpdateRequest"
+      responses:
+        "200":
+          description: Updated notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+
   /projects/{projectId}/my-role:
     get:
       summary: Get the current user's role on this project
@@ -1011,6 +1646,133 @@ paths:
                 properties:
                   role:
                     $ref: "#/components/schemas/ProjectRole"
+
+  /projects/{projectId}/board-filters:
+    get:
+      summary: List personal board filter presets
+      operationId: listBoardFilterPresets
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Preset list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPresetListResponse"
+    post:
+      summary: Create personal board filter preset
+      operationId: createBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BoardFilterPresetCreateRequest"
+      responses:
+        "201":
+          description: Preset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPreset"
+
+  /projects/{projectId}/board-filters/{presetId}:
+    patch:
+      summary: Update personal board filter preset
+      operationId: updateBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: presetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BoardFilterPresetUpdateRequest"
+      responses:
+        "200":
+          description: Preset updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPreset"
+    delete:
+      summary: Delete personal board filter preset
+      operationId: deleteBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: presetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/board-filters/shared/{token}:
+    get:
+      summary: Resolve shared board filter preset token
+      operationId: getSharedBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Shared preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPreset"
+        "404":
+          description: Shared preset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /projects/{projectId}/workflow:
     get:
@@ -1570,6 +2332,89 @@ components:
       type: string
       enum: [feature, bug]
 
+    TicketIncidentSeverity:
+      type: string
+      enum: [sev1, sev2, sev3, sev4]
+
+    BoardFilter:
+      type: object
+      properties:
+        assigneeId:
+          type: string
+          format: uuid
+        stateId:
+          type: string
+          format: uuid
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        type:
+          $ref: "#/components/schemas/TicketType"
+        q:
+          type: string
+        blocked:
+          type: boolean
+
+    DependencyRelationType:
+      type: string
+      enum: [blocks, blocked_by, related]
+
+    BoardFilterPreset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        filters:
+          $ref: "#/components/schemas/BoardFilter"
+        shareToken:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, ownerId, name, filters, createdAt, updatedAt]
+
+    BoardFilterPresetCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        filters:
+          $ref: "#/components/schemas/BoardFilter"
+        generateShareToken:
+          type: boolean
+      required: [name, filters]
+
+    BoardFilterPresetUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        filters:
+          $ref: "#/components/schemas/BoardFilter"
+        generateShareToken:
+          type: boolean
+
+    BoardFilterPresetListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoardFilterPreset"
+      required: [items]
+
     Story:
       type: object
       properties:
@@ -1730,9 +2575,27 @@ components:
           $ref: "#/components/schemas/UserSummary"
         priority:
           $ref: "#/components/schemas/TicketPriority"
+        incidentEnabled:
+          type: boolean
+        incidentSeverity:
+          $ref: "#/components/schemas/TicketIncidentSeverity"
+          nullable: true
+        incidentImpact:
+          type: string
+          nullable: true
+        incidentCommanderId:
+          type: string
+          format: uuid
+          nullable: true
+        incidentCommander:
+          $ref: "#/components/schemas/UserSummary"
         position:
           type: number
           format: float
+        blockedByCount:
+          type: integer
+        isBlocked:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -1750,9 +2613,93 @@ components:
         - title
         - stateId
         - priority
+        - incidentEnabled
         - position
+        - blockedByCount
+        - isBlocked
         - createdAt
         - updatedAt
+
+    TicketDependency:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        relatedTicketId:
+          type: string
+          format: uuid
+        relationType:
+          $ref: "#/components/schemas/DependencyRelationType"
+        relatedTicket:
+          $ref: "#/components/schemas/Ticket"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, ticketId, relatedTicketId, relationType, createdAt]
+
+    TicketDependencyCreateRequest:
+      type: object
+      properties:
+        relatedTicketId:
+          type: string
+          format: uuid
+        relationType:
+          $ref: "#/components/schemas/DependencyRelationType"
+      required: [relatedTicketId, relationType]
+
+    TicketDependencyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketDependency"
+      required: [items]
+
+    TicketDependencyGraphNode:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+        depth:
+          type: integer
+      required: [ticket, depth]
+
+    TicketDependencyGraphEdge:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sourceTicketId:
+          type: string
+          format: uuid
+        targetTicketId:
+          type: string
+          format: uuid
+        relationType:
+          $ref: "#/components/schemas/DependencyRelationType"
+      required: [id, sourceTicketId, targetTicketId, relationType]
+
+    TicketDependencyGraphResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketDependencyGraphNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketDependencyGraphEdge"
+      required: [nodes, edges]
 
     TicketCreateRequest:
       type: object
@@ -1775,6 +2722,18 @@ components:
           nullable: true
         priority:
           $ref: "#/components/schemas/TicketPriority"
+        incidentEnabled:
+          type: boolean
+        incidentSeverity:
+          $ref: "#/components/schemas/TicketIncidentSeverity"
+          nullable: true
+        incidentImpact:
+          type: string
+          nullable: true
+        incidentCommanderId:
+          type: string
+          format: uuid
+          nullable: true
       required: [title, storyId]
 
     TicketUpdateRequest:
@@ -1798,9 +2757,53 @@ components:
           nullable: true
         priority:
           $ref: "#/components/schemas/TicketPriority"
+        incidentEnabled:
+          type: boolean
+        incidentSeverity:
+          $ref: "#/components/schemas/TicketIncidentSeverity"
+          nullable: true
+        incidentImpact:
+          type: string
+          nullable: true
+        incidentCommanderId:
+          type: string
+          format: uuid
+          nullable: true
         position:
           type: number
           format: float
+
+    IncidentTimelineItemType:
+      type: string
+      enum: [activity, comment, webhook]
+
+    IncidentTimelineItem:
+      type: object
+      properties:
+        id:
+          type: string
+        ticketId:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/IncidentTimelineItemType"
+        title:
+          type: string
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, type, title, createdAt]
+
+    IncidentTimelineResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentTimelineItem"
+      required: [items]
 
     TicketListResponse:
       type: object
@@ -1812,6 +2815,66 @@ components:
         total:
           type: integer
       required: [items, total]
+
+    BulkTicketAction:
+      type: string
+      enum: [move_state, assign, set_priority, delete]
+
+    BulkTicketOperationRequest:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/BulkTicketAction"
+        ticketIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: string
+            format: uuid
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+      required: [action, ticketIds]
+
+    BulkTicketOperationResult:
+      type: object
+      properties:
+        ticketId:
+          type: string
+          format: uuid
+        success:
+          type: boolean
+        errorCode:
+          type: string
+        message:
+          type: string
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticketId, success]
+
+    BulkTicketOperationResponse:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/BulkTicketAction"
+        total:
+          type: integer
+        successCount:
+          type: integer
+        errorCount:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkTicketOperationResult"
+      required: [action, total, successCount, errorCount, results]
 
     BoardResponse:
       type: object
@@ -2040,6 +3103,107 @@ components:
             $ref: "#/components/schemas/ProjectActivity"
       required: [items]
 
+    ProjectLiveEventType:
+      type: string
+      enum:
+        - heartbeat
+        - notifications.unread_count
+        - notifications.changed
+        - board.refresh
+        - activity.changed
+
+    ProjectLiveEvent:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/ProjectLiveEventType"
+        projectId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+      required: [type, projectId, timestamp]
+
+    NotificationType:
+      type: string
+      enum: [mention, assignment]
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        ticketKey:
+          $ref: "#/components/schemas/TicketKey"
+        ticketTitle:
+          type: string
+        type:
+          $ref: "#/components/schemas/NotificationType"
+        message:
+          type: string
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, userId, ticketId, ticketKey, ticketTitle, type, message, createdAt]
+
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+      required: [items]
+
+    NotificationUnreadCountResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+      required: [count]
+
+    NotificationMarkAllResponse:
+      type: object
+      properties:
+        updated:
+          type: integer
+      required: [updated]
+
+    NotificationPreferences:
+      type: object
+      properties:
+        mentionEnabled:
+          type: boolean
+        assignmentEnabled:
+          type: boolean
+      required: [mentionEnabled, assignmentEnabled]
+
+    NotificationPreferencesUpdateRequest:
+      type: object
+      properties:
+        mentionEnabled:
+          type: boolean
+        assignmentEnabled:
+          type: boolean
+
     StatCount:
       type: object
       properties:
@@ -2055,6 +3219,8 @@ components:
         totalOpen:
           type: integer
         totalClosed:
+          type: integer
+        blockedOpen:
           type: integer
         byState:
           type: array
@@ -2072,7 +3238,326 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StatCount"
-      required: [totalOpen, totalClosed, byState, byPriority, byType, byAssignee]
+      required: [totalOpen, totalClosed, blockedOpen, byState, byPriority, byType, byAssignee]
+
+    Sprint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        goal:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        ticketIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        committedTickets:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, name, startDate, endDate, ticketIds, committedTickets, createdAt, updatedAt]
+
+    SprintListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sprint"
+      required: [items]
+
+    SprintCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        goal:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        ticketIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required: [name, startDate, endDate]
+
+    CapacitySettingScope:
+      type: string
+      enum: [team, user]
+
+    CapacitySetting:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        scope:
+          $ref: "#/components/schemas/CapacitySettingScope"
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        label:
+          type: string
+        capacity:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, scope, label, capacity, createdAt, updatedAt]
+
+    CapacitySettingInput:
+      type: object
+      properties:
+        scope:
+          $ref: "#/components/schemas/CapacitySettingScope"
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        label:
+          type: string
+        capacity:
+          type: integer
+      required: [scope, label, capacity]
+
+    CapacitySettingsReplaceRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapacitySettingInput"
+      required: [items]
+
+    CapacitySettingsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapacitySetting"
+      required: [items]
+
+    SprintForecastSummary:
+      type: object
+      properties:
+        sprint:
+          $ref: "#/components/schemas/Sprint"
+        committedTickets:
+          type: integer
+        capacity:
+          type: integer
+        projectedCompletion:
+          type: integer
+        overCapacityDelta:
+          type: integer
+        confidence:
+          type: number
+          format: float
+        iterations:
+          type: integer
+      required: [committedTickets, capacity, projectedCompletion, overCapacityDelta, confidence, iterations]
+
+    AiTriageSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+
+    AiTriageSettingsUpdateRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+
+    AiTriageField:
+      type: string
+      enum: [summary, priority, state, assignee]
+
+    AiTriageConfidence:
+      type: object
+      properties:
+        summary:
+          type: number
+          format: float
+        priority:
+          type: number
+          format: float
+        state:
+          type: number
+          format: float
+        assignee:
+          type: number
+          format: float
+      required: [summary, priority, state, assignee]
+
+    AiTriageSuggestion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        summary:
+          type: string
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        promptVersion:
+          type: string
+        model:
+          type: string
+        confidence:
+          $ref: "#/components/schemas/AiTriageConfidence"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, summary, priority, stateId, promptVersion, model, confidence, createdAt]
+
+    AiTriageSuggestionCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/TicketType"
+      required: [title]
+
+    AiTriageSuggestionDecisionRequest:
+      type: object
+      properties:
+        acceptedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+        rejectedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+      required: [acceptedFields, rejectedFields]
+
+    AiTriageSuggestionDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        suggestionId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        acceptedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+        rejectedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, suggestionId, projectId, actorId, acceptedFields, rejectedFields, createdAt]
+
+    DateValuePoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        value:
+          type: integer
+      required: [date, value]
+
+    StateOpenPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        counts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+      required: [date, counts]
+
+    ProjectReportingSummary:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        throughputByDay:
+          type: array
+          items:
+            $ref: "#/components/schemas/DateValuePoint"
+        averageCycleTimeHours:
+          type: number
+          format: float
+        openByState:
+          type: array
+          items:
+            $ref: "#/components/schemas/StateOpenPoint"
+      required: [from, to, throughputByDay, averageCycleTimeHours, openByState]
+
+    ProjectReportingExportJson:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        summary:
+          $ref: "#/components/schemas/ProjectReportingSummary"
+      required: [generatedAt, summary]
 
     ErrorResponse:
       type: object

@@ -1,9 +1,12 @@
 {{define "ticket_select_fields"}}
 t.id, t.project_id, p.key, t.key, t.number, t.type, t.story_id, s2.title, s2.description, s2.created_at, s2.updated_at,
 t.title, t.description, t.state_id, t.assignee_id,
-t.priority, t.position, t.created_at, t.updated_at,
+t.priority, t.incident_enabled, t.incident_severity, t.incident_impact, t.incident_commander_id, t.position, t.created_at, t.updated_at,
 s.name, s.sort_order, s.is_default, s.is_closed,
-u.name
+COALESCE(blockers.blocked_by_count, 0) AS blocked_by_count,
+(COALESCE(blockers.blocked_by_count, 0) > 0) AS is_blocked,
+u.name,
+cu.name
 {{end}}
 
 {{define "ticket_select_joins"}}
@@ -12,6 +15,13 @@ JOIN projects p ON p.id = t.project_id
 JOIN workflow_states s ON s.id = t.state_id
 JOIN stories s2 ON s2.id = t.story_id
 LEFT JOIN users u ON u.id = t.assignee_id
+LEFT JOIN users cu ON cu.id = t.incident_commander_id
+LEFT JOIN (
+  SELECT td.to_ticket_id AS ticket_id, COUNT(*)::int AS blocked_by_count
+  FROM ticket_dependencies td
+  WHERE td.relation_type = 'blocks'
+  GROUP BY td.to_ticket_id
+) blockers ON blockers.ticket_id = t.id
 {{end}}
 
 {{define "tickets_board.sql"}}
@@ -44,8 +54,11 @@ WHERE t.id = $1
 {{end}}
 
 {{define "tickets_insert.sql"}}
-INSERT INTO tickets (project_id, title, description, type, story_id, state_id, assignee_id, priority, position)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO tickets (
+  project_id, title, description, type, story_id, state_id, assignee_id, priority,
+  incident_enabled, incident_severity, incident_impact, incident_commander_id, position
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id
 {{end}}
 

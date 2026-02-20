@@ -12,60 +12,76 @@ import (
 )
 
 type Ticket struct {
-	ID           uuid.UUID
-	ProjectID    uuid.UUID
-	ProjectKey   string
-	Key          string
-	Number       int
-	Type         string
-	StoryID      uuid.UUID
-	StoryTitle   string
-	StorySummary *string
-	StoryCreated time.Time
-	StoryUpdated time.Time
-	Title        string
-	Description  string
-	StateID      uuid.UUID
-	StateName    string
-	StateOrder   int
-	StateDefault bool
-	StateClosed  bool
-	AssigneeID   *uuid.UUID
-	AssigneeName *string
-	Priority     string
-	Position     float64
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	ProjectKey            string
+	Key                   string
+	Number                int
+	Type                  string
+	StoryID               uuid.UUID
+	StoryTitle            string
+	StorySummary          *string
+	StoryCreated          time.Time
+	StoryUpdated          time.Time
+	Title                 string
+	Description           string
+	StateID               uuid.UUID
+	StateName             string
+	StateOrder            int
+	StateDefault          bool
+	StateClosed           bool
+	BlockedByCount        int
+	IsBlocked             bool
+	AssigneeID            *uuid.UUID
+	AssigneeName          *string
+	Priority              string
+	IncidentEnabled       bool
+	IncidentSeverity      *string
+	IncidentImpact        *string
+	IncidentCommanderID   *uuid.UUID
+	IncidentCommanderName *string
+	Position              float64
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 type TicketFilter struct {
 	ProjectID  uuid.UUID
 	StateID    *uuid.UUID
 	AssigneeID *uuid.UUID
+	Blocked    *bool
 	Query      string
 	Limit      int
 	Offset     int
 }
 
 type TicketCreateInput struct {
-	Title       string
-	Description string
-	Type        string
-	StoryID     uuid.UUID
-	StateID     *uuid.UUID
-	AssigneeID  *uuid.UUID
-	Priority    string
+	Title               string
+	Description         string
+	Type                string
+	StoryID             uuid.UUID
+	StateID             *uuid.UUID
+	AssigneeID          *uuid.UUID
+	Priority            string
+	IncidentEnabled     bool
+	IncidentSeverity    *string
+	IncidentImpact      *string
+	IncidentCommanderID *uuid.UUID
 }
 
 type TicketUpdateInput struct {
-	Title       *string
-	Description *string
-	Type        *string
-	StoryID     *uuid.UUID
-	StateID     *uuid.UUID
-	AssigneeID  *uuid.UUID
-	Priority    *string
-	Position    *float64
+	Title               *string
+	Description         *string
+	Type                *string
+	StoryID             *uuid.UUID
+	StateID             *uuid.UUID
+	AssigneeID          *uuid.UUID
+	Priority            *string
+	IncidentEnabled     *bool
+	IncidentSeverity    *string
+	IncidentImpact      *string
+	IncidentCommanderID *uuid.UUID
+	Position            *float64
 }
 
 func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket, int, error) {
@@ -91,6 +107,13 @@ func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket,
 	}
 	if filter.AssigneeID != nil {
 		conditions = append(conditions, fmt.Sprintf("t.assignee_id = %s", arg(*filter.AssigneeID)))
+	}
+	if filter.Blocked != nil {
+		if *filter.Blocked {
+			conditions = append(conditions, "EXISTS (SELECT 1 FROM ticket_dependencies td WHERE td.relation_type = 'blocks' AND td.to_ticket_id = t.id)")
+		} else {
+			conditions = append(conditions, "NOT EXISTS (SELECT 1 FROM ticket_dependencies td WHERE td.relation_type = 'blocks' AND td.to_ticket_id = t.id)")
+		}
 	}
 	if strings.TrimSpace(filter.Query) != "" {
 		q := "%%" + strings.TrimSpace(filter.Query) + "%%"
@@ -148,6 +171,19 @@ func (s *Store) CreateTicket(ctx context.Context, projectID uuid.UUID, input Tic
 	if err != nil {
 		return Ticket{}, err
 	}
+	incidentSeverity, err := normalizeIncidentSeverity(input.IncidentSeverity)
+	if err != nil {
+		return Ticket{}, err
+	}
+	incidentImpact := normalizeIncidentImpact(input.IncidentImpact)
+	var incidentCommanderID *uuid.UUID
+	if input.IncidentEnabled {
+		incidentCommanderID = input.IncidentCommanderID
+	}
+	if !input.IncidentEnabled {
+		incidentSeverity = nil
+		incidentImpact = nil
+	}
 
 	position, err := s.nextPosition(ctx, stateID)
 	if err != nil {
@@ -156,7 +192,23 @@ func (s *Store) CreateTicket(ctx context.Context, projectID uuid.UUID, input Tic
 
 	var ticketID uuid.UUID
 	query := mustSQL("tickets_insert", nil)
-	row := s.db.QueryRow(ctx, query, projectID, title, input.Description, ticketType, input.StoryID, stateID, input.AssigneeID, priority, position)
+	row := s.db.QueryRow(
+		ctx,
+		query,
+		projectID,
+		title,
+		input.Description,
+		ticketType,
+		input.StoryID,
+		stateID,
+		input.AssigneeID,
+		priority,
+		input.IncidentEnabled,
+		incidentSeverity,
+		incidentImpact,
+		incidentCommanderID,
+		position,
+	)
 
 	if err := row.Scan(&ticketID); err != nil {
 		return Ticket{}, err
@@ -215,6 +267,36 @@ func (s *Store) UpdateTicket(ctx context.Context, id uuid.UUID, input TicketUpda
 		}
 		if input.Priority != nil {
 			updates = append(updates, fmt.Sprintf("priority = %s", arg(normalizePriority(*input.Priority))))
+		}
+		if input.IncidentEnabled != nil {
+			updates = append(updates, fmt.Sprintf("incident_enabled = %s", arg(*input.IncidentEnabled)))
+			if !*input.IncidentEnabled {
+				updates = append(updates, "incident_severity = NULL")
+				updates = append(updates, "incident_impact = NULL")
+				updates = append(updates, "incident_commander_id = NULL")
+			}
+		}
+		if input.IncidentSeverity != nil {
+			sev, err := normalizeIncidentSeverity(input.IncidentSeverity)
+			if err != nil {
+				return struct{}{}, err
+			}
+			if sev == nil {
+				updates = append(updates, "incident_severity = NULL")
+			} else {
+				updates = append(updates, fmt.Sprintf("incident_severity = %s", arg(*sev)))
+			}
+		}
+		if input.IncidentImpact != nil {
+			impact := normalizeIncidentImpact(input.IncidentImpact)
+			if impact == nil {
+				updates = append(updates, "incident_impact = NULL")
+			} else {
+				updates = append(updates, fmt.Sprintf("incident_impact = %s", arg(*impact)))
+			}
+		}
+		if input.IncidentCommanderID != nil {
+			updates = append(updates, fmt.Sprintf("incident_commander_id = %s", arg(*input.IncidentCommanderID)))
 		}
 
 		position := input.Position
@@ -312,6 +394,10 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&ticket.StateID,
 		&ticket.AssigneeID,
 		&ticket.Priority,
+		&ticket.IncidentEnabled,
+		&ticket.IncidentSeverity,
+		&ticket.IncidentImpact,
+		&ticket.IncidentCommanderID,
 		&ticket.Position,
 		&ticket.CreatedAt,
 		&ticket.UpdatedAt,
@@ -319,7 +405,10 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&ticket.StateOrder,
 		&ticket.StateDefault,
 		&ticket.StateClosed,
+		&ticket.BlockedByCount,
+		&ticket.IsBlocked,
 		&ticket.AssigneeName,
+		&ticket.IncidentCommanderName,
 	)
 	return ticket, err
 }
@@ -346,4 +435,30 @@ func normalizeTicketType(input string) (string, error) {
 	default:
 		return "", errors.New("invalid ticket type")
 	}
+}
+
+func normalizeIncidentSeverity(input *string) (*string, error) {
+	if input == nil {
+		return nil, nil
+	}
+	value := strings.ToLower(strings.TrimSpace(*input))
+	switch value {
+	case "":
+		return nil, nil
+	case "sev1", "sev2", "sev3", "sev4":
+		return &value, nil
+	default:
+		return nil, errors.New("invalid incident severity")
+	}
+}
+
+func normalizeIncidentImpact(input *string) *string {
+	if input == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*input)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }

@@ -1,10 +1,14 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -53,10 +57,26 @@ type Store interface {
 	ListTickets(ctx context.Context, filter store.TicketFilter) ([]store.Ticket, int, error)
 	ListTicketsForBoard(ctx context.Context, projectID uuid.UUID) ([]store.Ticket, error)
 	GetTicket(ctx context.Context, id uuid.UUID) (store.Ticket, error)
+	ListTicketDependencies(ctx context.Context, projectID, ticketID uuid.UUID) ([]store.TicketDependency, error)
+	GetTicketDependencyForTicket(ctx context.Context, dependencyID, projectID, ticketID uuid.UUID) (store.TicketDependency, error)
+	CreateTicketDependency(ctx context.Context, projectID uuid.UUID, input store.TicketDependencyCreateInput) (store.TicketDependency, error)
+	DeleteTicketDependency(ctx context.Context, dependencyID, projectID, ticketID uuid.UUID) error
+	GetTicketDependencyGraph(ctx context.Context, projectID uuid.UUID, rootTicketID *uuid.UUID, depth int) (store.TicketDependencyGraph, error)
 	CreateTicket(ctx context.Context, projectID uuid.UUID, input store.TicketCreateInput) (store.Ticket, error)
 	UpdateTicket(ctx context.Context, id uuid.UUID, input store.TicketUpdateInput) (store.Ticket, error)
 	DeleteTicket(ctx context.Context, id uuid.UUID) error
 	GetProjectStats(ctx context.Context, projectID uuid.UUID) (store.ProjectStats, error)
+	ListSprints(ctx context.Context, projectID uuid.UUID) ([]store.Sprint, error)
+	CreateSprint(ctx context.Context, projectID uuid.UUID, input store.SprintCreateInput) (store.Sprint, error)
+	ListCapacitySettings(ctx context.Context, projectID uuid.UUID) ([]store.CapacitySetting, error)
+	ReplaceCapacitySettings(ctx context.Context, projectID uuid.UUID, inputs []store.CapacitySettingInput) ([]store.CapacitySetting, error)
+	GetSprintForecastSummary(ctx context.Context, projectID uuid.UUID, sprintID *uuid.UUID, iterations int) (store.SprintForecastSummary, error)
+	GetAiTriageSettings(ctx context.Context, projectID uuid.UUID) (store.AiTriageSettings, error)
+	UpdateAiTriageSettings(ctx context.Context, projectID uuid.UUID, enabled bool) (store.AiTriageSettings, error)
+	CreateAiTriageSuggestion(ctx context.Context, projectID uuid.UUID, input store.AiTriageSuggestionCreateInput) (store.AiTriageSuggestion, error)
+	GetAiTriageSuggestion(ctx context.Context, projectID, suggestionID uuid.UUID) (store.AiTriageSuggestion, error)
+	CreateAiTriageSuggestionDecision(ctx context.Context, projectID, suggestionID uuid.UUID, input store.AiTriageSuggestionDecisionCreateInput) (store.AiTriageSuggestionDecision, error)
+	GetProjectReportingSummary(ctx context.Context, projectID uuid.UUID, from, to time.Time) (store.ProjectReportingSummary, error)
 	ListWebhooks(ctx context.Context, projectID uuid.UUID) ([]store.Webhook, error)
 	GetWebhook(ctx context.Context, projectID uuid.UUID, id uuid.UUID) (store.Webhook, error)
 	CreateWebhook(ctx context.Context, projectID uuid.UUID, input store.WebhookCreateInput) (store.Webhook, error)
@@ -71,6 +91,20 @@ type Store interface {
 	ListActivities(ctx context.Context, ticketID uuid.UUID) ([]store.Activity, error)
 	ListProjectActivities(ctx context.Context, projectID uuid.UUID, limit int) ([]store.ProjectActivity, error)
 	CreateActivity(ctx context.Context, ticketID uuid.UUID, input store.ActivityCreateInput) error
+	CreateTicketWebhookEvent(ctx context.Context, input store.TicketWebhookEventCreateInput) error
+	ListTicketWebhookEvents(ctx context.Context, ticketID uuid.UUID) ([]store.TicketWebhookEvent, error)
+	CreateNotification(ctx context.Context, input store.NotificationCreateInput) (store.Notification, error)
+	ListNotifications(ctx context.Context, filter store.NotificationFilter) ([]store.Notification, error)
+	CountUnreadNotifications(ctx context.Context, projectID, userID uuid.UUID) (int, error)
+	MarkNotificationRead(ctx context.Context, id, projectID, userID uuid.UUID) (store.Notification, error)
+	MarkAllNotificationsRead(ctx context.Context, projectID, userID uuid.UUID) (int, error)
+	GetNotificationPreferences(ctx context.Context, userID uuid.UUID) (store.NotificationPreferences, error)
+	UpdateNotificationPreferences(ctx context.Context, userID uuid.UUID, input store.NotificationPreferencesUpdateInput) (store.NotificationPreferences, error)
+	ListBoardFilterPresets(ctx context.Context, projectID, ownerID uuid.UUID) ([]store.BoardFilterPreset, error)
+	CreateBoardFilterPreset(ctx context.Context, projectID, ownerID uuid.UUID, input store.BoardFilterPresetCreateInput) (store.BoardFilterPreset, error)
+	UpdateBoardFilterPreset(ctx context.Context, projectID, ownerID, presetID uuid.UUID, input store.BoardFilterPresetUpdateInput) (store.BoardFilterPreset, error)
+	DeleteBoardFilterPreset(ctx context.Context, projectID, ownerID, presetID uuid.UUID) error
+	GetSharedBoardFilterPreset(ctx context.Context, projectID uuid.UUID, token string) (store.BoardFilterPreset, error)
 }
 
 type Authenticator interface {
@@ -89,6 +123,7 @@ type API struct {
 	store                     Store
 	auth                      Authenticator
 	webhooks                  WebhookDispatcher
+	live                      *projectLiveHub
 	blob                      blob.ObjectStore
 	maxUploadSize             int64
 	cookieName                string
@@ -142,6 +177,7 @@ func NewHandler(st Store, authClient Authenticator, webhookDispatcher WebhookDis
 		store:                     st,
 		auth:                      authClient,
 		webhooks:                  webhookDispatcher,
+		live:                      newProjectLiveHub(),
 		blob:                      opts.BlobStore,
 		maxUploadSize:             maxUpload,
 		cookieName:                cookieName,
@@ -677,6 +713,9 @@ func (h *API) ListTickets(w http.ResponseWriter, r *http.Request, projectId open
 		}
 		filter.AssigneeID = &id
 	}
+	if params.Blocked != nil {
+		filter.Blocked = params.Blocked
+	}
 
 	tickets, total, err := h.store.ListTickets(r.Context(), filter)
 	if handleListError(w, r, err, "tickets", "ticket_list") {
@@ -737,26 +776,250 @@ func (h *API) CreateTicket(w http.ResponseWriter, r *http.Request, projectId ope
 	}
 
 	ticket, err := h.store.CreateTicket(r.Context(), projectUUID, store.TicketCreateInput{
-		Title:       req.Title,
-		Description: derefString(req.Description),
-		Type:        ticketType,
-		StoryID:     storyID,
-		StateID:     stateID,
-		AssigneeID:  assigneeID,
-		Priority:    priority,
+		Title:               req.Title,
+		Description:         derefString(req.Description),
+		Type:                ticketType,
+		StoryID:             storyID,
+		StateID:             stateID,
+		AssigneeID:          assigneeID,
+		Priority:            priority,
+		IncidentEnabled:     req.IncidentEnabled != nil && *req.IncidentEnabled,
+		IncidentSeverity:    mapStringPtr(req.IncidentSeverity, func(v TicketIncidentSeverity) string { return string(v) }),
+		IncidentImpact:      req.IncidentImpact,
+		IncidentCommanderID: parseOpenapiUUIDPtr(req.IncidentCommanderId),
 	})
 	if handleDBErrorWithCode(w, r, err, "ticket", "ticket_create", "ticket_create_failed") {
 		return
 	}
 
 	response := mapTicket(ticket)
-	if h.webhooks != nil {
-		h.webhooks.Dispatch(r.Context(), projectUUID, "ticket.created", map[string]any{
-			"ticket": response,
+	h.dispatchTicketWebhook(r.Context(), projectUUID, ticket.ID, "ticket.created", map[string]any{"ticket": response})
+	h.publishProjectLiveEvent(projectUUID, projectEventBoardRefresh, map[string]any{
+		"reason": "ticket.created",
+	})
+	h.publishProjectLiveEvent(projectUUID, projectEventActivityChanged, map[string]any{
+		"reason": "ticket.created",
+	})
+
+	writeJSON(w, http.StatusCreated, response)
+}
+
+func (h *API) BulkTicketOperation(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+
+	req, ok := decodeJSON[BulkTicketOperationRequest](w, r, "ticket_bulk")
+	if !ok {
+		return
+	}
+	if len(req.TicketIds) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_bulk_request", "ticketIds must not be empty")
+		return
+	}
+
+	switch req.Action {
+	case BulkTicketActionMoveState:
+		if req.StateId == nil {
+			writeError(w, http.StatusBadRequest, "invalid_bulk_request", "stateId is required for move_state")
+			return
+		}
+	case BulkTicketActionAssign:
+		if req.AssigneeId == nil {
+			writeError(w, http.StatusBadRequest, "invalid_bulk_request", "assigneeId is required for assign")
+			return
+		}
+	case BulkTicketActionSetPriority:
+		if req.Priority == nil {
+			writeError(w, http.StatusBadRequest, "invalid_bulk_request", "priority is required for set_priority")
+			return
+		}
+	case BulkTicketActionDelete:
+		// no-op
+	default:
+		writeError(w, http.StatusBadRequest, "invalid_bulk_request", "unsupported action")
+		return
+	}
+
+	results := make([]BulkTicketOperationResult, 0, len(req.TicketIds))
+	successCount := 0
+	errorCount := 0
+
+	var actorID *uuid.UUID
+	var actorName string
+	if actor, ok := authUser(r.Context()); ok {
+		actorName = actor.Name
+		if parsed, err := uuid.Parse(actor.ID); err == nil {
+			actorID = &parsed
+		}
+	}
+
+	for _, ticketIDRaw := range req.TicketIds {
+		ticketID := uuid.UUID(ticketIDRaw)
+		result := BulkTicketOperationResult{TicketId: ticketIDRaw}
+
+		ticket, err := h.store.GetTicket(r.Context(), ticketID)
+		if err != nil {
+			errorCount++
+			code := "not_found"
+			msg := "ticket not found"
+			result.Success = false
+			result.ErrorCode = &code
+			result.Message = &msg
+			results = append(results, result)
+			continue
+		}
+		if ticket.ProjectID != projectUUID {
+			errorCount++
+			code := "project_mismatch"
+			msg := "ticket does not belong to project"
+			result.Success = false
+			result.ErrorCode = &code
+			result.Message = &msg
+			results = append(results, result)
+			continue
+		}
+		if !h.hasBulkOperationRole(r.Context(), ticket.ProjectID) {
+			errorCount++
+			code := "insufficient_role"
+			msg := "requires contributor role or higher"
+			result.Success = false
+			result.ErrorCode = &code
+			result.Message = &msg
+			results = append(results, result)
+			continue
+		}
+
+		switch req.Action {
+		case BulkTicketActionMoveState:
+			stateID := uuid.UUID(*req.StateId)
+			updated, err := h.store.UpdateTicket(r.Context(), ticketID, store.TicketUpdateInput{
+				StateID: &stateID,
+			})
+			if err != nil {
+				errorCount++
+				code := "ticket_update_failed"
+				msg := err.Error()
+				result.Success = false
+				result.ErrorCode = &code
+				result.Message = &msg
+				results = append(results, result)
+				continue
+			}
+			if actorID != nil {
+				h.recordTicketActivities(r.Context(), ticket, updated, *actorID, actorName)
+			}
+			mapped := mapTicket(updated)
+			result.Success = true
+			result.Ticket = &mapped
+			results = append(results, result)
+			successCount++
+		case BulkTicketActionAssign:
+			assigneeID := uuid.UUID(*req.AssigneeId)
+			updated, err := h.store.UpdateTicket(r.Context(), ticketID, store.TicketUpdateInput{
+				AssigneeID: &assigneeID,
+			})
+			if err != nil {
+				errorCount++
+				code := "ticket_update_failed"
+				msg := err.Error()
+				result.Success = false
+				result.ErrorCode = &code
+				result.Message = &msg
+				results = append(results, result)
+				continue
+			}
+			if actorID != nil {
+				h.recordTicketActivities(r.Context(), ticket, updated, *actorID, actorName)
+			}
+			mapped := mapTicket(updated)
+			result.Success = true
+			result.Ticket = &mapped
+			results = append(results, result)
+			successCount++
+		case BulkTicketActionSetPriority:
+			priority := string(*req.Priority)
+			updated, err := h.store.UpdateTicket(r.Context(), ticketID, store.TicketUpdateInput{
+				Priority: &priority,
+			})
+			if err != nil {
+				errorCount++
+				code := "ticket_update_failed"
+				msg := err.Error()
+				result.Success = false
+				result.ErrorCode = &code
+				result.Message = &msg
+				results = append(results, result)
+				continue
+			}
+			if actorID != nil {
+				h.recordTicketActivities(r.Context(), ticket, updated, *actorID, actorName)
+			}
+			mapped := mapTicket(updated)
+			result.Success = true
+			result.Ticket = &mapped
+			results = append(results, result)
+			successCount++
+		case BulkTicketActionDelete:
+			if err := h.store.DeleteTicket(r.Context(), ticketID); err != nil {
+				errorCount++
+				code := "ticket_delete_failed"
+				msg := err.Error()
+				result.Success = false
+				result.ErrorCode = &code
+				result.Message = &msg
+				results = append(results, result)
+				continue
+			}
+			if h.webhooks != nil {
+				h.webhooks.Dispatch(r.Context(), ticket.ProjectID, "ticket.deleted", map[string]any{
+					"ticket": mapTicket(ticket),
+				})
+			}
+			result.Success = true
+			results = append(results, result)
+			successCount++
+		}
+	}
+
+	if successCount > 0 {
+		h.publishProjectLiveEvent(projectUUID, projectEventBoardRefresh, map[string]any{
+			"reason": "tickets.bulk",
+			"action": string(req.Action),
+		})
+		h.publishProjectLiveEvent(projectUUID, projectEventActivityChanged, map[string]any{
+			"reason": "tickets.bulk",
+			"action": string(req.Action),
 		})
 	}
 
-	writeJSON(w, http.StatusCreated, response)
+	writeJSON(w, http.StatusOK, BulkTicketOperationResponse{
+		Action:       req.Action,
+		Total:        len(req.TicketIds),
+		SuccessCount: successCount,
+		ErrorCount:   errorCount,
+		Results:      results,
+	})
+}
+
+func (h *API) hasBulkOperationRole(ctx context.Context, projectID uuid.UUID) bool {
+	if isAdmin(ctx) {
+		return true
+	}
+	user, ok := authUser(ctx)
+	if !ok {
+		return false
+	}
+	userID, err := uuid.Parse(user.ID)
+	if err != nil {
+		return false
+	}
+	role, err := h.store.GetProjectRoleForUser(ctx, projectID, userID)
+	if err != nil {
+		return false
+	}
+	return roleRank(role) >= roleRank(roleContributor)
 }
 
 func (h *API) GetTicket(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
@@ -821,6 +1084,24 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 		priority := string(*req.Priority)
 		input.Priority = &priority
 	}
+	if req.IncidentEnabled != nil {
+		input.IncidentEnabled = req.IncidentEnabled
+	}
+	if req.IncidentSeverity != nil {
+		incidentSeverity := string(*req.IncidentSeverity)
+		input.IncidentSeverity = &incidentSeverity
+	}
+	if req.IncidentImpact != nil {
+		input.IncidentImpact = req.IncidentImpact
+	}
+	if req.IncidentCommanderId != nil {
+		incidentCommanderID, err := parseOpenapiUUID(*req.IncidentCommanderId)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_incident_commander_id", "incidentCommanderId must be a UUID")
+			return
+		}
+		input.IncidentCommanderID = &incidentCommanderID
+	}
 	if req.Type != nil {
 		ticketType := string(*req.Type)
 		input.Type = &ticketType
@@ -839,26 +1120,40 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 		return
 	}
 
+	var actorID uuid.UUID
+	var actorName string
+	actorResolved := false
 	if actor, ok := authUser(r.Context()); ok {
-		if actorID, err := uuid.Parse(actor.ID); err == nil {
+		if parsedActorID, err := uuid.Parse(actor.ID); err == nil {
+			actorID = parsedActorID
+			actorName = actor.Name
+			actorResolved = true
 			h.recordTicketActivities(r.Context(), current, ticket, actorID, actor.Name)
+			h.notifyAssignment(r, current, ticket, actorID, actor.Name)
 		}
+	}
+	if actorResolved && req.Description != nil && current.Description != ticket.Description {
+		h.notifyMentions(r, ticket.ProjectID, ticket, actorID, actorName, ticket.Description)
 	}
 
 	response := mapTicket(ticket)
 	projectUUID := uuid.UUID(response.ProjectId)
-	if h.webhooks != nil {
-		h.webhooks.Dispatch(r.Context(), projectUUID, "ticket.updated", map[string]any{
-			"ticket": response,
+	h.dispatchTicketWebhook(r.Context(), projectUUID, ticket.ID, "ticket.updated", map[string]any{"ticket": response})
+	if previous != nil && previous.StateID != ticket.StateID {
+		h.dispatchTicketWebhook(r.Context(), projectUUID, ticket.ID, "ticket.state_changed", map[string]any{
+			"ticket":      response,
+			"fromStateId": previous.StateID.String(),
+			"toStateId":   ticket.StateID.String(),
 		})
-		if previous != nil && previous.StateID != ticket.StateID {
-			h.webhooks.Dispatch(r.Context(), projectUUID, "ticket.state_changed", map[string]any{
-				"ticket":      response,
-				"fromStateId": previous.StateID.String(),
-				"toStateId":   ticket.StateID.String(),
-			})
-		}
 	}
+	h.publishProjectLiveEvent(projectUUID, projectEventBoardRefresh, map[string]any{
+		"reason": "ticket.updated",
+		"id":     ticket.ID.String(),
+	})
+	h.publishProjectLiveEvent(projectUUID, projectEventActivityChanged, map[string]any{
+		"reason": "ticket.updated",
+		"id":     ticket.ID.String(),
+	})
 
 	writeJSON(w, http.StatusOK, response)
 }
@@ -880,10 +1175,18 @@ func (h *API) DeleteTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 		return
 	}
 
-	if deletedTicket != nil && h.webhooks != nil {
-		projectUUID := uuid.UUID(deletedTicket.ProjectID)
-		h.webhooks.Dispatch(r.Context(), projectUUID, "ticket.deleted", map[string]any{
+	if deletedTicket != nil {
+		projectUUID := deletedTicket.ProjectID
+		h.dispatchTicketWebhook(r.Context(), projectUUID, deletedTicket.ID, "ticket.deleted", map[string]any{
 			"ticket": mapTicket(*deletedTicket),
+		})
+		h.publishProjectLiveEvent(projectUUID, projectEventBoardRefresh, map[string]any{
+			"reason": "ticket.deleted",
+			"id":     deletedTicket.ID.String(),
+		})
+		h.publishProjectLiveEvent(projectUUID, projectEventActivityChanged, map[string]any{
+			"reason": "ticket.deleted",
+			"id":     deletedTicket.ID.String(),
 		})
 	}
 
@@ -1128,6 +1431,120 @@ func (h *API) GetProjectStats(w http.ResponseWriter, r *http.Request, projectId 
 	writeJSON(w, http.StatusOK, mapProjectStats(stats))
 }
 
+func (h *API) GetProjectReportingSummary(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectReportingSummaryParams) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+
+	from, to, ok := parseReportingRange(params.From, params.To)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_date_range", "`to` must be on or after `from`")
+		return
+	}
+
+	report, err := h.store.GetProjectReportingSummary(r.Context(), projectUUID, from, to)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reporting_error", "Failed to load project reporting summary")
+		return
+	}
+	writeJSON(w, http.StatusOK, mapProjectReportingSummary(report))
+}
+
+func (h *API) ExportProjectReportingSnapshot(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ExportProjectReportingSnapshotParams) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+
+	from, to, ok := parseReportingRange(params.From, params.To)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_date_range", "`to` must be on or after `from`")
+		return
+	}
+
+	report, err := h.store.GetProjectReportingSummary(r.Context(), projectUUID, from, to)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "reporting_error", "Failed to load project reporting summary")
+		return
+	}
+
+	format := "json"
+	if params.Format != nil {
+		format = strings.ToLower(string(*params.Format))
+	}
+
+	if format == "csv" {
+		content, err := renderProjectReportingCSV(report)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "reporting_export_error", "Failed to render reporting export")
+			return
+		}
+		filename := fmt.Sprintf("project-reporting-%s-to-%s.csv", report.From.Format("2006-01-02"), report.To.Format("2006-01-02"))
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(content)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, ProjectReportingExportJson{
+		GeneratedAt: time.Now().UTC(),
+		Summary:     mapProjectReportingSummary(report),
+	})
+}
+
+func parseReportingRange(fromParam, toParam *openapi_types.Date) (time.Time, time.Time, bool) {
+	now := time.Now().UTC()
+	to := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	from := to.AddDate(0, 0, -13)
+
+	if fromParam != nil {
+		parsed := fromParam.Time.UTC()
+		from = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+	}
+	if toParam != nil {
+		parsed := toParam.Time.UTC()
+		to = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	return from, to, !to.Before(from)
+}
+
+func renderProjectReportingCSV(report store.ProjectReportingSummary) ([]byte, error) {
+	buf := &bytes.Buffer{}
+	writer := csv.NewWriter(buf)
+	if err := writer.Write([]string{"section", "date", "label", "value"}); err != nil {
+		return nil, err
+	}
+	if err := writer.Write([]string{"meta", report.From.Format("2006-01-02"), "from", report.From.Format("2006-01-02")}); err != nil {
+		return nil, err
+	}
+	if err := writer.Write([]string{"meta", report.To.Format("2006-01-02"), "to", report.To.Format("2006-01-02")}); err != nil {
+		return nil, err
+	}
+	if err := writer.Write([]string{"meta", "", "average_cycle_time_hours", fmt.Sprintf("%.2f", report.AverageCycleTimeHours)}); err != nil {
+		return nil, err
+	}
+	for _, point := range report.ThroughputByDay {
+		if err := writer.Write([]string{"throughput_by_day", point.Date.Format("2006-01-02"), "throughput", fmt.Sprintf("%d", point.Value)}); err != nil {
+			return nil, err
+		}
+	}
+	for _, point := range report.OpenByState {
+		for _, count := range point.Counts {
+			if err := writer.Write([]string{"open_by_state", point.Date.Format("2006-01-02"), count.Label, fmt.Sprintf("%d", count.Value)}); err != nil {
+				return nil, err
+			}
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 func (h *API) GetMyProjectRole(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	projectUUID := uuid.UUID(projectId)
 	user, ok := authUser(r.Context())
@@ -1335,6 +1752,123 @@ func (h *API) ListTicketActivities(w http.ResponseWriter, r *http.Request, id op
 	writeJSON(w, http.StatusOK, ticketActivityListResponse{Items: mapSlice(activities, mapActivity)})
 }
 
+func (h *API) ListTicketIncidentTimeline(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	ticketID := uuid.UUID(id)
+	ticket, err := h.store.GetTicket(r.Context(), ticketID)
+	if handleDBError(w, r, err, "ticket", "ticket_load") {
+		return
+	}
+	if !h.requireProjectAccess(w, r, ticket.ProjectID) {
+		return
+	}
+
+	activities, _ := h.store.ListActivities(r.Context(), ticketID)
+	comments, _ := h.store.ListComments(r.Context(), ticketID)
+	webhookEvents, _ := h.store.ListTicketWebhookEvents(r.Context(), ticketID)
+
+	items := make([]IncidentTimelineItem, 0, len(activities)+len(comments)+len(webhookEvents))
+	for _, activity := range activities {
+		title := fmt.Sprintf("%s by %s", activity.Action, activity.ActorName)
+		body := ""
+		if activity.OldValue != nil || activity.NewValue != nil {
+			body = strings.TrimSpace(fmt.Sprintf("%s -> %s", derefString(activity.OldValue), derefString(activity.NewValue)))
+		}
+		items = append(items, IncidentTimelineItem{
+			Id:        activity.ID.String(),
+			TicketId:  toOpenapiUUID(ticketID),
+			Type:      IncidentTimelineItemTypeActivity,
+			Title:     title,
+			Body:      nullableString(body),
+			CreatedAt: activity.CreatedAt,
+		})
+	}
+	for _, comment := range comments {
+		items = append(items, IncidentTimelineItem{
+			Id:        comment.ID.String(),
+			TicketId:  toOpenapiUUID(ticketID),
+			Type:      IncidentTimelineItemTypeComment,
+			Title:     fmt.Sprintf("comment by %s", comment.AuthorName),
+			Body:      &comment.Message,
+			CreatedAt: comment.CreatedAt,
+		})
+	}
+	for _, evt := range webhookEvents {
+		body := fmt.Sprintf("event=%s delivered=%t", evt.Event, evt.Delivered)
+		items = append(items, IncidentTimelineItem{
+			Id:        evt.ID.String(),
+			TicketId:  toOpenapiUUID(ticketID),
+			Type:      IncidentTimelineItemTypeWebhook,
+			Title:     "webhook dispatch",
+			Body:      &body,
+			CreatedAt: evt.CreatedAt,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.Before(items[j].CreatedAt)
+	})
+
+	writeJSON(w, http.StatusOK, IncidentTimelineResponse{Items: items})
+}
+
+func (h *API) GetTicketIncidentPostmortem(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	ticketID := uuid.UUID(id)
+	ticket, err := h.store.GetTicket(r.Context(), ticketID)
+	if handleDBError(w, r, err, "ticket", "ticket_load") {
+		return
+	}
+	if !h.requireProjectAccess(w, r, ticket.ProjectID) {
+		return
+	}
+
+	activities, _ := h.store.ListActivities(r.Context(), ticketID)
+	comments, _ := h.store.ListComments(r.Context(), ticketID)
+	webhookEvents, _ := h.store.ListTicketWebhookEvents(r.Context(), ticketID)
+
+	type line struct {
+		at   time.Time
+		text string
+	}
+	lines := make([]line, 0, len(activities)+len(comments)+len(webhookEvents))
+	for _, a := range activities {
+		lines = append(lines, line{
+			at:   a.CreatedAt,
+			text: fmt.Sprintf("- %s: %s changed %s from `%s` to `%s`", a.CreatedAt.Format(time.RFC3339), a.ActorName, derefString(a.Field), derefString(a.OldValue), derefString(a.NewValue)),
+		})
+	}
+	for _, c := range comments {
+		lines = append(lines, line{
+			at:   c.CreatedAt,
+			text: fmt.Sprintf("- %s: comment by %s\n\n  %s", c.CreatedAt.Format(time.RFC3339), c.AuthorName, strings.ReplaceAll(c.Message, "\n", "\n  ")),
+		})
+	}
+	for _, e := range webhookEvents {
+		lines = append(lines, line{
+			at:   e.CreatedAt,
+			text: fmt.Sprintf("- %s: webhook `%s` (delivered=%t)", e.CreatedAt.Format(time.RFC3339), e.Event, e.Delivered),
+		})
+	}
+	sort.Slice(lines, func(i, j int) bool { return lines[i].at.Before(lines[j].at) })
+
+	var b strings.Builder
+	b.WriteString("# Postmortem Draft: " + ticket.Key + " " + ticket.Title + "\n\n")
+	b.WriteString("## Incident Summary\n\n")
+	b.WriteString("- Severity: " + derefString(ticket.IncidentSeverity) + "\n")
+	b.WriteString("- Commander: " + derefString(ticket.IncidentCommanderName) + "\n")
+	b.WriteString("- Impact: " + derefString(ticket.IncidentImpact) + "\n\n")
+	b.WriteString("## Timeline\n\n")
+	for _, l := range lines {
+		b.WriteString(l.text + "\n")
+	}
+	b.WriteString("\n## Root Cause\n\n")
+	b.WriteString("- TBD\n\n")
+	b.WriteString("## Action Items\n\n")
+	b.WriteString("- TBD\n")
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(b.String()))
+}
+
 func (h *API) recordTicketActivities(ctx context.Context, before, after store.Ticket, actorID uuid.UUID, actorName string) {
 	type fieldChange struct {
 		action   string
@@ -1395,6 +1929,14 @@ func (h *API) recordTicketActivities(ctx context.Context, before, after store.Ti
 			newValue: after.Title,
 		})
 	}
+	if derefString(before.IncidentSeverity) != derefString(after.IncidentSeverity) {
+		changes = append(changes, fieldChange{
+			action:   "incident_severity_changed",
+			field:    "incidentSeverity",
+			oldValue: derefString(before.IncidentSeverity),
+			newValue: derefString(after.IncidentSeverity),
+		})
+	}
 
 	for _, c := range changes {
 		field := c.field
@@ -1409,4 +1951,40 @@ func (h *API) recordTicketActivities(ctx context.Context, before, after store.Ti
 			NewValue:  &newVal,
 		})
 	}
+}
+
+func (h *API) dispatchTicketWebhook(ctx context.Context, projectID, ticketID uuid.UUID, event string, payload map[string]any) {
+	if h.webhooks != nil {
+		h.webhooks.Dispatch(ctx, projectID, event, payload)
+		_ = h.store.CreateTicketWebhookEvent(ctx, store.TicketWebhookEventCreateInput{
+			TicketID:  ticketID,
+			Event:     event,
+			Payload:   payload,
+			Delivered: true,
+		})
+	}
+}
+
+func nullableString(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func mapStringPtr[T ~string](value *T, mapper func(T) string) *string {
+	if value == nil {
+		return nil
+	}
+	mapped := mapper(*value)
+	return &mapped
+}
+
+func parseOpenapiUUIDPtr(id *openapi_types.UUID) *uuid.UUID {
+	if id == nil {
+		return nil
+	}
+	parsed := uuid.UUID(*id)
+	return &parsed
 }

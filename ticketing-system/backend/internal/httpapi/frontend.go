@@ -59,6 +59,13 @@ func WithFrontend(api http.Handler, dir string, basePath string) http.Handler {
 				}
 			}
 
+			// Browser navigation requests should always receive the SPA shell,
+			// even when the path matches API-like prefixes such as /projects/*.
+			if wantsHTML(r) {
+				http.ServeFile(w, r, indexPath)
+				return
+			}
+
 			// SPA fallback - serve index.html for non-API routes
 			if !isAPIPath(r.URL.Path) {
 				http.ServeFile(w, r, indexPath)
@@ -88,4 +95,9 @@ func isAPIPath(path string) bool {
 		}
 	}
 	return false
+}
+
+func wantsHTML(r *http.Request) bool {
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	return strings.Contains(accept, "text/html")
 }

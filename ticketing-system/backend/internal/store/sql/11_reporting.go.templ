@@ -1,0 +1,141 @@
+{{define "reporting_throughput_by_day.sql"}}
+WITH days AS (
+  SELECT generate_series($2::date, $3::date, interval '1 day') AS day
+),
+closed_activity AS (
+  SELECT t.id AS ticket_id, MIN(ta.created_at) AS closed_at
+  FROM tickets t
+  JOIN ticket_activities ta
+    ON ta.ticket_id = t.id
+   AND ta.action = 'state_changed'
+  JOIN workflow_states ws_closed
+    ON ws_closed.project_id = t.project_id
+   AND ws_closed.is_closed = true
+   AND ws_closed.name = ta.new_value
+  WHERE t.project_id = $1
+  GROUP BY t.id
+),
+closed_tickets AS (
+  SELECT
+    t.id AS ticket_id,
+    COALESCE(
+      ca.closed_at,
+      CASE WHEN ws_current.is_closed THEN t.updated_at END
+    ) AS closed_at
+  FROM tickets t
+  JOIN workflow_states ws_current ON ws_current.id = t.state_id
+  LEFT JOIN closed_activity ca ON ca.ticket_id = t.id
+  WHERE t.project_id = $1
+)
+SELECT d.day::date AS day, COUNT(ct.ticket_id)::int AS value
+FROM days d
+LEFT JOIN closed_tickets ct
+  ON ct.closed_at >= d.day
+ AND ct.closed_at < d.day + interval '1 day'
+GROUP BY d.day
+ORDER BY d.day
+{{end}}
+
+{{define "reporting_average_cycle_time_hours.sql"}}
+WITH closed_activity AS (
+  SELECT t.id AS ticket_id, MIN(ta.created_at) AS closed_at
+  FROM tickets t
+  JOIN ticket_activities ta
+    ON ta.ticket_id = t.id
+   AND ta.action = 'state_changed'
+  JOIN workflow_states ws_closed
+    ON ws_closed.project_id = t.project_id
+   AND ws_closed.is_closed = true
+   AND ws_closed.name = ta.new_value
+  WHERE t.project_id = $1
+  GROUP BY t.id
+),
+closed_tickets AS (
+  SELECT
+    t.id AS ticket_id,
+    t.created_at AS created_at,
+    COALESCE(
+      ca.closed_at,
+      CASE WHEN ws_current.is_closed THEN t.updated_at END
+    ) AS closed_at
+  FROM tickets t
+  JOIN workflow_states ws_current ON ws_current.id = t.state_id
+  LEFT JOIN closed_activity ca ON ca.ticket_id = t.id
+  WHERE t.project_id = $1
+)
+SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (ct.closed_at - ct.created_at)) / 3600.0), 0)
+FROM closed_tickets ct
+WHERE ct.closed_at IS NOT NULL
+  AND ct.closed_at >= $2::date
+  AND ct.closed_at < ($3::date + interval '1 day')
+{{end}}
+
+{{define "reporting_open_by_state_series.sql"}}
+WITH days AS (
+  SELECT generate_series($2::date, $3::date, interval '1 day') AS day
+),
+closed_activity AS (
+  SELECT t.id AS ticket_id, MIN(ta.created_at) AS closed_at
+  FROM tickets t
+  JOIN ticket_activities ta
+    ON ta.ticket_id = t.id
+   AND ta.action = 'state_changed'
+  JOIN workflow_states ws_closed
+    ON ws_closed.project_id = t.project_id
+   AND ws_closed.is_closed = true
+   AND ws_closed.name = ta.new_value
+  WHERE t.project_id = $1
+  GROUP BY t.id
+),
+closed_tickets AS (
+  SELECT
+    t.id AS ticket_id,
+    COALESCE(
+      ca.closed_at,
+      CASE WHEN ws_current.is_closed THEN t.updated_at END
+    ) AS closed_at
+  FROM tickets t
+  JOIN workflow_states ws_current ON ws_current.id = t.state_id
+  LEFT JOIN closed_activity ca ON ca.ticket_id = t.id
+  WHERE t.project_id = $1
+),
+ticket_day_state AS (
+  SELECT
+    d.day::date AS day,
+    t.id AS ticket_id,
+    COALESCE(
+      (
+        SELECT ta.new_value
+        FROM ticket_activities ta
+        WHERE ta.ticket_id = t.id
+          AND ta.action = 'state_changed'
+          AND ta.created_at < d.day + interval '1 day'
+        ORDER BY ta.created_at DESC
+        LIMIT 1
+      ),
+      (
+        SELECT ta.old_value
+        FROM ticket_activities ta
+        WHERE ta.ticket_id = t.id
+          AND ta.action = 'state_changed'
+        ORDER BY ta.created_at ASC
+        LIMIT 1
+      ),
+      ws_current.name
+    ) AS state_name
+  FROM days d
+  JOIN tickets t ON t.project_id = $1
+  JOIN workflow_states ws_current ON ws_current.id = t.state_id
+  LEFT JOIN closed_tickets ct ON ct.ticket_id = t.id
+  WHERE t.created_at < d.day + interval '1 day'
+    AND (ct.closed_at IS NULL OR ct.closed_at >= d.day + interval '1 day')
+)
+SELECT tds.day, ws.name, COUNT(*)::int AS value
+FROM ticket_day_state tds
+JOIN workflow_states ws
+  ON ws.project_id = $1
+ AND ws.is_closed = false
+ AND ws.name = tds.state_name
+GROUP BY tds.day, ws.name, ws.sort_order
+ORDER BY tds.day, ws.sort_order
+{{end}}

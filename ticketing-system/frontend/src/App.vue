@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppHeader from "@/components/app/AppHeader.vue";
 import LoginView from "@/components/app/LoginView.vue";
 import { useAdminStore } from "@/stores/admin";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
+import { buildProjectEventsWebSocketUrl } from "@/lib/api";
+import type { NotificationPreferences, ProjectLiveEvent } from "@/lib/api";
 
 const adminStore = useAdminStore();
 const boardStore = useBoardStore();
@@ -26,6 +28,18 @@ const currentUserName = computed(
 );
 const projects = computed(() => adminStore.projects);
 const projectLoading = computed(() => adminStore.projectStatus === "loading");
+const notifications = computed(() => boardStore.notifications);
+const notificationsLoading = computed(() => boardStore.notificationsLoading);
+const notificationsUnreadCount = computed(
+    () => boardStore.notificationsUnreadCount,
+);
+const notificationPreferences = computed(
+    () => boardStore.notificationPreferences,
+);
+const notificationPreferencesSaving = computed(
+    () => boardStore.notificationPreferencesSaving,
+);
+const inboxOpen = ref(false);
 
 const activeProjectId = computed(() =>
     typeof route.params.projectId === "string" ? route.params.projectId : "",
@@ -83,6 +97,149 @@ const checkSession = async () => {
             loginError.value = "Backend unavailable. Please try again.";
         }
     }
+};
+
+let notificationsTimer: number | null = null;
+let projectEventsSocket: WebSocket | null = null;
+let wsReconnectTimer: number | null = null;
+const wsConnected = ref(false);
+const wsFeatureEnabled =
+    (import.meta.env.VITE_USE_WS_LIVE_UPDATES || "true").toLowerCase() !==
+    "false";
+const liveUpdateMode = computed<"ws" | "polling">(() =>
+    wsFeatureEnabled && wsConnected.value ? "ws" : "polling",
+);
+
+const stopNotificationPolling = () => {
+    if (notificationsTimer !== null) {
+        window.clearInterval(notificationsTimer);
+        notificationsTimer = null;
+    }
+};
+
+const stopWsReconnectTimer = () => {
+    if (wsReconnectTimer !== null) {
+        window.clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = null;
+    }
+};
+
+const stopProjectEventsSocket = () => {
+    stopWsReconnectTimer();
+    if (projectEventsSocket) {
+        projectEventsSocket.onopen = null;
+        projectEventsSocket.onmessage = null;
+        projectEventsSocket.onerror = null;
+        projectEventsSocket.onclose = null;
+        projectEventsSocket.close();
+        projectEventsSocket = null;
+    }
+    wsConnected.value = false;
+};
+
+const startNotificationPolling = () => {
+    if (wsFeatureEnabled && wsConnected.value) return;
+    stopNotificationPolling();
+    notificationsTimer = window.setInterval(async () => {
+        if (!activeProjectId.value || showLogin.value) return;
+        try {
+            await boardStore.loadNotificationUnreadCount(activeProjectId.value);
+        } catch (err) {
+            handleAuthError(err);
+        }
+    }, 5000);
+};
+
+const handleProjectLiveEvent = async (event: ProjectLiveEvent) => {
+    const projectId = activeProjectId.value;
+    if (!projectId) return;
+    const payload = (event.payload || {}) as Record<string, unknown>;
+    switch (event.type) {
+        case "notifications.unread_count": {
+            const count = payload.count;
+            if (typeof count === "number") {
+                boardStore.notificationsUnreadCount = count;
+                return;
+            }
+            await boardStore.loadNotificationUnreadCount(projectId);
+            return;
+        }
+        case "notifications.changed":
+            await boardStore.loadNotificationUnreadCount(projectId);
+            if (inboxOpen.value) {
+                await boardStore.loadNotifications(projectId, { limit: 20 });
+            }
+            return;
+        case "heartbeat":
+            return;
+        case "board.refresh":
+            if (activePage.value === "board") {
+                await boardStore.loadBoard(projectId);
+                await boardStore.loadStories(projectId);
+            }
+            return;
+        case "activity.changed":
+            if (activePage.value === "dashboard") {
+                await boardStore.loadProjectActivities(projectId);
+            }
+            return;
+        default:
+            return;
+    }
+};
+
+const scheduleWsReconnect = () => {
+    if (!wsFeatureEnabled || showLogin.value || !activeProjectId.value) {
+        return;
+    }
+    if (wsReconnectTimer !== null) return;
+    wsReconnectTimer = window.setTimeout(() => {
+        wsReconnectTimer = null;
+        startProjectEventsSocket();
+    }, 2500);
+};
+
+const startProjectEventsSocket = () => {
+    if (!wsFeatureEnabled || showLogin.value || !activeProjectId.value) {
+        startNotificationPolling();
+        return;
+    }
+
+    stopProjectEventsSocket();
+    const socket = new WebSocket(
+        buildProjectEventsWebSocketUrl(activeProjectId.value),
+    );
+    projectEventsSocket = socket;
+
+    socket.onopen = async () => {
+        wsConnected.value = true;
+        stopNotificationPolling();
+        try {
+            await boardStore.loadNotificationUnreadCount(activeProjectId.value);
+        } catch (err) {
+            handleAuthError(err);
+        }
+    };
+
+    socket.onmessage = async (message) => {
+        try {
+            const event = JSON.parse(message.data) as ProjectLiveEvent;
+            await handleProjectLiveEvent(event);
+        } catch {
+            // Ignore malformed or unexpected events.
+        }
+    };
+
+    socket.onerror = () => {
+        socket.close();
+    };
+
+    socket.onclose = () => {
+        wsConnected.value = false;
+        if (showLogin.value) return;
+        startNotificationPolling();
+        scheduleWsReconnect();
+    };
 };
 
 const submitLogin = async () => {
@@ -152,6 +309,7 @@ const refreshActive = async () => {
             await boardStore.loadBoard(projectId);
             await boardStore.loadStories(projectId);
             await boardStore.loadWebhooks(projectId);
+            await boardStore.loadNotificationUnreadCount(projectId);
         } catch (err) {
             handleAuthError(err);
         }
@@ -182,9 +340,94 @@ const refreshActive = async () => {
     }
 };
 
+const openInbox = async () => {
+    const projectId = activeProjectId.value;
+    if (!projectId) return;
+    try {
+        await boardStore.loadNotifications(projectId, { limit: 20 });
+        await boardStore.loadNotificationPreferences(projectId);
+        await boardStore.loadNotificationUnreadCount(projectId);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const onInboxVisibilityChange = (value: boolean) => {
+    inboxOpen.value = value;
+};
+
+const markNotificationRead = async (notificationId: string) => {
+    const projectId = activeProjectId.value;
+    if (!projectId) return;
+    try {
+        await boardStore.markNotificationRead(projectId, notificationId);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const markAllNotificationsRead = async () => {
+    const projectId = activeProjectId.value;
+    if (!projectId) return;
+    try {
+        await boardStore.markAllNotificationsRead(projectId);
+        await boardStore.loadNotifications(projectId, { limit: 20 });
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const updateNotificationPreferences = async (
+    payload: Partial<NotificationPreferences>,
+) => {
+    const projectId = activeProjectId.value;
+    if (!projectId) return;
+    try {
+        await boardStore.updateNotificationPreferences(projectId, payload);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
 onMounted(() => {
     checkSession();
+    startProjectEventsSocket();
 });
+
+onUnmounted(() => {
+    stopProjectEventsSocket();
+    stopNotificationPolling();
+});
+
+watch(
+    () => activeProjectId.value,
+    async (projectId) => {
+        if (!projectId || showLogin.value) return;
+        try {
+            await boardStore.loadNotificationUnreadCount(projectId);
+            await boardStore.loadNotificationPreferences(projectId);
+        } catch (err) {
+            handleAuthError(err);
+        }
+        if (wsFeatureEnabled) {
+            startProjectEventsSocket();
+            return;
+        }
+        startNotificationPolling();
+    },
+);
+
+watch(
+    () => showLogin.value,
+    (value) => {
+        if (value) {
+            stopProjectEventsSocket();
+            stopNotificationPolling();
+            return;
+        }
+        startProjectEventsSocket();
+    },
+);
 </script>
 
 <template>
@@ -217,10 +460,23 @@ onMounted(() => {
                     :projects="projects"
                     :active-project-id="activeProjectId"
                     :can-manage-project="boardStore.canManageProject"
+                    :notifications="notifications"
+                    :notifications-loading="notificationsLoading"
+                    :notifications-unread-count="notificationsUnreadCount"
+                    :notification-preferences="notificationPreferences"
+                    :notification-preferences-saving="notificationPreferencesSaving"
+                    :live-update-mode="liveUpdateMode"
                     @set-page="setPage"
                     @select-project="selectProject"
                     @logout="performLogout"
                     @refresh="refreshActive"
+                    @open-inbox="openInbox"
+                    @inbox-visibility-change="onInboxVisibilityChange"
+                    @mark-notification-read="markNotificationRead"
+                    @mark-all-notifications-read="markAllNotificationsRead"
+                    @update-notification-preferences="
+                        updateNotificationPreferences
+                    "
                 />
 
                 <main

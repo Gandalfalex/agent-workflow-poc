@@ -2,11 +2,16 @@
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { marked } from "marked";
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type {
     Attachment,
+    DependencyRelationType,
+    IncidentTimelineItem,
     TicketActivity,
     TicketComment,
+    TicketDependency,
+    TicketIncidentSeverity,
+    TicketDependencyGraphResponse,
     TicketPriority,
     TicketType,
     WorkflowState,
@@ -19,6 +24,10 @@ type TicketEditor = {
     priority: TicketPriority;
     stateId: string;
     type: TicketType;
+    incidentEnabled: boolean;
+    incidentSeverity: TicketIncidentSeverity | undefined;
+    incidentImpact: string;
+    incidentCommanderId: string;
 };
 
 const props = defineProps<{
@@ -39,6 +48,18 @@ const props = defineProps<{
     attachments: Attachment[];
     attachmentUploading: boolean;
     attachmentError: string;
+    dependencies: TicketDependency[];
+    dependenciesLoading: boolean;
+    dependencyGraph: TicketDependencyGraphResponse;
+    dependencyGraphLoading: boolean;
+    dependencyOptions: Array<{ id: string; key: string; title: string }>;
+    dependencyRelationDraft: DependencyRelationType;
+    dependencyTicketIdDraft: string;
+    dependencySaving: boolean;
+    dependencyError: string;
+    incidentTimeline: IncidentTimelineItem[];
+    incidentTimelineLoading: boolean;
+    assigneeOptions: Array<{ id: string; name: string }>;
     projectId: string;
     ticketId: string;
     readOnly?: boolean;
@@ -53,9 +74,17 @@ const emit = defineEmits<{
     (e: "add-comment"): void;
     (e: "upload-attachment", file: File): void;
     (e: "delete-attachment", attachmentId: string): void;
+    (e: "update:dependencyRelationDraft", value: DependencyRelationType): void;
+    (e: "update:dependencyTicketIdDraft", value: string): void;
+    (e: "add-dependency"): void;
+    (e: "delete-dependency", dependencyId: string): void;
+    (e: "export-postmortem"): void;
+    (e: "open-dependency-ticket", ticketId: string): void;
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
+const incidentExpanded = ref(false);
+const showDependencyGraphOverlay = ref(false);
 
 const triggerFileUpload = () => {
     fileInput.value?.click();
@@ -81,6 +110,24 @@ const downloadUrl = (att: Attachment): string => {
 };
 
 const menuOpen = ref(false);
+const incidentTimelineVisibleItems = computed(() => {
+    if (incidentExpanded.value) return props.incidentTimeline;
+    return props.incidentTimeline.slice(-6);
+});
+const canExpandIncidentTimeline = computed(
+    () => props.incidentTimeline.length > 6,
+);
+
+watch(
+    () => props.show,
+    (show) => {
+        if (show) {
+            incidentExpanded.value = false;
+        } else {
+            showDependencyGraphOverlay.value = false;
+        }
+    },
+);
 
 const updateEditor = (patch: Partial<TicketEditor>) => {
     emit("update:editor", { ...props.editor, ...patch });
@@ -102,6 +149,132 @@ const priorityColor = (priority: string) => {
         default:
             return "bg-slate-500/15 text-slate-400 border-slate-500/20";
     }
+};
+
+type GraphNodeLayout = {
+    id: string;
+    key: string;
+    title: string;
+    depth: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    isCurrent: boolean;
+};
+
+type GraphEdgeLayout = {
+    id: string;
+    path: string;
+    relationType: string;
+    color: string;
+};
+
+const dependencyGraphLayout = computed(() => {
+    const nodes = props.dependencyGraph.nodes || [];
+    const edges = props.dependencyGraph.edges || [];
+    if (!nodes.length) {
+        return {
+            width: 640,
+            height: 180,
+            nodes: [] as GraphNodeLayout[],
+            edges: [] as GraphEdgeLayout[],
+        };
+    }
+
+    const grouped = new Map<number, typeof nodes>();
+    for (const node of nodes) {
+        const list = grouped.get(node.depth) || [];
+        list.push(node);
+        grouped.set(node.depth, list);
+    }
+    const depths = Array.from(grouped.keys()).sort((a, b) => a - b);
+    for (const depth of depths) {
+        const list = grouped.get(depth) || [];
+        list.sort((a, b) => a.ticket.key.localeCompare(b.ticket.key));
+        grouped.set(depth, list);
+    }
+
+    const cardWidth = 150;
+    const cardHeight = 38;
+    const colGap = 26;
+    const rowGap = 14;
+    const marginX = 18;
+    const marginY = 16;
+    const maxRows = Math.max(...depths.map((d) => (grouped.get(d) || []).length));
+    const width = Math.max(520, marginX * 2 + depths.length * cardWidth + (depths.length - 1) * colGap);
+    const height = Math.max(150, marginY * 2 + maxRows * cardHeight + (maxRows - 1) * rowGap);
+
+    const nodeLayouts: GraphNodeLayout[] = [];
+    const byID = new Map<string, GraphNodeLayout>();
+    depths.forEach((depth, colIndex) => {
+        const list = grouped.get(depth) || [];
+        list.forEach((node, rowIndex) => {
+            const layout: GraphNodeLayout = {
+                id: node.ticket.id,
+                key: node.ticket.key,
+                title: node.ticket.title,
+                depth: node.depth,
+                x: marginX + colIndex * (cardWidth + colGap),
+                y: marginY + rowIndex * (cardHeight + rowGap),
+                width: cardWidth,
+                height: cardHeight,
+                isCurrent: node.ticket.id === props.ticketId,
+            };
+            nodeLayouts.push(layout);
+            byID.set(layout.id, layout);
+        });
+    });
+
+    const colorForRelation = (relationType: string) => {
+        switch (relationType) {
+            case "blocks":
+                return "#f97316";
+            case "blocked_by":
+                return "#38bdf8";
+            default:
+                return "#94a3b8";
+        }
+    };
+
+    const edgeLayouts: GraphEdgeLayout[] = [];
+    for (const edge of edges) {
+        const source = byID.get(edge.sourceTicketId);
+        const target = byID.get(edge.targetTicketId);
+        if (!source || !target) continue;
+        const sx = source.x + source.width;
+        const sy = source.y + source.height / 2;
+        const tx = target.x;
+        const ty = target.y + target.height / 2;
+        const cx = sx + (tx - sx) / 2;
+        edgeLayouts.push({
+            id: edge.id,
+            relationType: edge.relationType,
+            color: colorForRelation(edge.relationType),
+            path: `M ${sx} ${sy} C ${cx} ${sy}, ${cx} ${ty}, ${tx} ${ty}`,
+        });
+    }
+
+    return {
+        width,
+        height,
+        nodes: nodeLayouts,
+        edges: edgeLayouts,
+    };
+});
+
+const shortTitle = (title: string) => {
+    const trimmed = title.trim();
+    if (trimmed.length <= 28) return trimmed;
+    return trimmed.slice(0, 27) + "...";
+};
+
+const dependencyNodeTestId = (nodeID: string) =>
+    `ticket.dependency-graph-node-${nodeID}`;
+
+const openDependencyTicket = (ticketId: string) => {
+    showDependencyGraphOverlay.value = false;
+    emit("open-dependency-ticket", ticketId);
 };
 </script>
 
@@ -294,6 +467,82 @@ const priorityColor = (priority: string) => {
                                 </select>
                             </div>
                         </div>
+                        <div class="rounded-xl border border-border bg-background/40 p-3" data-testid="ticket.incident-section">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-semibold text-muted-foreground">Incident mode</label>
+                                <input
+                                    data-testid="ticket.incident-enabled-checkbox"
+                                    type="checkbox"
+                                    :checked="props.editor.incidentEnabled"
+                                    :disabled="props.readOnly"
+                                    @change="
+                                        updateEditor({
+                                            incidentEnabled: ($event.target as HTMLInputElement).checked,
+                                        })
+                                    "
+                                />
+                            </div>
+                            <div v-if="props.editor.incidentEnabled" class="mt-3 grid gap-3 sm:grid-cols-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-muted-foreground">Severity</label>
+                                    <select
+                                        data-testid="ticket.incident-severity-select"
+                                        :value="props.editor.incidentSeverity || ''"
+                                        class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        :disabled="props.readOnly"
+                                        @change="
+                                            updateEditor({
+                                                incidentSeverity: (($event.target as HTMLSelectElement).value || undefined) as TicketIncidentSeverity | undefined,
+                                            })
+                                        "
+                                    >
+                                        <option value="">Select</option>
+                                        <option value="sev1">sev1</option>
+                                        <option value="sev2">sev2</option>
+                                        <option value="sev3">sev3</option>
+                                        <option value="sev4">sev4</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-muted-foreground">Commander</label>
+                                    <select
+                                        data-testid="ticket.incident-commander-select"
+                                        :value="props.editor.incidentCommanderId"
+                                        class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        :disabled="props.readOnly"
+                                        @change="
+                                            updateEditor({
+                                                incidentCommanderId: ($event.target as HTMLSelectElement).value,
+                                            })
+                                        "
+                                    >
+                                        <option value="">Unassigned</option>
+                                        <option
+                                            v-for="assignee in props.assigneeOptions"
+                                            :key="assignee.id"
+                                            :value="assignee.id"
+                                        >
+                                            {{ assignee.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="sm:col-span-3">
+                                    <label class="text-xs font-semibold text-muted-foreground">Impact</label>
+                                    <textarea
+                                        data-testid="ticket.incident-impact-input"
+                                        :value="props.editor.incidentImpact"
+                                        rows="2"
+                                        class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        :disabled="props.readOnly"
+                                        @input="
+                                            updateEditor({
+                                                incidentImpact: ($event.target as HTMLTextAreaElement).value,
+                                            })
+                                        "
+                                    />
+                                </div>
+                            </div>
+                        </div>
                         <div
                             v-if="props.ticketError"
                             class="rounded-2xl border border-border bg-secondary/60 px-3 py-2 text-xs"
@@ -353,6 +602,133 @@ const priorityColor = (priority: string) => {
                             <p v-else class="mt-2 text-[10px] text-muted-foreground">No files attached.</p>
                             <p v-if="props.attachmentError" class="mt-1 text-xs text-destructive">{{ props.attachmentError }}</p>
                         </div>
+
+                        <div data-testid="ticket.dependencies-section" class="mt-3">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-semibold text-muted-foreground">Dependencies</label>
+                                <span
+                                    v-if="props.dependenciesLoading"
+                                    class="text-[10px] text-muted-foreground"
+                                >
+                                    Loading...
+                                </span>
+                            </div>
+                            <div
+                                v-if="!props.readOnly"
+                                class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[140px_minmax(0,1fr)_auto]"
+                            >
+                                <select
+                                    data-testid="ticket.dependency-relation-select"
+                                    :value="props.dependencyRelationDraft"
+                                    class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    @change="
+                                        emit(
+                                            'update:dependencyRelationDraft',
+                                            ($event.target as HTMLSelectElement).value as DependencyRelationType,
+                                        )
+                                    "
+                                >
+                                    <option value="blocks">blocks</option>
+                                    <option value="blocked_by">blocked_by</option>
+                                    <option value="related">related</option>
+                                </select>
+                                <select
+                                    data-testid="ticket.dependency-ticket-select"
+                                    :value="props.dependencyTicketIdDraft"
+                                    class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    @change="
+                                        emit(
+                                            'update:dependencyTicketIdDraft',
+                                            ($event.target as HTMLSelectElement).value,
+                                        )
+                                    "
+                                >
+                                    <option value="">Select ticket</option>
+                                    <option
+                                        v-for="opt in props.dependencyOptions"
+                                        :key="opt.id"
+                                        :value="opt.id"
+                                    >
+                                        {{ opt.key }} - {{ opt.title }}
+                                    </option>
+                                </select>
+                                <Button
+                                    data-testid="ticket.dependency-add-button"
+                                    variant="outline"
+                                    size="sm"
+                                    :disabled="props.dependencySaving || !props.dependencyTicketIdDraft"
+                                    @click="emit('add-dependency')"
+                                >
+                                    Add
+                                </Button>
+                            </div>
+                            <p
+                                v-if="props.dependencyError"
+                                class="mt-1 text-xs text-destructive"
+                            >
+                                {{ props.dependencyError }}
+                            </p>
+                            <div v-if="props.dependencies.length" class="mt-2 space-y-1.5">
+                                <div
+                                    v-for="dep in props.dependencies"
+                                    :key="dep.id"
+                                    data-testid="ticket.dependency-item"
+                                    class="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-2 text-xs"
+                                >
+                                    <div class="min-w-0">
+                                        <span class="font-semibold text-foreground">{{ dep.relationType }}</span>
+                                        <span class="ml-2 text-muted-foreground">
+                                            {{
+                                                dep.relatedTicket?.key
+                                                    ? dep.relatedTicket.key + " - " + dep.relatedTicket.title
+                                                    : dep.relatedTicketId
+                                            }}
+                                        </span>
+                                    </div>
+                                    <button
+                                        v-if="!props.readOnly"
+                                        data-testid="ticket.dependency-delete-button"
+                                        type="button"
+                                        class="text-[10px] text-destructive hover:text-destructive/80 transition ml-2 whitespace-nowrap"
+                                        @click="emit('delete-dependency', dep.id)"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                            <p
+                                v-else
+                                class="mt-2 text-[10px] text-muted-foreground"
+                            >
+                                No dependencies.
+                            </p>
+                            <div data-testid="ticket.dependency-graph" class="mt-3 rounded-xl border border-border bg-background px-3 py-2">
+                                <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                                    Graph (2-hop)
+                                </p>
+                                <p
+                                    v-if="props.dependencyGraphLoading"
+                                    class="mt-1 text-[10px] text-muted-foreground"
+                                >
+                                    Loading graph...
+                                </p>
+                                <template v-else>
+                                    <p class="mt-1 text-[10px] text-muted-foreground">
+                                        {{ props.dependencyGraph.nodes.length }} nodes · {{ props.dependencyGraph.edges.length }} edges
+                                    </p>
+                                    <Button
+                                        data-testid="ticket.dependency-graph-open-button"
+                                        variant="outline"
+                                        size="sm"
+                                        class="mt-2"
+                                        :disabled="!dependencyGraphLayout.nodes.length"
+                                        @click="showDependencyGraphOverlay = true"
+                                    >
+                                        Open graph
+                                    </Button>
+                                </template>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -404,10 +780,75 @@ const priorityColor = (priority: string) => {
                                     <span v-else-if="activity.action === 'title_changed'">
                                         renamed ticket
                                     </span>
+                                    <span v-else-if="activity.action === 'incident_severity_changed'">
+                                        changed incident severity from
+                                        <span class="font-medium text-foreground">{{ activity.oldValue || "-" }}</span>
+                                        to
+                                        <span class="font-medium text-foreground">{{ activity.newValue || "-" }}</span>
+                                    </span>
                                     <span v-else>{{ activity.action }}</span>
                                     <span class="ml-1 text-muted-foreground/60">· {{ new Date(activity.createdAt).toLocaleString() }}</span>
                                 </span>
                             </div>
+                        </div>
+                    </div>
+                    <div
+                        v-if="props.editor.incidentEnabled"
+                        class="flex-shrink-0 border-b border-border"
+                    >
+                        <div class="px-6 py-3 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-semibold text-foreground">Incident timeline</span>
+                                <span class="text-[10px] text-muted-foreground">
+                                    {{ props.incidentTimeline.length }} events
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Button
+                                    v-if="canExpandIncidentTimeline"
+                                    data-testid="ticket.incident-toggle-button"
+                                    variant="ghost"
+                                    size="sm"
+                                    @click="incidentExpanded = !incidentExpanded"
+                                >
+                                    {{ incidentExpanded ? "Collapse" : "Expand" }}
+                                </Button>
+                                <Button
+                                    data-testid="ticket.export-postmortem-button"
+                                    variant="outline"
+                                    size="sm"
+                                    @click="emit('export-postmortem')"
+                                >
+                                    Export postmortem
+                                </Button>
+                            </div>
+                        </div>
+                        <div
+                            data-testid="ticket.incident-timeline"
+                            class="px-6 pb-3 space-y-1 max-h-28 overflow-y-auto"
+                        >
+                            <p
+                                v-if="props.incidentTimelineLoading"
+                                class="text-xs text-muted-foreground"
+                            >
+                                Loading timeline...
+                            </p>
+                            <div
+                                v-for="item in incidentTimelineVisibleItems"
+                                :key="item.id"
+                                data-testid="ticket.incident-item"
+                                class="text-xs text-muted-foreground break-words"
+                            >
+                                <span class="font-medium text-foreground">{{ item.title }}</span>
+                                <span v-if="item.body"> · {{ item.body }}</span>
+                                <span class="ml-1 text-muted-foreground/60">· {{ new Date(item.createdAt).toLocaleString() }}</span>
+                            </div>
+                            <p
+                                v-if="!props.incidentTimelineLoading && props.incidentTimeline.length === 0"
+                                class="text-xs text-muted-foreground"
+                            >
+                                No incident timeline events yet.
+                            </p>
                         </div>
                     </div>
 
@@ -519,6 +960,100 @@ const priorityColor = (priority: string) => {
                 >
                     {{ props.ticketSaving ? "Saving..." : "Save changes" }}
                 </Button>
+            </div>
+        </div>
+    </div>
+    <div
+        v-if="showDependencyGraphOverlay"
+        data-testid="ticket.dependency-graph-overlay"
+        class="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-6"
+        @click.self="showDependencyGraphOverlay = false"
+    >
+        <div class="flex h-[74vh] w-full max-w-5xl flex-col rounded-2xl border border-border bg-card shadow-2xl">
+            <div class="flex items-center justify-between border-b border-border px-5 py-3">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dependency graph</p>
+                    <p class="text-sm text-foreground">{{ props.ticketKey }} · 2-hop view</p>
+                </div>
+                <Button
+                    data-testid="ticket.dependency-graph-close-button"
+                    variant="ghost"
+                    size="sm"
+                    @click="showDependencyGraphOverlay = false"
+                >
+                    Close
+                </Button>
+            </div>
+            <div class="flex-1 overflow-auto p-4">
+                <div v-if="dependencyGraphLayout.nodes.length" class="min-w-fit">
+                    <svg
+                        class="h-[56vh]"
+                        :viewBox="`0 0 ${dependencyGraphLayout.width} ${dependencyGraphLayout.height}`"
+                        role="img"
+                        aria-label="Ticket dependency graph"
+                    >
+                        <path
+                            v-for="edge in dependencyGraphLayout.edges"
+                            :key="edge.id"
+                            :d="edge.path"
+                            :stroke="edge.color"
+                            stroke-width="2"
+                            fill="none"
+                            stroke-linecap="round"
+                            opacity="0.9"
+                        />
+                        <g
+                            v-for="node in dependencyGraphLayout.nodes"
+                            :key="node.id"
+                            :data-testid="dependencyNodeTestId(node.id)"
+                            class="cursor-pointer"
+                            @click="openDependencyTicket(node.id)"
+                        >
+                            <rect
+                                :x="node.x"
+                                :y="node.y"
+                                :width="node.width"
+                                :height="node.height"
+                                rx="8"
+                                :fill="node.isCurrent ? '#1d4ed8' : '#0f172a'"
+                                :stroke="node.isCurrent ? '#93c5fd' : '#334155'"
+                                stroke-width="1.5"
+                            />
+                            <text
+                                :x="node.x + 10"
+                                :y="node.y + 17"
+                                font-size="11"
+                                font-weight="700"
+                                :fill="node.isCurrent ? '#eff6ff' : '#e2e8f0'"
+                            >
+                                {{ node.key }}
+                            </text>
+                            <text
+                                :x="node.x + 10"
+                                :y="node.y + 33"
+                                font-size="10"
+                                :fill="node.isCurrent ? '#dbeafe' : '#94a3b8'"
+                            >
+                                {{ shortTitle(node.title) }}
+                            </text>
+                        </g>
+                    </svg>
+                </div>
+                <p v-else class="text-sm text-muted-foreground">No dependency graph data yet.</p>
+            </div>
+            <div class="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
+                <span class="inline-flex items-center gap-1 mr-3">
+                    <span class="h-2 w-2 rounded-full bg-orange-400"></span>
+                    blocks
+                </span>
+                <span class="inline-flex items-center gap-1 mr-3">
+                    <span class="h-2 w-2 rounded-full bg-sky-400"></span>
+                    blocked_by
+                </span>
+                <span class="inline-flex items-center gap-1">
+                    <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+                    related
+                </span>
             </div>
         </div>
     </div>

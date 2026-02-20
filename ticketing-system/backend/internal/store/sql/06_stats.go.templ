@@ -37,3 +37,17 @@ JOIN workflow_states s ON s.id = t.state_id
 WHERE t.project_id = $1
 GROUP BY s.is_closed
 {{end}}
+
+{{define "stats_blocked_open.sql"}}
+SELECT COUNT(*)
+FROM tickets t
+JOIN workflow_states s ON s.id = t.state_id
+WHERE t.project_id = $1
+  AND s.is_closed = false
+  AND EXISTS (
+    SELECT 1
+    FROM ticket_dependencies td
+    WHERE td.relation_type = 'blocks'
+      AND td.to_ticket_id = t.id
+  )
+{{end}}

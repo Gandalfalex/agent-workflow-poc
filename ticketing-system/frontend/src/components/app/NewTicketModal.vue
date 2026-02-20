@@ -8,6 +8,7 @@ import type {
     TicketType,
     WorkflowState,
     GroupMember,
+    AiTriageSuggestion,
 } from "@/lib/api";
 
 type NewTicketForm = {
@@ -29,12 +30,25 @@ const props = defineProps<{
     ticketTypes: TicketType[];
     canSubmit: boolean;
     groupMembers: GroupMember[];
+    aiTriageEnabled: boolean;
+    aiTriageLoading: boolean;
+    aiTriageBusy: boolean;
+    aiTriageError: string;
+    aiTriageSuggestion: AiTriageSuggestion | null;
+    aiFieldSelection: {
+        summary: boolean;
+        priority: boolean;
+        state: boolean;
+        assignee: boolean;
+    };
 }>();
 
 const emit = defineEmits<{
     (e: "update:ticket", value: NewTicketForm): void;
     (e: "close"): void;
     (e: "create"): void;
+    (e: "request-ai-triage"): void;
+    (e: "toggle-ai-field", field: "summary" | "priority" | "state" | "assignee", value: boolean): void;
 }>();
 
 const assigneeSearch = ref("");
@@ -120,6 +134,82 @@ const handleAssigneeBlur = () => {
                 >
             </div>
             <div class="mt-6 space-y-4">
+                <div>
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-muted-foreground"
+                            >AI Triage</label
+                        >
+                        <button
+                            v-if="props.aiTriageEnabled"
+                            data-testid="new-ticket.ai-suggest-button"
+                            type="button"
+                            class="rounded-lg border border-border bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
+                            :disabled="props.aiTriageBusy"
+                            @click="emit('request-ai-triage')"
+                        >
+                            {{ props.aiTriageBusy ? "Suggesting..." : "Suggest" }}
+                        </button>
+                    </div>
+                    <p
+                        v-if="!props.aiTriageEnabled && !props.aiTriageLoading"
+                        class="mt-2 text-[11px] text-muted-foreground"
+                    >
+                        AI triage is disabled for this project.
+                    </p>
+                    <p
+                        v-if="props.aiTriageError"
+                        class="mt-2 text-[11px] text-destructive"
+                    >
+                        {{ props.aiTriageError }}
+                    </p>
+                    <div
+                        v-if="props.aiTriageSuggestion"
+                        data-testid="new-ticket.ai-suggestion-panel"
+                        class="mt-2 rounded-xl border border-border/80 bg-background/70 p-3 text-xs"
+                    >
+                        <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                            Model {{ props.aiTriageSuggestion.model }} · {{ props.aiTriageSuggestion.promptVersion }}
+                        </p>
+                        <div class="mt-2 space-y-2">
+                            <label class="flex items-center gap-2">
+                                <input
+                                    data-testid="new-ticket.ai-apply-summary"
+                                    type="checkbox"
+                                    :checked="props.aiFieldSelection.summary"
+                                    @change="emit('toggle-ai-field', 'summary', ($event.target as HTMLInputElement).checked)"
+                                />
+                                <span>Apply summary</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input
+                                    data-testid="new-ticket.ai-apply-priority"
+                                    type="checkbox"
+                                    :checked="props.aiFieldSelection.priority"
+                                    @change="emit('toggle-ai-field', 'priority', ($event.target as HTMLInputElement).checked)"
+                                />
+                                <span>Apply priority</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input
+                                    data-testid="new-ticket.ai-apply-state"
+                                    type="checkbox"
+                                    :checked="props.aiFieldSelection.state"
+                                    @change="emit('toggle-ai-field', 'state', ($event.target as HTMLInputElement).checked)"
+                                />
+                                <span>Apply state</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input
+                                    data-testid="new-ticket.ai-apply-assignee"
+                                    type="checkbox"
+                                    :checked="props.aiFieldSelection.assignee"
+                                    @change="emit('toggle-ai-field', 'assignee', ($event.target as HTMLInputElement).checked)"
+                                />
+                                <span>Apply assignee</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
                 <div>
                     <label class="text-xs font-semibold text-muted-foreground"
                         >Title</label

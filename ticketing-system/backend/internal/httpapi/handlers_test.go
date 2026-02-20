@@ -33,8 +33,16 @@ type fakeStore struct {
 	boardTickets    []store.Ticket
 	boardTicketsErr error
 
-	getTicket    store.Ticket
-	getTicketErr error
+	getTicket                   store.Ticket
+	getTicketErr                error
+	ticketDependencies          []store.TicketDependency
+	ticketDependenciesErr       error
+	ticketDependency            store.TicketDependency
+	ticketDependencyErr         error
+	createTicketDependencyInput store.TicketDependencyCreateInput
+	deleteTicketDependencyErr   error
+	ticketDependencyGraph       store.TicketDependencyGraph
+	ticketDependencyGraphErr    error
 
 	createTicket    store.Ticket
 	createTicketErr error
@@ -46,15 +54,24 @@ type fakeStore struct {
 
 	deleteTicketErr error
 
-	webhooks         []store.Webhook
-	webhookErr       error
-	getWebhook       store.Webhook
-	getWebhookErr    error
-	createWebhook    store.Webhook
-	createWebhookErr error
-	updateWebhook    store.Webhook
-	updateWebhookErr error
-	deleteWebhookErr error
+	webhooks                   []store.Webhook
+	webhookErr                 error
+	getWebhook                 store.Webhook
+	getWebhookErr              error
+	createWebhook              store.Webhook
+	createWebhookErr           error
+	updateWebhook              store.Webhook
+	updateWebhookErr           error
+	deleteWebhookErr           error
+	boardFilterPresets         []store.BoardFilterPreset
+	boardFilterPresetErr       error
+	createBoardFilterPreset    store.BoardFilterPreset
+	createBoardFilterPresetErr error
+	updateBoardFilterPreset    store.BoardFilterPreset
+	updateBoardFilterPresetErr error
+	deleteBoardFilterPresetErr error
+	sharedBoardFilterPreset    store.BoardFilterPreset
+	sharedBoardFilterPresetErr error
 
 	replaceErr    error
 	replaceResult []store.WorkflowState
@@ -118,8 +135,40 @@ type fakeStore struct {
 	webhookDeliveries    []store.WebhookDelivery
 	webhookDeliveriesErr error
 
-	projectRoleForUser    string
-	projectRoleForUserErr error
+	projectRoleForUser         string
+	projectRoleForUserErr      error
+	sprints                    []store.Sprint
+	sprintsErr                 error
+	sprint                     store.Sprint
+	sprintErr                  error
+	capacitySettings           []store.CapacitySetting
+	capacitySettingsErr        error
+	replacedCapacityInputs     []store.CapacitySettingInput
+	sprintForecastSummary      store.SprintForecastSummary
+	sprintForecastSummaryErr   error
+	aiTriageSettings           store.AiTriageSettings
+	aiTriageSettingsErr        error
+	aiTriageSuggestion         store.AiTriageSuggestion
+	aiTriageSuggestionErr      error
+	aiTriageDecision           store.AiTriageSuggestionDecision
+	aiTriageDecisionErr        error
+	projectReportingSummary    store.ProjectReportingSummary
+	projectReportingSummaryErr error
+
+	notifications                  []store.Notification
+	notificationsErr               error
+	notification                   store.Notification
+	notificationErr                error
+	unreadNotificationCount        int
+	unreadNotificationCountErr     error
+	markAllNotificationsUpdated    int
+	markAllNotificationsReadErr    error
+	notificationPreferences        store.NotificationPreferences
+	notificationPreferencesErr     error
+	hasNotificationPreferences     bool
+	updatedNotificationPreferences store.NotificationPreferences
+	updateNotificationPrefsErr     error
+	hasUpdatedNotificationPrefs    bool
 }
 
 func (f *fakeStore) Ping(ctx context.Context) error {
@@ -349,6 +398,84 @@ func (f *fakeStore) GetProjectStats(ctx context.Context, projectID uuid.UUID) (s
 	return store.ProjectStats{}, nil
 }
 
+func (f *fakeStore) ListSprints(ctx context.Context, projectID uuid.UUID) ([]store.Sprint, error) {
+	if f.sprintsErr != nil {
+		return nil, f.sprintsErr
+	}
+	return f.sprints, nil
+}
+
+func (f *fakeStore) CreateSprint(ctx context.Context, projectID uuid.UUID, input store.SprintCreateInput) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
+func (f *fakeStore) ListCapacitySettings(ctx context.Context, projectID uuid.UUID) ([]store.CapacitySetting, error) {
+	if f.capacitySettingsErr != nil {
+		return nil, f.capacitySettingsErr
+	}
+	return f.capacitySettings, nil
+}
+
+func (f *fakeStore) ReplaceCapacitySettings(ctx context.Context, projectID uuid.UUID, inputs []store.CapacitySettingInput) ([]store.CapacitySetting, error) {
+	f.replacedCapacityInputs = inputs
+	if f.capacitySettingsErr != nil {
+		return nil, f.capacitySettingsErr
+	}
+	return f.capacitySettings, nil
+}
+
+func (f *fakeStore) GetSprintForecastSummary(ctx context.Context, projectID uuid.UUID, sprintID *uuid.UUID, iterations int) (store.SprintForecastSummary, error) {
+	if f.sprintForecastSummaryErr != nil {
+		return store.SprintForecastSummary{}, f.sprintForecastSummaryErr
+	}
+	return f.sprintForecastSummary, nil
+}
+
+func (f *fakeStore) GetAiTriageSettings(ctx context.Context, projectID uuid.UUID) (store.AiTriageSettings, error) {
+	if f.aiTriageSettingsErr != nil {
+		return store.AiTriageSettings{}, f.aiTriageSettingsErr
+	}
+	return f.aiTriageSettings, nil
+}
+
+func (f *fakeStore) UpdateAiTriageSettings(ctx context.Context, projectID uuid.UUID, enabled bool) (store.AiTriageSettings, error) {
+	if f.aiTriageSettingsErr != nil {
+		return store.AiTriageSettings{}, f.aiTriageSettingsErr
+	}
+	return store.AiTriageSettings{Enabled: enabled}, nil
+}
+
+func (f *fakeStore) CreateAiTriageSuggestion(ctx context.Context, projectID uuid.UUID, input store.AiTriageSuggestionCreateInput) (store.AiTriageSuggestion, error) {
+	if f.aiTriageSuggestionErr != nil {
+		return store.AiTriageSuggestion{}, f.aiTriageSuggestionErr
+	}
+	return f.aiTriageSuggestion, nil
+}
+
+func (f *fakeStore) GetAiTriageSuggestion(ctx context.Context, projectID, suggestionID uuid.UUID) (store.AiTriageSuggestion, error) {
+	if f.aiTriageSuggestionErr != nil {
+		return store.AiTriageSuggestion{}, f.aiTriageSuggestionErr
+	}
+	return f.aiTriageSuggestion, nil
+}
+
+func (f *fakeStore) CreateAiTriageSuggestionDecision(ctx context.Context, projectID, suggestionID uuid.UUID, input store.AiTriageSuggestionDecisionCreateInput) (store.AiTriageSuggestionDecision, error) {
+	if f.aiTriageDecisionErr != nil {
+		return store.AiTriageSuggestionDecision{}, f.aiTriageDecisionErr
+	}
+	return f.aiTriageDecision, nil
+}
+
+func (f *fakeStore) GetProjectReportingSummary(ctx context.Context, projectID uuid.UUID, from, to time.Time) (store.ProjectReportingSummary, error) {
+	if f.projectReportingSummaryErr != nil {
+		return store.ProjectReportingSummary{}, f.projectReportingSummaryErr
+	}
+	return f.projectReportingSummary, nil
+}
+
 func (f *fakeStore) ListActivities(ctx context.Context, ticketID uuid.UUID) ([]store.Activity, error) {
 	return nil, nil
 }
@@ -359,6 +486,60 @@ func (f *fakeStore) ListProjectActivities(ctx context.Context, projectID uuid.UU
 
 func (f *fakeStore) CreateActivity(ctx context.Context, ticketID uuid.UUID, input store.ActivityCreateInput) error {
 	return nil
+}
+
+func (f *fakeStore) CreateTicketWebhookEvent(ctx context.Context, input store.TicketWebhookEventCreateInput) error {
+	return nil
+}
+
+func (f *fakeStore) ListTicketWebhookEvents(ctx context.Context, ticketID uuid.UUID) ([]store.TicketWebhookEvent, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) CreateNotification(ctx context.Context, input store.NotificationCreateInput) (store.Notification, error) {
+	if f.notificationErr != nil {
+		return store.Notification{}, f.notificationErr
+	}
+	return f.notification, nil
+}
+
+func (f *fakeStore) ListNotifications(ctx context.Context, filter store.NotificationFilter) ([]store.Notification, error) {
+	if f.notificationsErr != nil {
+		return nil, f.notificationsErr
+	}
+	return f.notifications, nil
+}
+
+func (f *fakeStore) CountUnreadNotifications(ctx context.Context, projectID, userID uuid.UUID) (int, error) {
+	return f.unreadNotificationCount, f.unreadNotificationCountErr
+}
+
+func (f *fakeStore) MarkNotificationRead(ctx context.Context, id, projectID, userID uuid.UUID) (store.Notification, error) {
+	if f.notificationErr != nil {
+		return store.Notification{}, f.notificationErr
+	}
+	return f.notification, nil
+}
+
+func (f *fakeStore) MarkAllNotificationsRead(ctx context.Context, projectID, userID uuid.UUID) (int, error) {
+	return f.markAllNotificationsUpdated, f.markAllNotificationsReadErr
+}
+
+func (f *fakeStore) GetNotificationPreferences(ctx context.Context, userID uuid.UUID) (store.NotificationPreferences, error) {
+	if !f.hasNotificationPreferences {
+		return store.NotificationPreferences{MentionEnabled: true, AssignmentEnabled: true}, f.notificationPreferencesErr
+	}
+	return f.notificationPreferences, f.notificationPreferencesErr
+}
+
+func (f *fakeStore) UpdateNotificationPreferences(ctx context.Context, userID uuid.UUID, input store.NotificationPreferencesUpdateInput) (store.NotificationPreferences, error) {
+	if f.updateNotificationPrefsErr != nil {
+		return store.NotificationPreferences{}, f.updateNotificationPrefsErr
+	}
+	if !f.hasUpdatedNotificationPrefs {
+		return store.NotificationPreferences{MentionEnabled: true, AssignmentEnabled: true}, nil
+	}
+	return f.updatedNotificationPreferences, nil
 }
 
 func (f *fakeStore) GetProjectRoleForUser(ctx context.Context, projectID, userID uuid.UUID) (string, error) {
@@ -395,6 +576,39 @@ func (f *fakeStore) GetTicket(ctx context.Context, id uuid.UUID) (store.Ticket, 
 		return store.Ticket{}, f.getTicketErr
 	}
 	return f.getTicket, nil
+}
+
+func (f *fakeStore) ListTicketDependencies(ctx context.Context, projectID, ticketID uuid.UUID) ([]store.TicketDependency, error) {
+	if f.ticketDependenciesErr != nil {
+		return nil, f.ticketDependenciesErr
+	}
+	return f.ticketDependencies, nil
+}
+
+func (f *fakeStore) GetTicketDependencyForTicket(ctx context.Context, dependencyID, projectID, ticketID uuid.UUID) (store.TicketDependency, error) {
+	if f.ticketDependencyErr != nil {
+		return store.TicketDependency{}, f.ticketDependencyErr
+	}
+	return f.ticketDependency, nil
+}
+
+func (f *fakeStore) CreateTicketDependency(ctx context.Context, projectID uuid.UUID, input store.TicketDependencyCreateInput) (store.TicketDependency, error) {
+	f.createTicketDependencyInput = input
+	if f.ticketDependencyErr != nil {
+		return store.TicketDependency{}, f.ticketDependencyErr
+	}
+	return f.ticketDependency, nil
+}
+
+func (f *fakeStore) DeleteTicketDependency(ctx context.Context, dependencyID, projectID, ticketID uuid.UUID) error {
+	return f.deleteTicketDependencyErr
+}
+
+func (f *fakeStore) GetTicketDependencyGraph(ctx context.Context, projectID uuid.UUID, rootTicketID *uuid.UUID, depth int) (store.TicketDependencyGraph, error) {
+	if f.ticketDependencyGraphErr != nil {
+		return store.TicketDependencyGraph{}, f.ticketDependencyGraphErr
+	}
+	return f.ticketDependencyGraph, nil
 }
 
 func (f *fakeStore) CreateTicket(ctx context.Context, projectID uuid.UUID, input store.TicketCreateInput) (store.Ticket, error) {
@@ -449,6 +663,38 @@ func (f *fakeStore) DeleteWebhook(ctx context.Context, projectID uuid.UUID, id u
 	return f.deleteWebhookErr
 }
 
+func (f *fakeStore) ListBoardFilterPresets(ctx context.Context, projectID, ownerID uuid.UUID) ([]store.BoardFilterPreset, error) {
+	if f.boardFilterPresetErr != nil {
+		return nil, f.boardFilterPresetErr
+	}
+	return f.boardFilterPresets, nil
+}
+
+func (f *fakeStore) CreateBoardFilterPreset(ctx context.Context, projectID, ownerID uuid.UUID, input store.BoardFilterPresetCreateInput) (store.BoardFilterPreset, error) {
+	if f.createBoardFilterPresetErr != nil {
+		return store.BoardFilterPreset{}, f.createBoardFilterPresetErr
+	}
+	return f.createBoardFilterPreset, nil
+}
+
+func (f *fakeStore) UpdateBoardFilterPreset(ctx context.Context, projectID, ownerID, presetID uuid.UUID, input store.BoardFilterPresetUpdateInput) (store.BoardFilterPreset, error) {
+	if f.updateBoardFilterPresetErr != nil {
+		return store.BoardFilterPreset{}, f.updateBoardFilterPresetErr
+	}
+	return f.updateBoardFilterPreset, nil
+}
+
+func (f *fakeStore) DeleteBoardFilterPreset(ctx context.Context, projectID, ownerID, presetID uuid.UUID) error {
+	return f.deleteBoardFilterPresetErr
+}
+
+func (f *fakeStore) GetSharedBoardFilterPreset(ctx context.Context, projectID uuid.UUID, token string) (store.BoardFilterPreset, error) {
+	if f.sharedBoardFilterPresetErr != nil {
+		return store.BoardFilterPreset{}, f.sharedBoardFilterPresetErr
+	}
+	return f.sharedBoardFilterPreset, nil
+}
+
 type fakeAuth struct {
 	loginUser  auth.User
 	loginToken auth.TokenSet
@@ -491,6 +737,10 @@ func openapiUUID(value string) openapi_types.UUID {
 		return uuid.Nil
 	}
 	return parsed
+}
+
+func intPtr(value int) *int {
+	return &value
 }
 
 func (f *fakeWebhookDispatcher) Dispatch(ctx context.Context, projectID uuid.UUID, event string, data any) {
@@ -942,6 +1192,277 @@ func TestRBAC(t *testing.T) {
 		}
 		if resp["role"] != "contributor" {
 			t.Fatalf("expected role contributor, got %q", resp["role"])
+		}
+	})
+
+	t.Run("viewer bulk operation returns per-ticket failure summary", func(t *testing.T) {
+		ticketID := uuid.New()
+		fs := &fakeStore{
+			projectRoleForUser: "viewer",
+			projectIDsForUser:  []uuid.UUID{uuid.UUID(projectID)},
+			getTicket: store.Ticket{
+				ID:        ticketID,
+				ProjectID: uuid.UUID(projectID),
+				Key:       "TIC-1",
+				Title:     "Test",
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+			},
+		}
+		h := newHandlerWith(fs)
+		body := `{"action":"delete","ticketIds":["` + ticketID.String() + `"]}`
+		req := newTestRequestAsUser(http.MethodPost, "/projects/"+projectID.String()+"/tickets/bulk", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.BulkTicketOperation(rec, req, projectID)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		var resp map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if got := int(resp["successCount"].(float64)); got != 0 {
+			t.Fatalf("expected successCount 0, got %d", got)
+		}
+		if got := int(resp["errorCount"].(float64)); got != 1 {
+			t.Fatalf("expected errorCount 1, got %d", got)
+		}
+	})
+
+	t.Run("contributor bulk delete succeeds", func(t *testing.T) {
+		ticketID := uuid.New()
+		fs := &fakeStore{
+			projectRoleForUser: "contributor",
+			projectIDsForUser:  []uuid.UUID{uuid.UUID(projectID)},
+			getTicket: store.Ticket{
+				ID:        ticketID,
+				ProjectID: uuid.UUID(projectID),
+				Key:       "TIC-1",
+				Title:     "Test",
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+			},
+		}
+		h := newHandlerWith(fs)
+		body := `{"action":"delete","ticketIds":["` + ticketID.String() + `"]}`
+		req := newTestRequestAsUser(http.MethodPost, "/projects/"+projectID.String()+"/tickets/bulk", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.BulkTicketOperation(rec, req, projectID)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		var resp map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if got := int(resp["successCount"].(float64)); got != 1 {
+			t.Fatalf("expected successCount 1, got %d", got)
+		}
+		if got := int(resp["errorCount"].(float64)); got != 0 {
+			t.Fatalf("expected errorCount 0, got %d", got)
+		}
+	})
+}
+
+func TestSprintPlannerHandlers(t *testing.T) {
+	projectID := openapiUUID("11111111-1111-1111-1111-111111111111")
+	sprintID := uuid.New()
+	now := time.Now().UTC()
+	start := openapi_types.Date{Time: now}
+	end := openapi_types.Date{Time: now.AddDate(0, 0, 13)}
+
+	t.Run("create sprint", func(t *testing.T) {
+		fs := &fakeStore{
+			projectRoleForUser: "contributor",
+			projectIDsForUser:  []uuid.UUID{uuid.UUID(projectID)},
+			sprint: store.Sprint{
+				ID:               sprintID,
+				ProjectID:        uuid.UUID(projectID),
+				Name:             "Sprint 1",
+				StartDate:        start.Time,
+				EndDate:          end.Time,
+				TicketIDs:        []uuid.UUID{},
+				CommittedTickets: 0,
+				CreatedAt:        now,
+				UpdatedAt:        now,
+			},
+		}
+		h := newHandlerWith(fs)
+		body := `{"name":"Sprint 1","startDate":"` + start.Time.Format("2006-01-02") + `","endDate":"` + end.Time.Format("2006-01-02") + `"}`
+		req := newTestRequestAsUser(http.MethodPost, "/sprints", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.CreateProjectSprint(rec, req, projectID)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected status 201, got %d", rec.Code)
+		}
+	})
+
+	t.Run("list capacity settings", func(t *testing.T) {
+		fs := &fakeStore{
+			projectIDsForUser: []uuid.UUID{uuid.UUID(projectID)},
+			capacitySettings: []store.CapacitySetting{
+				{
+					ID:        uuid.New(),
+					ProjectID: uuid.UUID(projectID),
+					Scope:     "team",
+					Label:     "Team",
+					Capacity:  12,
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+			},
+		}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodGet, "/capacity-settings", nil)
+		rec := httptest.NewRecorder()
+
+		h.ListProjectCapacitySettings(rec, req, projectID)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("get sprint forecast", func(t *testing.T) {
+		fs := &fakeStore{
+			projectIDsForUser: []uuid.UUID{uuid.UUID(projectID)},
+			sprintForecastSummary: store.SprintForecastSummary{
+				CommittedTickets:    10,
+				Capacity:            8,
+				ProjectedCompletion: 9,
+				OverCapacityDelta:   2,
+				Confidence:          0.55,
+				Iterations:          500,
+			},
+		}
+		h := newHandlerWith(fs)
+		params := GetProjectSprintForecastParams{Iterations: intPtr(500)}
+		req := newTestRequestAsUser(http.MethodGet, "/sprint-forecast", nil)
+		rec := httptest.NewRecorder()
+
+		h.GetProjectSprintForecast(rec, req, projectID, params)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+	})
+}
+
+func TestAiTriageHandlers(t *testing.T) {
+	projectID := openapiUUID("11111111-1111-1111-1111-111111111111")
+	stateID := uuid.New()
+	actorID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	t.Run("create suggestion when enabled", func(t *testing.T) {
+		fs := &fakeStore{
+			projectRoleForUser: "contributor",
+			projectIDsForUser:  []uuid.UUID{uuid.UUID(projectID)},
+			aiTriageSettings:   store.AiTriageSettings{Enabled: true},
+			states: []store.WorkflowState{
+				{ID: stateID, Name: "Backlog", IsDefault: true},
+			},
+			aiTriageSuggestion: store.AiTriageSuggestion{
+				ID:                 uuid.New(),
+				ProjectID:          uuid.UUID(projectID),
+				Summary:            "Summary",
+				Priority:           "high",
+				StateID:            stateID,
+				ConfidenceSummary:  0.8,
+				ConfidencePriority: 0.7,
+				ConfidenceState:    0.9,
+				ConfidenceAssignee: 0.2,
+				PromptVersion:      "triage-v1",
+				Model:              "heuristic-local-v1",
+				CreatedAt:          time.Now().UTC(),
+			},
+		}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodPost, "/ai-triage/suggestions", strings.NewReader(`{"title":"prod error","description":"critical fail"}`))
+		rec := httptest.NewRecorder()
+
+		h.CreateAiTriageSuggestion(rec, req, projectID)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected status 201, got %d", rec.Code)
+		}
+	})
+
+	t.Run("decision recorded field-by-field", func(t *testing.T) {
+		suggestionID := uuid.New()
+		fs := &fakeStore{
+			projectRoleForUser: "contributor",
+			projectIDsForUser:  []uuid.UUID{uuid.UUID(projectID)},
+			aiTriageSettings:   store.AiTriageSettings{Enabled: true},
+			aiTriageSuggestion: store.AiTriageSuggestion{
+				ID:        suggestionID,
+				ProjectID: uuid.UUID(projectID),
+			},
+			aiTriageDecision: store.AiTriageSuggestionDecision{
+				ID:             uuid.New(),
+				SuggestionID:   suggestionID,
+				ProjectID:      uuid.UUID(projectID),
+				ActorID:        actorID,
+				AcceptedFields: []string{"priority", "summary"},
+				RejectedFields: []string{"assignee"},
+				CreatedAt:      time.Now().UTC(),
+			},
+		}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(http.MethodPost, "/ai-triage/suggestions/"+suggestionID.String()+"/decision", strings.NewReader(`{"acceptedFields":["summary","priority"],"rejectedFields":["assignee"]}`))
+		rec := httptest.NewRecorder()
+
+		h.RecordAiTriageSuggestionDecision(rec, req, projectID, openapiUUID(suggestionID.String()))
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected status 201, got %d", rec.Code)
+		}
+	})
+}
+
+func TestStreamProjectEventsAccess(t *testing.T) {
+	projectID := openapiUUID("11111111-1111-1111-1111-111111111111")
+
+	t.Run("missing session returns unauthorized", func(t *testing.T) {
+		h := newHandlerWith(&fakeStore{})
+		req := httptest.NewRequest(http.MethodGet, "/projects/"+projectID.String()+"/events/ws", nil)
+		rec := httptest.NewRecorder()
+
+		h.StreamProjectEvents(rec, req, projectID)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("expected status 401, got %d", rec.Code)
+		}
+	})
+
+	t.Run("no project access returns forbidden", func(t *testing.T) {
+		h := newHandlerWith(&fakeStore{})
+		req := newTestRequestAsUser(http.MethodGet, "/projects/"+projectID.String()+"/events/ws", nil)
+		rec := httptest.NewRecorder()
+
+		h.StreamProjectEvents(rec, req, projectID)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+	})
+
+	t.Run("no websocket upgrade returns upgrade required", func(t *testing.T) {
+		h := newHandlerWith(&fakeStore{
+			projectIDsForUser: []uuid.UUID{uuid.UUID(projectID)},
+		})
+		req := newTestRequestAsUser(http.MethodGet, "/projects/"+projectID.String()+"/events/ws", nil)
+		rec := httptest.NewRecorder()
+
+		h.StreamProjectEvents(rec, req, projectID)
+
+		if rec.Code != http.StatusUpgradeRequired {
+			t.Fatalf("expected status 426, got %d", rec.Code)
 		}
 	})
 }

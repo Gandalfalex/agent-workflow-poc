@@ -1,0 +1,11 @@
+{{define "ticket_webhook_events_insert.sql"}}
+INSERT INTO ticket_webhook_events (ticket_id, webhook_id, event, payload, delivered)
+VALUES ($1, $2, $3, $4, $5)
+{{end}}
+
+{{define "ticket_webhook_events_list.sql"}}
+SELECT id, ticket_id, webhook_id, event, payload::text, delivered, created_at
+FROM ticket_webhook_events
+WHERE ticket_id = $1
+ORDER BY created_at ASC
+{{end}}

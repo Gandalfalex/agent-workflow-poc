@@ -1,37 +1,75 @@
 import { defineStore } from "pinia";
 import {
   addTicketComment,
+  bulkTicketOperation as apiBulkTicketOperation,
   createStory,
   createTicket,
   deleteStory,
   deleteTicket,
   deleteTicketAttachment,
+  deleteTicketDependency as apiDeleteTicketDependency,
   deleteWebhook,
   getBoard,
+  getProjectDependencyGraph as apiGetProjectDependencyGraph,
   getMyProjectRole,
+  getNotificationPreferences as apiGetNotificationPreferences,
+  getNotificationUnreadCount,
+  getProjectReportingSummary as apiGetProjectReportingSummary,
+  getProjectSprintForecast as apiGetProjectSprintForecast,
   getProjectStats,
   getWorkflow,
+  listProjectCapacitySettings as apiListProjectCapacitySettings,
+  listProjectSprints as apiListProjectSprints,
   listStories,
+  listTicketDependencies as apiListTicketDependencies,
   listTicketAttachments,
   getProjectActivities,
+  listBoardFilterPresets,
+  listNotifications,
   listTicketActivities,
   listTicketComments,
   listWebhookDeliveries,
   listWebhooks,
+  markAllNotificationsRead as apiMarkAllNotificationsRead,
+  markNotificationRead as apiMarkNotificationRead,
   testWebhook,
   updateTicket,
+  replaceProjectCapacitySettings as apiReplaceProjectCapacitySettings,
+  updateBoardFilterPreset as apiUpdateBoardFilterPreset,
+  updateNotificationPreferences as apiUpdateNotificationPreferences,
   updateWorkflow,
   uploadTicketAttachment,
+  createTicketDependency as apiCreateTicketDependency,
+  createProjectSprint as apiCreateProjectSprint,
+  createBoardFilterPreset as apiCreateBoardFilterPreset,
+  deleteBoardFilterPreset as apiDeleteBoardFilterPreset,
+  getSharedBoardFilterPreset,
   type Attachment,
+  type BoardFilter,
+  type BoardFilterPreset,
+  type BulkTicketOperationRequest,
+  type BulkTicketOperationResponse,
+  type Notification,
+  type NotificationPreferences,
   type ProjectRole,
   type Story,
   type ProjectActivity,
   type TicketActivity,
   type TicketComment,
   type TicketCreateRequest,
+  type TicketPriority,
   type TicketResponse,
+  type TicketDependency,
+  type TicketDependencyCreateRequest,
+  type TicketDependencyGraphResponse,
   type TicketUpdateRequest,
   type ProjectStats,
+  type ProjectReportingSummary,
+  type Sprint,
+  type SprintCreateRequest,
+  type SprintForecastSummary,
+  type CapacitySetting,
+  type CapacitySettingInput,
   type WebhookDelivery,
   type WebhookEvent,
   type WebhookResponse,
@@ -86,94 +124,79 @@ const demoStateInProgress = demoStates[1]!;
 const demoStateReview = demoStates[2]!;
 const demoStateDone = demoStates[3]!;
 
-const demoStoryId = "bfc9e1a1-3cd9-4e1d-9f1e-000000000201";
-const demoStory: Story = {
-  id: demoStoryId,
-  projectId: demoProjectId,
-  title: "Demo Story",
-  description: "A demo story for sample tickets.",
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
-
-const demoTickets: TicketResponse[] = [
-  {
-    id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000101",
-    key: `${demoProjectKey}-101`,
-    number: 101,
-    type: "feature",
-    projectId: demoProjectId,
-    projectKey: demoProjectKey,
-    storyId: demoStoryId,
-    story: demoStory,
-    title: "Webhook signing for ticket.created",
-    description: "Include HMAC signature and retry policy.",
-    stateId: demoStateBacklog.id,
-    state: demoStateBacklog,
-    priority: "high",
-    position: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    assignee: { id: "user-1", name: "Ari" },
-  },
-  {
-    id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000102",
-    key: `${demoProjectKey}-102`,
-    number: 102,
-    type: "feature",
-    projectId: demoProjectId,
-    projectKey: demoProjectKey,
-    storyId: demoStoryId,
-    story: demoStory,
-    title: "Drag-and-drop keyboard support",
-    description: "Add arrow move + enter to drop.",
-    stateId: demoStateInProgress.id,
-    state: demoStateInProgress,
-    priority: "medium",
-    position: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    assignee: { id: "user-2", name: "Nova" },
-  },
-  {
-    id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000103",
-    key: `${demoProjectKey}-103`,
-    number: 103,
-    type: "bug",
-    projectId: demoProjectId,
-    projectKey: demoProjectKey,
-    storyId: demoStoryId,
-    story: demoStory,
-    title: "Ticket detail drawer",
-    description: "Inline editing for title, description, and assignee.",
-    stateId: demoStateReview.id,
-    state: demoStateReview,
-    priority: "low",
-    position: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    assignee: { id: "user-3", name: "Jules" },
-  },
-  {
-    id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000104",
-    key: `${demoProjectKey}-104`,
-    number: 104,
-    type: "feature",
-    projectId: demoProjectId,
-    projectKey: demoProjectKey,
-    storyId: demoStoryId,
-    story: demoStory,
-    title: "OpenAPI schema sync",
-    description: "Auto-generate clients from spec.",
-    stateId: demoStateDone.id,
-    state: demoStateDone,
-    priority: "high",
-    position: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    assignee: { id: "user-4", name: "Sam" },
-  },
+const demoAssignees = ["Ari", "Nova", "Jules", "Sam", "Ira", "Mika", "Rene"];
+const demoStoryTitles = ["Checkout Reliability", "Mobile Experience", "Platform Foundations"];
+const demoTicketTitles = [
+  "Reduce API latency spikes",
+  "Fix flaky webhook retries",
+  "Improve board keyboard navigation",
+  "Stabilize attachment uploads",
+  "Refine dashboard trend chart",
+  "Add validation for workflow edits",
+  "Harden notification preference sync",
+  "Improve ticket modal performance",
+  "Polish dependency graph layout",
+  "Fix stale board filter badge",
+  "Tighten markdown preview spacing",
+  "Improve login error feedback",
 ];
+
+const rand = (max: number) => Math.floor(Math.random() * max);
+
+function makeDemoData(): { stories: Story[]; tickets: TicketResponse[] } {
+  const now = new Date().toISOString();
+  const stories: Story[] = demoStoryTitles.map((title, index) => ({
+    id: `demo-story-${index + 1}`,
+    projectId: demoProjectId,
+    title,
+    description: `Demo storyline for ${title.toLowerCase()}.`,
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  const statePool = [demoStateBacklog, demoStateInProgress, demoStateReview, demoStateDone];
+  const priorityPool: TicketPriority[] = ["low", "medium", "high", "urgent"];
+  const typePool: Array<"feature" | "bug"> = ["feature", "bug"];
+  const tickets: TicketResponse[] = [];
+  let ticketNumber = 100;
+
+  stories.forEach((story) => {
+    const ticketCount = 3 + rand(3); // 3..5 per story
+    for (let i = 0; i < ticketCount; i += 1) {
+      const baseTitle = demoTicketTitles[rand(demoTicketTitles.length)]!;
+      const title = `${baseTitle} (${story.title.split(" ")[0]})`;
+      ticketNumber += 1;
+      const state = statePool[rand(statePool.length)]!;
+      const assigneeName = demoAssignees[rand(demoAssignees.length)]!;
+      const assigneeID = `demo-user-${assigneeName.toLowerCase()}`;
+      tickets.push({
+        id: `demo-ticket-${ticketNumber}`,
+        key: `${demoProjectKey}-${ticketNumber}`,
+        number: ticketNumber,
+        type: typePool[rand(typePool.length)]!,
+        projectId: demoProjectId,
+        projectKey: demoProjectKey,
+        storyId: story.id,
+        story,
+        title,
+        description: `Demo ticket for ${story.title}.`,
+        stateId: state.id,
+        state,
+        priority: priorityPool[rand(priorityPool.length)]!,
+        incidentEnabled: false,
+        position: i + 1,
+        blockedByCount: 0,
+        isBlocked: false,
+        createdAt: now,
+        updatedAt: now,
+        assigneeId: assigneeID,
+        assignee: { id: assigneeID, name: assigneeName },
+      });
+    }
+  });
+
+  return { stories, tickets };
+}
 
 const isAuthError = (err: unknown) => {
   const error = err as Error & { status?: number };
@@ -204,6 +227,13 @@ export const useBoardStore = defineStore("board", {
     commentSaving: false,
     commentError: "",
     ticketAttachments: [] as Attachment[],
+    ticketDependencies: [] as TicketDependency[],
+    ticketDependenciesLoading: false,
+    ticketDependencyGraph: {
+      nodes: [],
+      edges: [],
+    } as TicketDependencyGraphResponse,
+    ticketDependencyGraphLoading: false,
     attachmentUploading: false,
     attachmentError: "",
     webhookDeliveries: [] as WebhookDelivery[],
@@ -212,11 +242,30 @@ export const useBoardStore = defineStore("board", {
     dashboardLoading: false,
     projectActivities: [] as ProjectActivity[],
     projectActivitiesLoading: false,
+    projectReportingSummary: null as ProjectReportingSummary | null,
+    projectReportingLoading: false,
+    sprints: [] as Sprint[],
+    sprintsLoading: false,
+    capacitySettings: [] as CapacitySetting[],
+    capacitySettingsLoading: false,
+    sprintForecastSummary: null as SprintForecastSummary | null,
+    sprintForecastLoading: false,
     currentUserRole: null as ProjectRole | null,
     workflowEditorStates: [] as WorkflowState[],
     workflowEditorLoading: false,
     workflowEditorSaving: false,
     workflowEditorError: "",
+    boardFilterPresets: [] as BoardFilterPreset[],
+    boardFilterPresetsLoading: false,
+    boardFilterPresetsError: "",
+    notifications: [] as Notification[],
+    notificationsLoading: false,
+    notificationsUnreadCount: 0,
+    notificationPreferences: {
+      mentionEnabled: true,
+      assignmentEnabled: true,
+    } as NotificationPreferences,
+    notificationPreferencesSaving: false,
   }),
   getters: {
     canEditTickets(): boolean {
@@ -248,6 +297,10 @@ export const useBoardStore = defineStore("board", {
       this.commentSaving = false;
       this.commentError = "";
       this.ticketAttachments = [];
+      this.ticketDependencies = [];
+      this.ticketDependenciesLoading = false;
+      this.ticketDependencyGraph = { nodes: [], edges: [] };
+      this.ticketDependencyGraphLoading = false;
       this.attachmentUploading = false;
       this.attachmentError = "";
       this.webhookDeliveries = [];
@@ -256,17 +309,37 @@ export const useBoardStore = defineStore("board", {
       this.dashboardLoading = false;
       this.projectActivities = [];
       this.projectActivitiesLoading = false;
+      this.projectReportingSummary = null;
+      this.projectReportingLoading = false;
+      this.sprints = [];
+      this.sprintsLoading = false;
+      this.capacitySettings = [];
+      this.capacitySettingsLoading = false;
+      this.sprintForecastSummary = null;
+      this.sprintForecastLoading = false;
       this.currentUserRole = null;
       this.workflowEditorStates = [];
       this.workflowEditorLoading = false;
       this.workflowEditorSaving = false;
       this.workflowEditorError = "";
+      this.boardFilterPresets = [];
+      this.boardFilterPresetsLoading = false;
+      this.boardFilterPresetsError = "";
+      this.notifications = [];
+      this.notificationsLoading = false;
+      this.notificationsUnreadCount = 0;
+      this.notificationPreferences = {
+        mentionEnabled: true,
+        assignmentEnabled: true,
+      };
+      this.notificationPreferencesSaving = false;
     },
     applyDemo() {
+      const demo = makeDemoData();
       this.apiMode = "demo";
       this.states = demoStates;
-      this.tickets = demoTickets;
-      this.stories = [demoStory];
+      this.tickets = demo.tickets;
+      this.stories = demo.stories;
       this.loading = false;
     },
     clearComments() {
@@ -274,6 +347,8 @@ export const useBoardStore = defineStore("board", {
       this.commentError = "";
       this.ticketActivities = [];
       this.ticketAttachments = [];
+      this.ticketDependencies = [];
+      this.ticketDependencyGraph = { nodes: [], edges: [] };
       this.attachmentError = "";
     },
     async loadBoard(projectId: string) {
@@ -313,7 +388,11 @@ export const useBoardStore = defineStore("board", {
     },
     async loadStories(projectId: string) {
       if (this.apiMode === "demo") {
-        this.stories = [];
+        if (this.stories.length === 0) {
+          const demo = makeDemoData();
+          this.tickets = demo.tickets;
+          this.stories = demo.stories;
+        }
         return;
       }
       this.storyLoading = true;
@@ -522,6 +601,79 @@ export const useBoardStore = defineStore("board", {
         this.projectActivitiesLoading = false;
       }
     },
+    async loadProjectReportingSummary(
+      projectId: string,
+      opts: { from?: string; to?: string } = {},
+    ) {
+      this.projectReportingLoading = true;
+      try {
+        this.projectReportingSummary = await apiGetProjectReportingSummary(
+          projectId,
+          opts,
+        );
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.projectReportingSummary = null;
+      } finally {
+        this.projectReportingLoading = false;
+      }
+    },
+    async loadSprints(projectId: string) {
+      this.sprintsLoading = true;
+      try {
+        const result = await apiListProjectSprints(projectId);
+        this.sprints = result.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.sprints = [];
+      } finally {
+        this.sprintsLoading = false;
+      }
+    },
+    async createSprint(projectId: string, payload: SprintCreateRequest) {
+      const created = await apiCreateProjectSprint(projectId, payload);
+      this.sprints = [created, ...this.sprints.filter((s) => s.id !== created.id)];
+      return created;
+    },
+    async loadCapacitySettings(projectId: string) {
+      this.capacitySettingsLoading = true;
+      try {
+        const result = await apiListProjectCapacitySettings(projectId);
+        this.capacitySettings = result.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.capacitySettings = [];
+      } finally {
+        this.capacitySettingsLoading = false;
+      }
+    },
+    async replaceCapacitySettings(projectId: string, items: CapacitySettingInput[]) {
+      const result = await apiReplaceProjectCapacitySettings(projectId, { items });
+      this.capacitySettings = result.items;
+      return result.items;
+    },
+    async loadSprintForecast(
+      projectId: string,
+      opts: { sprintId?: string; iterations?: number } = {},
+    ) {
+      this.sprintForecastLoading = true;
+      try {
+        this.sprintForecastSummary = await apiGetProjectSprintForecast(projectId, opts);
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.sprintForecastSummary = null;
+      } finally {
+        this.sprintForecastLoading = false;
+      }
+    },
     async loadCurrentUserRole(projectId: string) {
       try {
         const result = await getMyProjectRole(projectId);
@@ -531,6 +683,149 @@ export const useBoardStore = defineStore("board", {
           throw err;
         }
         this.currentUserRole = null;
+      }
+    },
+    async loadBoardFilterPresets(projectId: string) {
+      this.boardFilterPresetsLoading = true;
+      this.boardFilterPresetsError = "";
+      try {
+        const result = await listBoardFilterPresets(projectId);
+        this.boardFilterPresets = result.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.boardFilterPresets = [];
+        this.boardFilterPresetsError = "Unable to load filter presets.";
+      } finally {
+        this.boardFilterPresetsLoading = false;
+      }
+    },
+    async createBoardFilterPreset(
+      projectId: string,
+      payload: { name: string; filters: BoardFilter; generateShareToken?: boolean },
+    ) {
+      this.boardFilterPresetsError = "";
+      try {
+        const created = await apiCreateBoardFilterPreset(projectId, payload);
+        this.boardFilterPresets = [created, ...this.boardFilterPresets];
+        return created;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.boardFilterPresetsError = "Unable to create filter preset.";
+        throw err;
+      }
+    },
+    async updateBoardFilterPreset(
+      projectId: string,
+      presetId: string,
+      payload: { name?: string; filters?: BoardFilter; generateShareToken?: boolean },
+    ) {
+      this.boardFilterPresetsError = "";
+      try {
+        const updated = await apiUpdateBoardFilterPreset(projectId, presetId, payload);
+        this.boardFilterPresets = this.boardFilterPresets.map((preset) =>
+          preset.id === updated.id ? updated : preset,
+        );
+        return updated;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.boardFilterPresetsError = "Unable to update filter preset.";
+        throw err;
+      }
+    },
+    async deleteBoardFilterPreset(projectId: string, presetId: string) {
+      this.boardFilterPresetsError = "";
+      try {
+        await apiDeleteBoardFilterPreset(projectId, presetId);
+        this.boardFilterPresets = this.boardFilterPresets.filter(
+          (preset) => preset.id !== presetId,
+        );
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.boardFilterPresetsError = "Unable to delete filter preset.";
+        throw err;
+      }
+    },
+    async resolveSharedBoardFilterPreset(projectId: string, token: string) {
+      return getSharedBoardFilterPreset(projectId, token);
+    },
+    async loadNotifications(
+      projectId: string,
+      opts: { limit?: number; unreadOnly?: boolean } = {},
+    ) {
+      this.notificationsLoading = true;
+      try {
+        const result = await listNotifications(projectId, opts);
+        this.notifications = result.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.notifications = [];
+      } finally {
+        this.notificationsLoading = false;
+      }
+    },
+    async loadNotificationUnreadCount(projectId: string) {
+      try {
+        const result = await getNotificationUnreadCount(projectId);
+        this.notificationsUnreadCount = result.count;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.notificationsUnreadCount = 0;
+      }
+    },
+    async markNotificationRead(projectId: string, notificationId: string) {
+      const updated = await apiMarkNotificationRead(projectId, notificationId);
+      this.notifications = this.notifications.map((item) =>
+        item.id === updated.id ? updated : item,
+      );
+      await this.loadNotificationUnreadCount(projectId);
+      return updated;
+    },
+    async markAllNotificationsRead(projectId: string) {
+      await apiMarkAllNotificationsRead(projectId);
+      this.notifications = this.notifications.map((item) => ({
+        ...item,
+        readAt: item.readAt || new Date().toISOString(),
+      }));
+      this.notificationsUnreadCount = 0;
+    },
+    async loadNotificationPreferences(projectId: string) {
+      try {
+        this.notificationPreferences =
+          await apiGetNotificationPreferences(projectId);
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.notificationPreferences = {
+          mentionEnabled: true,
+          assignmentEnabled: true,
+        };
+      }
+    },
+    async updateNotificationPreferences(
+      projectId: string,
+      payload: Partial<NotificationPreferences>,
+    ) {
+      this.notificationPreferencesSaving = true;
+      try {
+        this.notificationPreferences = await apiUpdateNotificationPreferences(
+          projectId,
+          payload,
+        );
+      } finally {
+        this.notificationPreferencesSaving = false;
       }
     },
     async createTicket(projectId: string, payload: TicketCreateRequest) {
@@ -559,7 +854,10 @@ export const useBoardStore = defineStore("board", {
             stateId: resolvedState.id,
             state: resolvedState,
             priority: payload.priority || "medium",
+            incidentEnabled: payload.incidentEnabled ?? false,
             position: 0,
+            blockedByCount: 0,
+            isBlocked: false,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
@@ -612,6 +910,52 @@ export const useBoardStore = defineStore("board", {
         this.errorMessage = "Unable to delete ticket.";
         throw err;
       }
+    },
+    async bulkTicketOperation(
+      projectId: string,
+      payload: BulkTicketOperationRequest,
+    ): Promise<BulkTicketOperationResponse> {
+      this.errorMessage = "";
+      if (this.apiMode === "demo") {
+        const results = payload.ticketIds.map((ticketId) => ({
+          ticketId,
+          success: true,
+        }));
+        if (payload.action === "delete") {
+          this.tickets = this.tickets.filter(
+            (ticket) => !payload.ticketIds.includes(ticket.id),
+          );
+        } else if (payload.action === "move_state" && payload.stateId) {
+          this.tickets = this.tickets.map((ticket) =>
+            payload.ticketIds.includes(ticket.id)
+              ? { ...ticket, stateId: payload.stateId as string }
+              : ticket,
+          );
+        } else if (payload.action === "assign" && payload.assigneeId) {
+          const assignee = this.tickets.find(
+            (ticket) => ticket.assignee?.id === payload.assigneeId,
+          )?.assignee;
+          this.tickets = this.tickets.map((ticket) =>
+            payload.ticketIds.includes(ticket.id)
+              ? { ...ticket, assigneeId: payload.assigneeId, assignee }
+              : ticket,
+          );
+        } else if (payload.action === "set_priority" && payload.priority) {
+          this.tickets = this.tickets.map((ticket) =>
+            payload.ticketIds.includes(ticket.id)
+              ? { ...ticket, priority: payload.priority as TicketPriority }
+              : ticket,
+          );
+        }
+        return {
+          action: payload.action,
+          total: payload.ticketIds.length,
+          successCount: payload.ticketIds.length,
+          errorCount: 0,
+          results,
+        };
+      }
+      return apiBulkTicketOperation(projectId, payload);
     },
     async loadTicketComments(ticketId: string) {
       this.commentError = "";
@@ -678,6 +1022,53 @@ export const useBoardStore = defineStore("board", {
         }
         this.ticketAttachments = [];
         this.attachmentError = "Unable to load attachments.";
+      }
+    },
+    async loadTicketDependencies(ticketId: string) {
+      this.ticketDependenciesLoading = true;
+      try {
+        const list = await apiListTicketDependencies(ticketId);
+        this.ticketDependencies = list.items;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.ticketDependencies = [];
+      } finally {
+        this.ticketDependenciesLoading = false;
+      }
+    },
+    async createTicketDependency(
+      ticketId: string,
+      payload: TicketDependencyCreateRequest,
+    ) {
+      const created = await apiCreateTicketDependency(ticketId, payload);
+      this.ticketDependencies = [created, ...this.ticketDependencies];
+      return created;
+    },
+    async removeTicketDependency(ticketId: string, dependencyId: string) {
+      await apiDeleteTicketDependency(ticketId, dependencyId);
+      this.ticketDependencies = this.ticketDependencies.filter(
+        (item) => item.id !== dependencyId,
+      );
+    },
+    async loadDependencyGraph(
+      projectId: string,
+      opts: { rootTicketId?: string; depth?: number } = {},
+    ) {
+      this.ticketDependencyGraphLoading = true;
+      try {
+        this.ticketDependencyGraph = await apiGetProjectDependencyGraph(
+          projectId,
+          opts,
+        );
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.ticketDependencyGraph = { nodes: [], edges: [] };
+      } finally {
+        this.ticketDependencyGraphLoading = false;
       }
     },
     async uploadAttachment(projectId: string, ticketId: string, file: File) {

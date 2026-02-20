@@ -1,0 +1,65 @@
+{{define "notification_select_fields"}}
+n.id, n.project_id, n.user_id, n.ticket_id, t.key, t.title, n.type, n.message, n.read_at, n.created_at
+{{end}}
+
+{{define "notifications_insert.sql"}}
+INSERT INTO notifications (project_id, user_id, ticket_id, type, message)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+{{end}}
+
+{{define "notifications_list.sql"}}
+SELECT {{template "notification_select_fields" .}}
+FROM notifications n
+JOIN tickets t ON t.id = n.ticket_id
+WHERE n.project_id = $1 AND n.user_id = $2
+{{- if .UnreadOnly }}
+  AND n.read_at IS NULL
+{{- end }}
+ORDER BY n.created_at DESC
+LIMIT $3
+{{end}}
+
+{{define "notifications_unread_count.sql"}}
+SELECT COUNT(*)
+FROM notifications
+WHERE project_id = $1
+  AND user_id = $2
+  AND read_at IS NULL
+{{end}}
+
+{{define "notifications_mark_read.sql"}}
+WITH updated AS (
+  UPDATE notifications
+  SET read_at = COALESCE(read_at, now())
+  WHERE id = $1 AND project_id = $2 AND user_id = $3
+  RETURNING id, project_id, user_id, ticket_id, type, message, read_at, created_at
+)
+SELECT updated.id, updated.project_id, updated.user_id, updated.ticket_id, t.key, t.title, updated.type, updated.message, updated.read_at, updated.created_at
+FROM updated
+JOIN tickets t ON t.id = updated.ticket_id
+{{end}}
+
+{{define "notifications_mark_all_read.sql"}}
+UPDATE notifications
+SET read_at = now()
+WHERE project_id = $1
+  AND user_id = $2
+  AND read_at IS NULL
+{{end}}
+
+{{define "notification_preferences_get.sql"}}
+SELECT mention_enabled, assignment_enabled
+FROM notification_preferences
+WHERE user_id = $1
+{{end}}
+
+{{define "notification_preferences_upsert.sql"}}
+INSERT INTO notification_preferences (user_id, mention_enabled, assignment_enabled, updated_at)
+VALUES ($1, COALESCE($2, true), COALESCE($3, true), now())
+ON CONFLICT (user_id) DO UPDATE
+SET mention_enabled = COALESCE($2, notification_preferences.mention_enabled),
+    assignment_enabled = COALESCE($3, notification_preferences.assignment_enabled),
+    updated_at = now()
+RETURNING mention_enabled, assignment_enabled
+{{end}}
