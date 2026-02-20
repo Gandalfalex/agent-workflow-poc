@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { computed, ref } from "vue";
+import { useI18n } from "@/lib/i18n";
 import type {
     Story,
     TicketPriority,
@@ -53,6 +54,7 @@ const emit = defineEmits<{
 
 const assigneeSearch = ref("");
 const showAssigneeDropdown = ref(false);
+const { t } = useI18n();
 
 const updateField = (patch: Partial<NewTicketForm>) => {
     emit("update:ticket", { ...props.ticket, ...patch });
@@ -108,13 +110,19 @@ const handleAssigneeBlur = () => {
         showAssigneeDropdown.value = false;
     }, 200);
 };
+
+const closeModal = (event?: Event) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    emit("close");
+};
 </script>
 
 <template>
     <div
         v-if="props.show"
         data-testid="new-ticket.modal"
-        class="fixed inset-0 z-20 flex items-center justify-center bg-black/30 px-6"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-6"
         @click.self="emit('close')"
     >
         <div
@@ -125,19 +133,24 @@ const handleAssigneeBlur = () => {
                     <p
                         class="text-xs uppercase tracking-[0.3em] text-muted-foreground"
                     >
-                        New ticket
+                        {{ t("newTicket.title") }}
                     </p>
-                    <h2 class="text-2xl font-semibold">Create a card</h2>
+                    <h2 class="text-2xl font-semibold">{{ t("newTicket.subtitle") }}</h2>
                 </div>
-                <Button variant="ghost" size="sm" @click="emit('close')"
-                    >Close</Button
+                <button
+                    type="button"
+                    data-testid="new-ticket.close-button"
+                    class="inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition hover:bg-muted"
+                    @click="closeModal"
                 >
+                    {{ t("common.close") }}
+                </button>
             </div>
             <div class="mt-6 space-y-4">
                 <div>
                     <div class="flex items-center justify-between">
                         <label class="text-xs font-semibold text-muted-foreground"
-                            >AI Triage</label
+                            >{{ t("newTicket.aiTriage") }}</label
                         >
                         <button
                             v-if="props.aiTriageEnabled"
@@ -147,14 +160,18 @@ const handleAssigneeBlur = () => {
                             :disabled="props.aiTriageBusy"
                             @click="emit('request-ai-triage')"
                         >
-                            {{ props.aiTriageBusy ? "Suggesting..." : "Suggest" }}
+                            {{
+                                props.aiTriageBusy
+                                    ? t("newTicket.suggesting")
+                                    : t("newTicket.suggest")
+                            }}
                         </button>
                     </div>
                     <p
                         v-if="!props.aiTriageEnabled && !props.aiTriageLoading"
                         class="mt-2 text-[11px] text-muted-foreground"
                     >
-                        AI triage is disabled for this project.
+                        {{ t("newTicket.aiDisabled") }}
                     </p>
                     <p
                         v-if="props.aiTriageError"
@@ -178,7 +195,7 @@ const handleAssigneeBlur = () => {
                                     :checked="props.aiFieldSelection.summary"
                                     @change="emit('toggle-ai-field', 'summary', ($event.target as HTMLInputElement).checked)"
                                 />
-                                <span>Apply summary</span>
+                                <span>{{ t("newTicket.applySummary") }}</span>
                             </label>
                             <label class="flex items-center gap-2">
                                 <input
@@ -187,7 +204,7 @@ const handleAssigneeBlur = () => {
                                     :checked="props.aiFieldSelection.priority"
                                     @change="emit('toggle-ai-field', 'priority', ($event.target as HTMLInputElement).checked)"
                                 />
-                                <span>Apply priority</span>
+                                <span>{{ t("newTicket.applyPriority") }}</span>
                             </label>
                             <label class="flex items-center gap-2">
                                 <input
@@ -196,7 +213,7 @@ const handleAssigneeBlur = () => {
                                     :checked="props.aiFieldSelection.state"
                                     @change="emit('toggle-ai-field', 'state', ($event.target as HTMLInputElement).checked)"
                                 />
-                                <span>Apply state</span>
+                                <span>{{ t("newTicket.applyState") }}</span>
                             </label>
                             <label class="flex items-center gap-2">
                                 <input
@@ -205,20 +222,20 @@ const handleAssigneeBlur = () => {
                                     :checked="props.aiFieldSelection.assignee"
                                     @change="emit('toggle-ai-field', 'assignee', ($event.target as HTMLInputElement).checked)"
                                 />
-                                <span>Apply assignee</span>
+                                <span>{{ t("newTicket.applyAssignee") }}</span>
                             </label>
                         </div>
                     </div>
                 </div>
                 <div>
                     <label class="text-xs font-semibold text-muted-foreground"
-                        >Title</label
+                        >{{ t("newTicket.fieldTitle") }}</label
                     >
                     <input
                         data-testid="new-ticket.title-input"
                         :value="props.ticket.title"
                         type="text"
-                        placeholder="Short summary"
+                        :placeholder="t('newTicket.shortSummaryPlaceholder')"
                         class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         @input="
                             updateField({
@@ -230,13 +247,13 @@ const handleAssigneeBlur = () => {
                 </div>
                 <div>
                     <label class="text-xs font-semibold text-muted-foreground"
-                        >Description</label
+                        >{{ t("newTicket.fieldDescription") }}</label
                     >
                     <MarkdownEditor
                         :model-value="props.ticket.description"
                         @update:model-value="updateField({ description: $event })"
                         :rows="3"
-                        placeholder="What needs to happen?"
+                        :placeholder="t('newTicket.descriptionPlaceholder')"
                         data-testid="new-ticket.description-input"
                         compact
                     />
@@ -245,7 +262,7 @@ const handleAssigneeBlur = () => {
                     <div>
                         <label
                             class="text-xs font-semibold text-muted-foreground"
-                            >Type</label
+                            >{{ t("newTicket.fieldType") }}</label
                         >
                         <select
                             data-testid="new-ticket.type-select"
@@ -270,7 +287,7 @@ const handleAssigneeBlur = () => {
                     <div>
                         <label
                             class="text-xs font-semibold text-muted-foreground"
-                            >Priority</label
+                            >{{ t("newTicket.fieldPriority") }}</label
                         >
                         <select
                             data-testid="new-ticket.priority-select"
@@ -298,7 +315,7 @@ const handleAssigneeBlur = () => {
                     <div>
                         <label
                             class="text-xs font-semibold text-muted-foreground"
-                            >Story</label
+                            >{{ t("newTicket.fieldStory") }}</label
                         >
                         <select
                             data-testid="new-ticket.story-select"
@@ -312,7 +329,7 @@ const handleAssigneeBlur = () => {
                                 })
                             "
                         >
-                            <option value="" disabled>Select a story</option>
+                            <option value="" disabled>{{ t("newTicket.selectStory") }}</option>
                             <option
                                 v-for="story in props.stories"
                                 :key="story.id"
@@ -325,7 +342,7 @@ const handleAssigneeBlur = () => {
                     <div>
                         <label
                             class="text-xs font-semibold text-muted-foreground"
-                            >State</label
+                            >{{ t("newTicket.fieldState") }}</label
                         >
                         <select
                             data-testid="new-ticket.state-select"
@@ -351,14 +368,14 @@ const handleAssigneeBlur = () => {
                 </div>
                 <div>
                     <label class="text-xs font-semibold text-muted-foreground"
-                        >Assignee</label
+                        >{{ t("newTicket.fieldAssignee") }}</label
                     >
                     <div class="relative mt-2">
                         <input
                             data-testid="new-ticket.assignee-input"
                             v-model="assigneeSearch"
                             type="text"
-                            placeholder="Search from group members..."
+                            :placeholder="t('newTicket.assigneeSearchPlaceholder')"
                             class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             @focus="showAssigneeDropdown = true"
                             @blur="handleAssigneeBlur"
@@ -397,7 +414,11 @@ const handleAssigneeBlur = () => {
                             "
                             class="absolute top-full left-0 right-0 mt-2 z-50 rounded-xl border border-border bg-card/95 shadow-lg px-3 py-2 text-xs text-muted-foreground"
                         >
-                            No users found matching "{{ assigneeSearch }}"
+                            {{
+                                t("newTicket.noUsersFound", {
+                                    query: assigneeSearch,
+                                })
+                            }}
                         </div>
                         <div
                             v-else-if="
@@ -406,7 +427,7 @@ const handleAssigneeBlur = () => {
                             "
                             class="absolute top-full left-0 right-0 mt-2 z-50 rounded-xl border border-border bg-card/95 shadow-lg px-3 py-2 text-xs text-muted-foreground"
                         >
-                            No group members available
+                            {{ t("newTicket.noGroupMembers") }}
                         </div>
                     </div>
                     <div
@@ -431,13 +452,19 @@ const handleAssigneeBlur = () => {
                 </div>
             </div>
             <div class="mt-6 flex items-center justify-end gap-3">
-                <Button variant="outline" @click="emit('close')">Cancel</Button>
+                <Button
+                    data-testid="new-ticket.cancel-button"
+                    variant="outline"
+                    @click="closeModal"
+                >
+                    {{ t("common.cancel") }}
+                </Button>
                 <Button
                     data-testid="new-ticket.create-button"
                     :disabled="!props.canSubmit"
                     @click="emit('create')"
                 >
-                    Create ticket
+                    {{ t("newTicket.create") }}
                 </Button>
             </div>
         </div>

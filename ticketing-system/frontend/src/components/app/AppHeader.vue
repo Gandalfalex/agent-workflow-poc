@@ -61,10 +61,10 @@ const closeInbox = () => {
                 <p
                     class="text-[10px] uppercase tracking-[0.3em] text-muted-foreground"
                 >
-                    Ops Console
+                    {{ t("header.brand") }}
                 </p>
                 <p class="text-base font-semibold">
-                    {{ props.activeProjectLabel || "Ticketing Workspace" }}
+                    {{ props.activeProjectLabel || t("header.workspaceDefault") }}
                 </p>
             </div>
         </div>
@@ -163,7 +163,7 @@ const closeInbox = () => {
                 </button>
                 <div
                     v-if="showInbox"
-                    class="fixed inset-0 z-[90] bg-slate-950/45 backdrop-blur-[1px]"
+                    class="pointer-events-none fixed inset-0 z-[30] bg-slate-950/45 backdrop-blur-[1px]"
                     @click="closeInbox"
                 ></div>
                 <div
@@ -296,7 +296,10 @@ const closeInbox = () => {
                 data-testid="nav.logout-button"
                 variant="ghost"
                 size="sm"
-                @click="emit('logout')"
+                @click="
+                    closeInbox();
+                    emit('logout');
+                "
                 >{{ t("header.logout") }}</Button
             >
         </div>

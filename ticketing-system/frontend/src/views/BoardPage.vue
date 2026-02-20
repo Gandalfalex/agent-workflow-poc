@@ -2,13 +2,14 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BoardView from "@/components/app/BoardView.vue";
+import BoardToolbar from "@/components/app/board/BoardToolbar.vue";
+import BoardBulkActionBar from "@/components/app/board/BoardBulkActionBar.vue";
 import NewTicketModal from "@/components/app/NewTicketModal.vue";
 import StoryModal from "@/components/app/StoryModal.vue";
 import TicketModal from "@/components/app/TicketModal.vue";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
 import { useAdminStore } from "@/stores/admin";
-import { useI18n } from "@/lib/i18n";
 import {
     createAiTriageSuggestion,
     getProjectAiTriageSettings,
@@ -36,7 +37,6 @@ const props = defineProps<{ projectId: string }>();
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
 const adminStore = useAdminStore();
-const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
@@ -60,7 +60,10 @@ const bulkAssigneeId = ref("");
 const bulkPriority = ref<TicketPriority>("medium");
 const bulkBusy = ref(false);
 const bulkMessage = ref("");
-const boardSearchInput = ref<HTMLInputElement | null>(null);
+const boardToolbarRef = ref<{ focusSearch: () => void } | null>(null);
+const showFilterPanel = ref(true);
+const showShortcutHelp = ref(false);
+const showPresetEditor = ref(false);
 const selectedTicket = ref<TicketResponse | null>(null);
 const ticketEditor = ref({
     title: "",
@@ -749,6 +752,34 @@ const clearBoardFilters = () => {
     presetName.value = "";
 };
 
+const toggleFilterPanel = () => {
+    showFilterPanel.value = !showFilterPanel.value;
+};
+
+const openPresetEditor = () => {
+    showPresetEditor.value = true;
+    if (!presetName.value.trim() && activePresetId.value) {
+        const active = boardFilterPresets.value.find(
+            (item) => item.id === activePresetId.value,
+        );
+        if (active) {
+            presetName.value = active.name;
+        }
+    }
+};
+
+const cancelPresetEditor = () => {
+    showPresetEditor.value = false;
+    presetName.value = "";
+};
+
+const savePresetFromEditor = async () => {
+    await savePreset();
+    if (activePresetId.value) {
+        showPresetEditor.value = false;
+    }
+};
+
 const toggleBulkSelectMode = () => {
     bulkSelectMode.value = !bulkSelectMode.value;
     if (!bulkSelectMode.value) {
@@ -1027,8 +1058,7 @@ const onGlobalKeydown = async (event: KeyboardEvent) => {
     if (event.key === "/") {
         event.preventDefault();
         await nextTick();
-        boardSearchInput.value?.focus();
-        boardSearchInput.value?.select();
+        boardToolbarRef.value?.focusSearch();
         return;
     }
     if (event.key.toLowerCase() === "n") {
@@ -1204,6 +1234,13 @@ const exportIncidentPostmortem = async () => {
 
 const openDependencyTicketFromGraph = async (ticketId: string) => {
     if (!ticketId) return;
+    const graphTicket = ticketDependencyGraph.value.nodes.find(
+        (node) => node.ticket.id === ticketId,
+    )?.ticket;
+    if (graphTicket) {
+        await openTicket(graphTicket);
+        return;
+    }
     const ticket = tickets.value.find((item) => item.id === ticketId);
     if (ticket) {
         await openTicket(ticket);
@@ -1260,220 +1297,48 @@ watch(
 </script>
 
 <template>
-    <section class="rounded-2xl border border-border bg-card/70 px-4 py-2.5">
-        <div class="flex items-center gap-3">
-            <div class="relative flex-1">
-                <input
-                    ref="boardSearchInput"
-                    v-model="boardSearch"
-                    data-testid="board.filter-search-input"
-                    type="text"
-                    :placeholder="t('board.search.placeholder')"
-                    class="w-full rounded-xl border border-input bg-background pl-3 pr-16 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <div
-                    class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-muted-foreground"
-                >
-                    <kbd
-                        class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold"
-                        >/</kbd
-                    >
-                    <kbd
-                        class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold"
-                        >N</kbd
-                    >
-                </div>
-            </div>
-            <button
-                v-if="hasActiveFilter"
-                data-testid="board.filter-clear-button"
-                class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground transition hover:border-foreground hover:text-foreground whitespace-nowrap"
-                @click="clearBoardFilters"
-            >
-                {{ t("common.clear") }}
-            </button>
-        </div>
-        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-5">
-            <select
-                v-model="filterStateId"
-                data-testid="board.filter-state-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option value="">{{ t("board.filter.allStates") }}</option>
-                <option v-for="state in states" :key="state.id" :value="state.id">
-                    {{ state.name }}
-                </option>
-            </select>
-            <select
-                v-model="filterAssigneeId"
-                data-testid="board.filter-assignee-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option value="">{{ t("board.filter.allAssignees") }}</option>
-                <option
-                    v-for="assignee in assigneeOptions"
-                    :key="assignee.id"
-                    :value="assignee.id"
-                >
-                    {{ assignee.name }}
-                </option>
-            </select>
-            <select
-                v-model="filterPriority"
-                data-testid="board.filter-priority-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option value="">{{ t("board.filter.allPriorities") }}</option>
-                <option v-for="priority in priorities" :key="priority" :value="priority">
-                    {{ priority }}
-                </option>
-            </select>
-            <select
-                v-model="filterType"
-                data-testid="board.filter-type-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option value="">{{ t("board.filter.allTypes") }}</option>
-                <option v-for="ticketType in ticketTypes" :key="ticketType" :value="ticketType">
-                    {{ ticketType }}
-                </option>
-            </select>
-            <label
-                class="flex items-center gap-2 rounded-xl border border-input bg-background px-3 py-2 text-sm"
-            >
-                <input
-                    v-model="filterBlocked"
-                    data-testid="board.filter-blocked-checkbox"
-                    type="checkbox"
-                />
-                {{ t("board.filter.blockedOnly") }}
-            </label>
-        </div>
-        <div class="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto_auto]">
-            <select
-                v-model="activePresetId"
-                data-testid="board.preset-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                @change="onPresetChange"
-            >
-                <option value="">{{ t("board.filter.selectPreset") }}</option>
-                <option
-                    v-for="preset in boardFilterPresets"
-                    :key="preset.id"
-                    :value="preset.id"
-                >
-                    {{ preset.name }}
-                </option>
-            </select>
-            <input
-                v-model="presetName"
-                type="text"
-                data-testid="board.preset-name-input"
-                :placeholder="t('board.filter.presetName')"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <button
-                data-testid="board.preset-save-button"
-                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
-                :disabled="presetBusy"
-                @click="savePreset"
-            >
-                {{ t("board.preset.save") }}
-            </button>
-            <button
-                data-testid="board.preset-rename-button"
-                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
-                :disabled="presetBusy || !activePresetId"
-                @click="renamePreset"
-            >
-                {{ t("board.preset.rename") }}
-            </button>
-            <button
-                data-testid="board.preset-delete-button"
-                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
-                :disabled="presetBusy || !activePresetId"
-                @click="deletePreset"
-            >
-                {{ t("board.preset.delete") }}
-            </button>
-            <button
-                data-testid="board.preset-share-button"
-                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
-                :disabled="presetBusy || !activePresetId"
-                @click="sharePreset"
-            >
-                {{ t("board.preset.share") }}
-            </button>
-        </div>
-        <p
-            v-if="presetMessage || boardFilterPresetsLoading || boardFilterPresetsError"
-            class="mt-2 text-xs text-muted-foreground"
-        >
-            {{ presetMessage || (boardFilterPresetsLoading ? t("board.filter.loadingPresets") : boardFilterPresetsError) }}
-        </p>
-        <div v-if="canEditTickets && bulkSelectMode" class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-            <select
-                v-model="bulkAction"
-                data-testid="board.bulk-action-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option value="move_state">{{ t("board.bulk.moveState") }}</option>
-                <option value="assign">{{ t("board.bulk.assignUser") }}</option>
-                <option value="set_priority">{{ t("board.bulk.setPriority") }}</option>
-                <option value="delete">{{ t("board.bulk.deleteTickets") }}</option>
-            </select>
-            <select
-                v-if="bulkAction === 'move_state'"
-                v-model="bulkStateId"
-                data-testid="board.bulk-state-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option value="">{{ t("board.bulk.selectState") }}</option>
-                <option v-for="state in states" :key="state.id" :value="state.id">
-                    {{ state.name }}
-                </option>
-            </select>
-            <select
-                v-else-if="bulkAction === 'assign'"
-                v-model="bulkAssigneeId"
-                data-testid="board.bulk-assignee-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option value="">{{ t("board.bulk.selectAssignee") }}</option>
-                <option
-                    v-for="assignee in assigneeOptions"
-                    :key="assignee.id"
-                    :value="assignee.id"
-                >
-                    {{ assignee.name }}
-                </option>
-            </select>
-            <select
-                v-else-if="bulkAction === 'set_priority'"
-                v-model="bulkPriority"
-                data-testid="board.bulk-priority-select"
-                class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-                <option v-for="priority in priorities" :key="priority" :value="priority">
-                    {{ priority }}
-                </option>
-            </select>
-            <div v-else class="rounded-xl border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
-                {{ t("board.bulk.deleteHint") }}
-            </div>
-            <button
-                data-testid="board.bulk-apply-button"
-                class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"
-                :disabled="bulkBusy || !bulkSelectMode || selectedTicketIds.length === 0"
-                @click="applyBulkAction"
-            >
-                {{ bulkBusy ? t("board.bulk.applying") : t("board.bulk.apply") }}
-            </button>
-        </div>
-        <p v-if="bulkMessage" data-testid="board.bulk-message" class="mt-2 text-xs text-muted-foreground">
-            {{ bulkMessage }}
-        </p>
-    </section>
+    <BoardToolbar
+        ref="boardToolbarRef"
+        :board-search="boardSearch"
+        :active-preset-id="activePresetId"
+        :has-active-filter="hasActiveFilter"
+        :show-filter-panel="showFilterPanel"
+        :show-shortcut-help="showShortcutHelp"
+        :show-preset-editor="showPresetEditor"
+        :filter-state-id="filterStateId"
+        :filter-assignee-id="filterAssigneeId"
+        :filter-priority="filterPriority"
+        :filter-type="filterType"
+        :filter-blocked="filterBlocked"
+        :preset-name="presetName"
+        :preset-busy="presetBusy"
+        :preset-message="presetMessage"
+        :board-filter-presets-loading="boardFilterPresetsLoading"
+        :board-filter-presets-error="boardFilterPresetsError"
+        :states="states"
+        :assignee-options="assigneeOptions"
+        :priorities="priorities"
+        :ticket-types="ticketTypes"
+        :board-filter-presets="boardFilterPresets"
+        @update:board-search="boardSearch = $event"
+        @update:active-preset-id="activePresetId = $event"
+        @toggle-filter-panel="toggleFilterPanel"
+        @toggle-shortcut-help="showShortcutHelp = !showShortcutHelp"
+        @clear-filters="clearBoardFilters"
+        @preset-change="onPresetChange"
+        @update:filter-state-id="filterStateId = $event"
+        @update:filter-assignee-id="filterAssigneeId = $event"
+        @update:filter-priority="filterPriority = $event"
+        @update:filter-type="filterType = $event"
+        @update:filter-blocked="filterBlocked = $event"
+        @open-preset-editor="openPresetEditor"
+        @update:preset-name="presetName = $event"
+        @save-preset-from-editor="savePresetFromEditor"
+        @cancel-preset-editor="cancelPresetEditor"
+        @rename-preset="renamePreset"
+        @delete-preset="deletePreset"
+        @share-preset="sharePreset"
+    />
 
     <section
         v-if="errorMessage"
@@ -1510,6 +1375,24 @@ watch(
         :on-drag-end="onDragEnd"
         :on-drop-column="onDropColumn"
         :on-drop-card="onDropCard"
+    />
+    <BoardBulkActionBar
+        v-if="canEditTickets && bulkSelectMode"
+        :selected-count="selectedTicketIds.length"
+        :bulk-action="bulkAction"
+        :bulk-state-id="bulkStateId"
+        :bulk-assignee-id="bulkAssigneeId"
+        :bulk-priority="bulkPriority"
+        :bulk-busy="bulkBusy"
+        :bulk-message="bulkMessage"
+        :states="states"
+        :priorities="priorities"
+        :assignee-options="assigneeOptions"
+        @update:bulk-action="bulkAction = $event"
+        @update:bulk-state-id="bulkStateId = $event"
+        @update:bulk-assignee-id="bulkAssigneeId = $event"
+        @update:bulk-priority="bulkPriority = $event"
+        @apply="applyBulkAction"
     />
 
     <NewTicketModal

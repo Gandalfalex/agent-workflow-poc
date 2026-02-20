@@ -17,6 +17,7 @@ import type {
     WorkflowState,
 } from "@/lib/api";
 import { downloadTicketAttachmentUrl } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 type TicketEditor = {
     title: string;
@@ -85,6 +86,7 @@ const emit = defineEmits<{
 const fileInput = ref<HTMLInputElement | null>(null);
 const incidentExpanded = ref(false);
 const showDependencyGraphOverlay = ref(false);
+const { t } = useI18n();
 
 const triggerFileUpload = () => {
     fileInput.value?.click();
@@ -126,6 +128,14 @@ watch(
         } else {
             showDependencyGraphOverlay.value = false;
         }
+    },
+);
+
+watch(
+    () => props.ticketId,
+    () => {
+        // Always close the graph overlay when switching to a different ticket.
+        showDependencyGraphOverlay.value = false;
     },
 );
 
@@ -276,13 +286,54 @@ const openDependencyTicket = (ticketId: string) => {
     showDependencyGraphOverlay.value = false;
     emit("open-dependency-ticket", ticketId);
 };
+
+const formatActivityMessage = (activity: TicketActivity): string => {
+    switch (activity.action) {
+        case "state_changed":
+            return t("ticket.activityChangedState", {
+                old: activity.oldValue || t("ticket.unknownValue"),
+                new: activity.newValue || t("ticket.unknownValue"),
+            });
+        case "priority_changed":
+            return t("ticket.activityChangedPriority", {
+                old: activity.oldValue || t("ticket.unknownValue"),
+                new: activity.newValue || t("ticket.unknownValue"),
+            });
+        case "assignee_changed":
+            if (activity.newValue) {
+                return t("ticket.activityAssignedTo", { new: activity.newValue });
+            }
+            return t("ticket.activityRemovedAssignee");
+        case "type_changed":
+            return t("ticket.activityChangedType", {
+                old: activity.oldValue || t("ticket.unknownValue"),
+                new: activity.newValue || t("ticket.unknownValue"),
+            });
+        case "title_changed":
+            return t("ticket.activityRenamed");
+        case "incident_severity_changed":
+            return t("ticket.activityChangedIncidentSeverity", {
+                old: activity.oldValue || t("ticket.unknownValue"),
+                new: activity.newValue || t("ticket.unknownValue"),
+            });
+        default:
+            return activity.action;
+    }
+};
+
+const relationLabel = (relationType: string): string => {
+    if (relationType === "blocks") return t("ticket.relationBlocks");
+    if (relationType === "blocked_by") return t("ticket.relationBlockedBy");
+    if (relationType === "related") return t("ticket.relationRelated");
+    return relationType;
+};
 </script>
 
 <template>
     <div
         v-if="props.show"
         data-testid="ticket.modal"
-        class="fixed inset-0 z-30 flex items-center justify-center bg-black/50 px-6"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 px-6"
         @click.self="emit('close')"
     >
         <div
@@ -295,7 +346,7 @@ const openDependencyTicket = (ticketId: string) => {
                         <p
                             class="text-[10px] uppercase tracking-[0.3em] text-muted-foreground"
                         >
-                            Ticket
+                            {{ t("ticket.titleLabel") }}
                         </p>
                         <h2 class="text-xl font-semibold">
                             {{ props.ticketKey }}
@@ -309,13 +360,18 @@ const openDependencyTicket = (ticketId: string) => {
                     </span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" @click="emit('close')">
-                        Close
-                    </Button>
+                    <button
+                        type="button"
+                        data-testid="ticket.close-button"
+                        class="inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition hover:bg-muted"
+                        @click="emit('close')"
+                    >
+                        {{ t("common.close") }}
+                    </button>
                     <div v-if="!props.readOnly" class="relative">
                         <button
                             class="rounded-full border border-border bg-background px-2 py-1 text-lg font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground cursor-pointer"
-                            aria-label="Ticket actions"
+                            :aria-label="t('ticket.actionsLabel')"
                             @click.stop="menuOpen = !menuOpen"
                         >
                             &#x22EE;
@@ -337,7 +393,7 @@ const openDependencyTicket = (ticketId: string) => {
                                 :disabled="props.ticketSaving"
                                 @click.stop="menuOpen = false; emit('delete')"
                             >
-                                Delete ticket
+                                {{ t("ticket.deleteTicket") }}
                             </Button>
                         </div>
                     </div>
@@ -354,7 +410,7 @@ const openDependencyTicket = (ticketId: string) => {
                         <div>
                             <label
                                 class="text-xs font-semibold text-muted-foreground"
-                                >Title</label
+                                >{{ t("ticket.fieldTitle") }}</label
                             >
                             <input
                                 data-testid="ticket.title-input"
@@ -373,13 +429,13 @@ const openDependencyTicket = (ticketId: string) => {
                         <div>
                             <label
                                 class="text-xs font-semibold text-muted-foreground"
-                                >Description</label
+                                >{{ t("ticket.fieldDescription") }}</label
                             >
                             <MarkdownEditor
                                 :model-value="props.editor.description"
                                 @update:model-value="updateEditor({ description: $event })"
                                 :rows="7"
-                                placeholder="Describe the ticket..."
+                                :placeholder="t('ticket.describePlaceholder')"
                                 data-testid="ticket.description-input"
                                 show-preview
                             />
@@ -388,7 +444,7 @@ const openDependencyTicket = (ticketId: string) => {
                             <div>
                                 <label
                                     class="text-xs font-semibold text-muted-foreground"
-                                    >Type</label
+                                    >{{ t("ticket.fieldType") }}</label
                                 >
                                 <select
                                     data-testid="ticket.type-select"
@@ -415,7 +471,7 @@ const openDependencyTicket = (ticketId: string) => {
                             <div>
                                 <label
                                     class="text-xs font-semibold text-muted-foreground"
-                                    >Priority</label
+                                    >{{ t("ticket.fieldPriority") }}</label
                                 >
                                 <select
                                     data-testid="ticket.priority-select"
@@ -442,7 +498,7 @@ const openDependencyTicket = (ticketId: string) => {
                             <div>
                                 <label
                                     class="text-xs font-semibold text-muted-foreground"
-                                    >State</label
+                                    >{{ t("ticket.fieldState") }}</label
                                 >
                                 <select
                                     data-testid="ticket.state-select"
@@ -469,7 +525,7 @@ const openDependencyTicket = (ticketId: string) => {
                         </div>
                         <div class="rounded-xl border border-border bg-background/40 p-3" data-testid="ticket.incident-section">
                             <div class="flex items-center justify-between">
-                                <label class="text-xs font-semibold text-muted-foreground">Incident mode</label>
+                                <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.incidentMode") }}</label>
                                 <input
                                     data-testid="ticket.incident-enabled-checkbox"
                                     type="checkbox"
@@ -484,7 +540,7 @@ const openDependencyTicket = (ticketId: string) => {
                             </div>
                             <div v-if="props.editor.incidentEnabled" class="mt-3 grid gap-3 sm:grid-cols-3">
                                 <div>
-                                    <label class="text-xs font-semibold text-muted-foreground">Severity</label>
+                                    <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.severity") }}</label>
                                     <select
                                         data-testid="ticket.incident-severity-select"
                                         :value="props.editor.incidentSeverity || ''"
@@ -496,7 +552,7 @@ const openDependencyTicket = (ticketId: string) => {
                                             })
                                         "
                                     >
-                                        <option value="">Select</option>
+                                        <option value="">{{ t("ticket.select") }}</option>
                                         <option value="sev1">sev1</option>
                                         <option value="sev2">sev2</option>
                                         <option value="sev3">sev3</option>
@@ -504,7 +560,7 @@ const openDependencyTicket = (ticketId: string) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="text-xs font-semibold text-muted-foreground">Commander</label>
+                                    <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.commander") }}</label>
                                     <select
                                         data-testid="ticket.incident-commander-select"
                                         :value="props.editor.incidentCommanderId"
@@ -516,7 +572,7 @@ const openDependencyTicket = (ticketId: string) => {
                                             })
                                         "
                                     >
-                                        <option value="">Unassigned</option>
+                                        <option value="">{{ t("ticket.unassigned") }}</option>
                                         <option
                                             v-for="assignee in props.assigneeOptions"
                                             :key="assignee.id"
@@ -527,7 +583,7 @@ const openDependencyTicket = (ticketId: string) => {
                                     </select>
                                 </div>
                                 <div class="sm:col-span-3">
-                                    <label class="text-xs font-semibold text-muted-foreground">Impact</label>
+                                    <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.impact") }}</label>
                                     <textarea
                                         data-testid="ticket.incident-impact-input"
                                         :value="props.editor.incidentImpact"
@@ -553,7 +609,7 @@ const openDependencyTicket = (ticketId: string) => {
                         <!-- Attachments -->
                         <div data-testid="ticket.attachments-section">
                             <div class="flex items-center justify-between">
-                                <label class="text-xs font-semibold text-muted-foreground">Attachments</label>
+                                <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.attachments") }}</label>
                                 <button
                                     v-if="!props.readOnly"
                                     data-testid="ticket.upload-attachment-button"
@@ -562,7 +618,7 @@ const openDependencyTicket = (ticketId: string) => {
                                     :disabled="props.attachmentUploading"
                                     @click="triggerFileUpload"
                                 >
-                                    {{ props.attachmentUploading ? "Uploading..." : "+ Upload" }}
+                                    {{ props.attachmentUploading ? t("ticket.uploading") : t("ticket.upload") }}
                                 </button>
                             </div>
                             <input
@@ -595,22 +651,22 @@ const openDependencyTicket = (ticketId: string) => {
                                         class="text-[10px] text-destructive hover:text-destructive/80 transition ml-2 whitespace-nowrap"
                                         @click="emit('delete-attachment', att.id)"
                                     >
-                                        Delete
+                                        {{ t("common.delete") }}
                                     </button>
                                 </div>
                             </div>
-                            <p v-else class="mt-2 text-[10px] text-muted-foreground">No files attached.</p>
+                            <p v-else class="mt-2 text-[10px] text-muted-foreground">{{ t("ticket.noFiles") }}</p>
                             <p v-if="props.attachmentError" class="mt-1 text-xs text-destructive">{{ props.attachmentError }}</p>
                         </div>
 
                         <div data-testid="ticket.dependencies-section" class="mt-3">
                             <div class="flex items-center justify-between">
-                                <label class="text-xs font-semibold text-muted-foreground">Dependencies</label>
+                                <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.dependencies") }}</label>
                                 <span
                                     v-if="props.dependenciesLoading"
                                     class="text-[10px] text-muted-foreground"
                                 >
-                                    Loading...
+                                    {{ t("ticket.loading") }}
                                 </span>
                             </div>
                             <div
@@ -628,9 +684,9 @@ const openDependencyTicket = (ticketId: string) => {
                                         )
                                     "
                                 >
-                                    <option value="blocks">blocks</option>
-                                    <option value="blocked_by">blocked_by</option>
-                                    <option value="related">related</option>
+                                    <option value="blocks">{{ t("ticket.relationBlocks") }}</option>
+                                    <option value="blocked_by">{{ t("ticket.relationBlockedBy") }}</option>
+                                    <option value="related">{{ t("ticket.relationRelated") }}</option>
                                 </select>
                                 <select
                                     data-testid="ticket.dependency-ticket-select"
@@ -643,7 +699,7 @@ const openDependencyTicket = (ticketId: string) => {
                                         )
                                     "
                                 >
-                                    <option value="">Select ticket</option>
+                                    <option value="">{{ t("ticket.selectTicket") }}</option>
                                     <option
                                         v-for="opt in props.dependencyOptions"
                                         :key="opt.id"
@@ -659,7 +715,7 @@ const openDependencyTicket = (ticketId: string) => {
                                     :disabled="props.dependencySaving || !props.dependencyTicketIdDraft"
                                     @click="emit('add-dependency')"
                                 >
-                                    Add
+                                    {{ t("common.add") }}
                                 </Button>
                             </div>
                             <p
@@ -676,7 +732,7 @@ const openDependencyTicket = (ticketId: string) => {
                                     class="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-2 text-xs"
                                 >
                                     <div class="min-w-0">
-                                        <span class="font-semibold text-foreground">{{ dep.relationType }}</span>
+                                        <span class="font-semibold text-foreground">{{ relationLabel(dep.relationType) }}</span>
                                         <span class="ml-2 text-muted-foreground">
                                             {{
                                                 dep.relatedTicket?.key
@@ -692,7 +748,7 @@ const openDependencyTicket = (ticketId: string) => {
                                         class="text-[10px] text-destructive hover:text-destructive/80 transition ml-2 whitespace-nowrap"
                                         @click="emit('delete-dependency', dep.id)"
                                     >
-                                        Remove
+                                        {{ t("ticket.remove") }}
                                     </button>
                                 </div>
                             </div>
@@ -700,21 +756,26 @@ const openDependencyTicket = (ticketId: string) => {
                                 v-else
                                 class="mt-2 text-[10px] text-muted-foreground"
                             >
-                                No dependencies.
+                                {{ t("ticket.noDependencies") }}
                             </p>
                             <div data-testid="ticket.dependency-graph" class="mt-3 rounded-xl border border-border bg-background px-3 py-2">
                                 <p class="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                                    Graph (2-hop)
+                                    {{ t("ticket.graphTitle") }}
                                 </p>
                                 <p
                                     v-if="props.dependencyGraphLoading"
                                     class="mt-1 text-[10px] text-muted-foreground"
                                 >
-                                    Loading graph...
+                                    {{ t("ticket.loadingGraph") }}
                                 </p>
                                 <template v-else>
                                     <p class="mt-1 text-[10px] text-muted-foreground">
-                                        {{ props.dependencyGraph.nodes.length }} nodes · {{ props.dependencyGraph.edges.length }} edges
+                                        {{
+                                            t("ticket.graphNodesEdges", {
+                                                nodes: props.dependencyGraph.nodes.length,
+                                                edges: props.dependencyGraph.edges.length,
+                                            })
+                                        }}
                                     </p>
                                     <Button
                                         data-testid="ticket.dependency-graph-open-button"
@@ -724,7 +785,7 @@ const openDependencyTicket = (ticketId: string) => {
                                         :disabled="!dependencyGraphLayout.nodes.length"
                                         @click="showDependencyGraphOverlay = true"
                                     >
-                                        Open graph
+                                        {{ t("ticket.openGraph") }}
                                     </Button>
                                 </template>
                             </div>
@@ -740,7 +801,7 @@ const openDependencyTicket = (ticketId: string) => {
                         class="flex-shrink-0 border-b border-border"
                     >
                         <div class="px-6 py-3 flex items-center gap-2">
-                            <span class="text-sm font-semibold text-foreground">Activity</span>
+                            <span class="text-sm font-semibold text-foreground">{{ t("ticket.activity") }}</span>
                         </div>
                         <div
                             data-testid="ticket.activity-timeline"
@@ -755,38 +816,7 @@ const openDependencyTicket = (ticketId: string) => {
                                 <span class="mt-0.5 h-1.5 w-1.5 rounded-full bg-muted-foreground flex-shrink-0"></span>
                                 <span>
                                     <span class="font-medium text-foreground">{{ activity.actorName }}</span>
-                                    <span v-if="activity.action === 'state_changed'">
-                                        changed state from
-                                        <span class="font-medium text-foreground">{{ activity.oldValue }}</span>
-                                        to
-                                        <span class="font-medium text-foreground">{{ activity.newValue }}</span>
-                                    </span>
-                                    <span v-else-if="activity.action === 'priority_changed'">
-                                        changed priority from
-                                        <span class="font-medium text-foreground">{{ activity.oldValue }}</span>
-                                        to
-                                        <span class="font-medium text-foreground">{{ activity.newValue }}</span>
-                                    </span>
-                                    <span v-else-if="activity.action === 'assignee_changed'">
-                                        <span v-if="activity.newValue">assigned to <span class="font-medium text-foreground">{{ activity.newValue }}</span></span>
-                                        <span v-else>removed assignee</span>
-                                    </span>
-                                    <span v-else-if="activity.action === 'type_changed'">
-                                        changed type from
-                                        <span class="font-medium text-foreground">{{ activity.oldValue }}</span>
-                                        to
-                                        <span class="font-medium text-foreground">{{ activity.newValue }}</span>
-                                    </span>
-                                    <span v-else-if="activity.action === 'title_changed'">
-                                        renamed ticket
-                                    </span>
-                                    <span v-else-if="activity.action === 'incident_severity_changed'">
-                                        changed incident severity from
-                                        <span class="font-medium text-foreground">{{ activity.oldValue || "-" }}</span>
-                                        to
-                                        <span class="font-medium text-foreground">{{ activity.newValue || "-" }}</span>
-                                    </span>
-                                    <span v-else>{{ activity.action }}</span>
+                                    <span> {{ formatActivityMessage(activity) }}</span>
                                     <span class="ml-1 text-muted-foreground/60">· {{ new Date(activity.createdAt).toLocaleString() }}</span>
                                 </span>
                             </div>
@@ -798,9 +828,9 @@ const openDependencyTicket = (ticketId: string) => {
                     >
                         <div class="px-6 py-3 flex items-center justify-between gap-2">
                             <div class="flex items-center gap-2">
-                                <span class="text-sm font-semibold text-foreground">Incident timeline</span>
+                                <span class="text-sm font-semibold text-foreground">{{ t("ticket.incidentTimeline") }}</span>
                                 <span class="text-[10px] text-muted-foreground">
-                                    {{ props.incidentTimeline.length }} events
+                                    {{ t("ticket.eventsCount", { count: props.incidentTimeline.length }) }}
                                 </span>
                             </div>
                             <div class="flex items-center gap-2">
@@ -811,7 +841,7 @@ const openDependencyTicket = (ticketId: string) => {
                                     size="sm"
                                     @click="incidentExpanded = !incidentExpanded"
                                 >
-                                    {{ incidentExpanded ? "Collapse" : "Expand" }}
+                                    {{ incidentExpanded ? t("ticket.collapse") : t("ticket.expand") }}
                                 </Button>
                                 <Button
                                     data-testid="ticket.export-postmortem-button"
@@ -819,7 +849,7 @@ const openDependencyTicket = (ticketId: string) => {
                                     size="sm"
                                     @click="emit('export-postmortem')"
                                 >
-                                    Export postmortem
+                                    {{ t("ticket.exportPostmortem") }}
                                 </Button>
                             </div>
                         </div>
@@ -831,7 +861,7 @@ const openDependencyTicket = (ticketId: string) => {
                                 v-if="props.incidentTimelineLoading"
                                 class="text-xs text-muted-foreground"
                             >
-                                Loading timeline...
+                                {{ t("ticket.loadingTimeline") }}
                             </p>
                             <div
                                 v-for="item in incidentTimelineVisibleItems"
@@ -847,7 +877,7 @@ const openDependencyTicket = (ticketId: string) => {
                                 v-if="!props.incidentTimelineLoading && props.incidentTimeline.length === 0"
                                 class="text-xs text-muted-foreground"
                             >
-                                No incident timeline events yet.
+                                {{ t("ticket.noTimeline") }}
                             </p>
                         </div>
                     </div>
@@ -856,12 +886,12 @@ const openDependencyTicket = (ticketId: string) => {
                         class="flex items-center justify-between px-6 py-3 flex-shrink-0 border-b border-border"
                     >
                         <span class="text-sm font-semibold text-foreground"
-                            >Comments</span
+                            >{{ t("ticket.comments") }}</span
                         >
                         <span
                             v-if="props.commentSaving"
                             class="text-xs text-muted-foreground"
-                            >Saving...</span
+                            >{{ t("ticket.saving") }}</span
                         >
                     </div>
 
@@ -903,19 +933,19 @@ const openDependencyTicket = (ticketId: string) => {
                         v-else
                         class="flex-1 flex items-center justify-center text-xs text-muted-foreground min-h-0"
                     >
-                        No comments yet.
+                        {{ t("ticket.noComments") }}
                     </div>
 
                     <div v-if="!props.readOnly" class="border-t border-border px-6 py-3 flex-shrink-0">
                         <label
                             class="text-[10px] font-semibold text-muted-foreground block mb-2"
-                            >Add comment (Markdown)</label
+                            >{{ t("ticket.addComment") }}</label
                         >
                         <MarkdownEditor
                             :model-value="props.commentDraft"
                             @update:model-value="emit('update:commentDraft', $event)"
                             :rows="2"
-                            placeholder="Progress, blockers, notes..."
+                            :placeholder="t('ticket.commentPlaceholder')"
                             data-testid="ticket.comment-input"
                             compact
                             :show-preview="false"
@@ -932,8 +962,8 @@ const openDependencyTicket = (ticketId: string) => {
                             >
                                 {{
                                     props.commentSaving
-                                        ? "Posting..."
-                                        : "Post"
+                                        ? t("ticket.posting")
+                                        : t("ticket.post")
                                 }}
                             </Button>
                             <span
@@ -948,8 +978,19 @@ const openDependencyTicket = (ticketId: string) => {
 
             <!-- Footer: fixed at bottom -->
             <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0">
+                <Button
+                    v-if="!props.readOnly"
+                    data-testid="ticket.delete-button"
+                    variant="outline"
+                    size="sm"
+                    class="border-destructive/30 text-destructive hover:bg-destructive/5"
+                    :disabled="props.ticketSaving"
+                    @click="emit('delete')"
+                >
+                    {{ t("ticket.deleteTicket") }}
+                </Button>
                 <Button variant="ghost" size="sm" @click="emit('close')">
-                    Cancel
+                    {{ t("common.cancel") }}
                 </Button>
                 <Button
                     v-if="!props.readOnly"
@@ -958,7 +999,7 @@ const openDependencyTicket = (ticketId: string) => {
                     :disabled="props.ticketSaving"
                     @click="emit('save')"
                 >
-                    {{ props.ticketSaving ? "Saving..." : "Save changes" }}
+                    {{ props.ticketSaving ? t("ticket.saving") : t("ticket.saveChanges") }}
                 </Button>
             </div>
         </div>
@@ -972,8 +1013,8 @@ const openDependencyTicket = (ticketId: string) => {
         <div class="flex h-[74vh] w-full max-w-5xl flex-col rounded-2xl border border-border bg-card shadow-2xl">
             <div class="flex items-center justify-between border-b border-border px-5 py-3">
                 <div>
-                    <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">Dependency graph</p>
-                    <p class="text-sm text-foreground">{{ props.ticketKey }} · 2-hop view</p>
+                    <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">{{ t("ticket.dependencyGraph") }}</p>
+                    <p class="text-sm text-foreground">{{ t("ticket.dependencyGraphView", { key: props.ticketKey }) }}</p>
                 </div>
                 <Button
                     data-testid="ticket.dependency-graph-close-button"
@@ -981,7 +1022,7 @@ const openDependencyTicket = (ticketId: string) => {
                     size="sm"
                     @click="showDependencyGraphOverlay = false"
                 >
-                    Close
+                    {{ t("common.close") }}
                 </Button>
             </div>
             <div class="flex-1 overflow-auto p-4">
@@ -990,7 +1031,7 @@ const openDependencyTicket = (ticketId: string) => {
                         class="h-[56vh]"
                         :viewBox="`0 0 ${dependencyGraphLayout.width} ${dependencyGraphLayout.height}`"
                         role="img"
-                        aria-label="Ticket dependency graph"
+                        :aria-label="t('ticket.dependencyGraphAria')"
                     >
                         <path
                             v-for="edge in dependencyGraphLayout.edges"
@@ -1005,11 +1046,11 @@ const openDependencyTicket = (ticketId: string) => {
                         <g
                             v-for="node in dependencyGraphLayout.nodes"
                             :key="node.id"
-                            :data-testid="dependencyNodeTestId(node.id)"
                             class="cursor-pointer"
                             @click="openDependencyTicket(node.id)"
                         >
                             <rect
+                                :data-testid="dependencyNodeTestId(node.id)"
                                 :x="node.x"
                                 :y="node.y"
                                 :width="node.width"
@@ -1018,8 +1059,10 @@ const openDependencyTicket = (ticketId: string) => {
                                 :fill="node.isCurrent ? '#1d4ed8' : '#0f172a'"
                                 :stroke="node.isCurrent ? '#93c5fd' : '#334155'"
                                 stroke-width="1.5"
+                                @click="openDependencyTicket(node.id)"
                             />
                             <text
+                                class="pointer-events-none"
                                 :x="node.x + 10"
                                 :y="node.y + 17"
                                 font-size="11"
@@ -1029,6 +1072,7 @@ const openDependencyTicket = (ticketId: string) => {
                                 {{ node.key }}
                             </text>
                             <text
+                                class="pointer-events-none"
                                 :x="node.x + 10"
                                 :y="node.y + 33"
                                 font-size="10"
@@ -1039,20 +1083,20 @@ const openDependencyTicket = (ticketId: string) => {
                         </g>
                     </svg>
                 </div>
-                <p v-else class="text-sm text-muted-foreground">No dependency graph data yet.</p>
+                <p v-else class="text-sm text-muted-foreground">{{ t("ticket.noDependencyGraph") }}</p>
             </div>
             <div class="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
                 <span class="inline-flex items-center gap-1 mr-3">
                     <span class="h-2 w-2 rounded-full bg-orange-400"></span>
-                    blocks
+                    {{ t("ticket.relationBlocks") }}
                 </span>
                 <span class="inline-flex items-center gap-1 mr-3">
                     <span class="h-2 w-2 rounded-full bg-sky-400"></span>
-                    blocked_by
+                    {{ t("ticket.relationBlockedBy") }}
                 </span>
                 <span class="inline-flex items-center gap-1">
                     <span class="h-2 w-2 rounded-full bg-slate-400"></span>
-                    related
+                    {{ t("ticket.relationRelated") }}
                 </span>
             </div>
         </div>
