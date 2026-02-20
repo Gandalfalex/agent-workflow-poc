@@ -170,7 +170,13 @@ Snapshot date: February 19, 2026
 
 ## Frontend UX
 - Login view with session bootstrap.
-- Project board page: Kanban columns, ticket/story display, drag-and-drop, search/filter.
+- Project board page:
+  - Kanban columns with story-group rows, drag-and-drop, and board search/filter controls.
+  - Single primary toolbar in default mode with `Views`-first interaction and collapsible filters.
+  - Contextual floating bulk-action bar that appears only in selection mode.
+  - Story-group progress indicator and tighter story-column layout (~15% width target).
+  - Ticket-card clarity updates: priority edge stripe, stronger selected state, drag handle, type iconography, assignee avatar, and long-ID truncation with full ID/title metadata retained.
+  - Hover quick actions for common operations (move to next state, cycle priority, assign to current user).
 - Reusable MarkdownEditor component with formatting toolbar (bold, italic, code, link, lists, quote, heading), keyboard shortcuts (Ctrl+B/I/E/K, Tab indent), and edit/preview toggle. Used in all description and comment fields.
 - Ticket detail modal: inline editing, comments with markdown, file attachments (upload/download/delete), assignee/priority/type/story fields, activity timeline showing state/priority/assignee/type/title changes.
 - New ticket and story creation modals with markdown-enabled description fields.

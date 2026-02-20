@@ -218,11 +218,11 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 ---
 
 ## Recommended Next 5 Tickets
-1. TKT-022: Board UI clarity and density refresh (P0)
-2. WebSocket live-update transport with polling fallback (P1-P2)
-3. Webhook payload versioning (`v1` envelope + idempotency key) (P2)
-4. Attachment download caching layer (Nginx/CDN fronting backend) (P2)
-5. RBAC/admin audit trail for sensitive actions (P2)
+1. WebSocket live-update transport with polling fallback (P1-P2)
+2. Webhook payload versioning (`v1` envelope + idempotency key) (P2)
+3. Attachment download caching layer (Nginx/CDN fronting backend) (P2)
+4. RBAC/admin audit trail for sensitive actions (P2)
+5. TKT-021: Portfolio command center (P2)
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.

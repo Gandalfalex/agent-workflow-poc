@@ -247,7 +247,7 @@ Source: `.documentation/feature_roadmap.md`
 
 ### TKT-022: Board UI Clarity and Density Refresh — **HIGH PRIORITY**
 - Priority: `P0`
-- Status: **Planned**
+- Status: **Done** (implemented February 20, 2026)
 - Source: UX review (February 20, 2026)
 - Scope:
   - Information density and typography:
@@ -275,8 +275,16 @@ Source: `.documentation/feature_roadmap.md`
     - Add mini per-story progress indicator across states (not just total count).
     - Hide preset name input until save/create preset action is invoked.
 - Acceptance criteria:
-  - Board top chrome is reduced to a single primary toolbar in default (non-selection) mode.
-  - Bulk actions only appear contextually when one or more tickets are selected.
-  - Card readability improves for long identifiers without loss of traceability.
-  - Dark-theme contrast meets accessible readability for metadata and selection states.
-  - E2E selectors and tests are updated for any changed toolbar/selection interactions.
+  - ✅ Board top chrome is reduced to a single primary toolbar in default (non-selection) mode.
+  - ✅ Bulk actions only appear contextually when one or more tickets are selected.
+  - ✅ Card readability improves for long identifiers without loss of traceability (truncated display + full ID/title metadata line).
+  - ✅ Dark-theme readability and selection contrast improved (priority stripe, stronger selected state, clearer metadata text).
+  - ✅ E2E selectors/contracts and tests updated for toolbar/preset interaction changes.
+- Implementation notes:
+  - Board filter panel now defaults to collapsed; toolbar remains primary entry point.
+  - Preset-name input is hidden until explicit save/edit intent (`Save view` action).
+  - Added card hover quick actions (move-to-next-state, cycle priority, assign-to-me).
+  - Preserved contract-driven E2E compatibility by adding selector keys:
+    - `board.filter_toggle_button`
+    - `board.preset_open_editor_button`
+  - Validation: frontend build and full E2E suite pass (`make -C ticketing-system e2e`).
