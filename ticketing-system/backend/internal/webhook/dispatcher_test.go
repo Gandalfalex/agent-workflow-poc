@@ -121,9 +121,11 @@ func TestDeliver(t *testing.T) {
 		}
 
 		envelope := Envelope{
-			Event:  "ticket.created",
-			SentAt: time.Now().UTC(),
-			Data:   map[string]string{"id": "123"},
+			Version:        "v1",
+			Event:          "ticket.created",
+			EventTimestamp: time.Now().UTC(),
+			IdempotencyKey: "idem-123",
+			Data:           map[string]string{"id": "123"},
 		}
 
 		result, err := d.deliver(context.Background(), hook, envelope)
@@ -151,6 +153,12 @@ func TestDeliver(t *testing.T) {
 		if receivedHeaders.Get("X-Ticketing-Event") != "ticket.created" {
 			t.Errorf("expected X-Ticketing-Event 'ticket.created', got %q", receivedHeaders.Get("X-Ticketing-Event"))
 		}
+		if receivedHeaders.Get("X-Ticketing-Webhook-Version") != "v1" {
+			t.Errorf("expected X-Ticketing-Webhook-Version 'v1', got %q", receivedHeaders.Get("X-Ticketing-Webhook-Version"))
+		}
+		if receivedHeaders.Get("X-Ticketing-Idempotency-Key") != "idem-123" {
+			t.Errorf("expected X-Ticketing-Idempotency-Key 'idem-123', got %q", receivedHeaders.Get("X-Ticketing-Idempotency-Key"))
+		}
 
 		// Verify body
 		var received Envelope
@@ -159,6 +167,15 @@ func TestDeliver(t *testing.T) {
 		}
 		if received.Event != "ticket.created" {
 			t.Errorf("expected event 'ticket.created', got %q", received.Event)
+		}
+		if received.Version != "v1" {
+			t.Errorf("expected version 'v1', got %q", received.Version)
+		}
+		if received.IdempotencyKey != "idem-123" {
+			t.Errorf("expected idempotency key 'idem-123', got %q", received.IdempotencyKey)
+		}
+		if received.EventTimestamp.IsZero() {
+			t.Error("expected event timestamp to be set")
 		}
 	})
 
@@ -181,11 +198,7 @@ func TestDeliver(t *testing.T) {
 			Secret:  &secret,
 		}
 
-		envelope := Envelope{
-			Event:  "ticket.created",
-			SentAt: time.Now().UTC(),
-			Data:   map[string]string{"id": "123"},
-		}
+		envelope := newEnvelope("ticket.created", map[string]string{"id": "123"})
 
 		_, err := d.deliver(context.Background(), hook, envelope)
 		if err != nil {
@@ -219,11 +232,7 @@ func TestDeliver(t *testing.T) {
 			Secret:  &emptySecret,
 		}
 
-		envelope := Envelope{
-			Event:  "ticket.created",
-			SentAt: time.Now().UTC(),
-			Data:   nil,
-		}
+		envelope := newEnvelope("ticket.created", nil)
 
 		_, err := d.deliver(context.Background(), hook, envelope)
 		if err != nil {
@@ -253,11 +262,7 @@ func TestDeliver(t *testing.T) {
 			Secret:  nil,
 		}
 
-		envelope := Envelope{
-			Event:  "ticket.created",
-			SentAt: time.Now().UTC(),
-			Data:   nil,
-		}
+		envelope := newEnvelope("ticket.created", nil)
 
 		_, err := d.deliver(context.Background(), hook, envelope)
 		if err != nil {
@@ -284,11 +289,7 @@ func TestDeliver(t *testing.T) {
 			Enabled: true,
 		}
 
-		envelope := Envelope{
-			Event:  "ticket.created",
-			SentAt: time.Now().UTC(),
-			Data:   nil,
-		}
+		envelope := newEnvelope("ticket.created", nil)
 
 		result, err := d.deliver(context.Background(), hook, envelope)
 		if err != nil {
@@ -317,11 +318,7 @@ func TestDeliver(t *testing.T) {
 			Enabled: true,
 		}
 
-		envelope := Envelope{
-			Event:  "ticket.created",
-			SentAt: time.Now().UTC(),
-			Data:   nil,
-		}
+		envelope := newEnvelope("ticket.created", nil)
 
 		result, err := d.deliver(context.Background(), hook, envelope)
 		if err != nil {
@@ -349,11 +346,7 @@ func TestDeliver(t *testing.T) {
 				Enabled: true,
 			}
 
-			envelope := Envelope{
-				Event:  "ticket.created",
-				SentAt: time.Now().UTC(),
-				Data:   nil,
-			}
+			envelope := newEnvelope("ticket.created", nil)
 
 			result, err := d.deliver(context.Background(), hook, envelope)
 			server.Close()
@@ -441,10 +434,12 @@ func TestDispatch(t *testing.T) {
 }
 
 func TestEnvelope_JSONMarshaling(t *testing.T) {
-	sentAt := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
+	eventTimestamp := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
 	envelope := Envelope{
-		Event:  "ticket.created",
-		SentAt: sentAt,
+		Version:        "v1",
+		Event:          "ticket.created",
+		EventTimestamp: eventTimestamp,
+		IdempotencyKey: "idem-123",
 		Data: map[string]any{
 			"ticketId": "123",
 			"title":    "Test ticket",
@@ -464,7 +459,30 @@ func TestEnvelope_JSONMarshaling(t *testing.T) {
 	if decoded.Event != "ticket.created" {
 		t.Errorf("expected event 'ticket.created', got %q", decoded.Event)
 	}
-	if !decoded.SentAt.Equal(sentAt) {
-		t.Errorf("expected sentAt %v, got %v", sentAt, decoded.SentAt)
+	if decoded.Version != "v1" {
+		t.Errorf("expected version 'v1', got %q", decoded.Version)
+	}
+	if decoded.IdempotencyKey != "idem-123" {
+		t.Errorf("expected idempotency key 'idem-123', got %q", decoded.IdempotencyKey)
+	}
+	if !decoded.EventTimestamp.Equal(eventTimestamp) {
+		t.Errorf("expected eventTimestamp %v, got %v", eventTimestamp, decoded.EventTimestamp)
+	}
+}
+
+func TestNewEnvelope(t *testing.T) {
+	envelope := newEnvelope("ticket.updated", map[string]string{"id": "1"})
+
+	if envelope.Version != "v1" {
+		t.Errorf("expected version 'v1', got %q", envelope.Version)
+	}
+	if envelope.Event != "ticket.updated" {
+		t.Errorf("expected event 'ticket.updated', got %q", envelope.Event)
+	}
+	if envelope.EventTimestamp.IsZero() {
+		t.Error("expected event timestamp to be set")
+	}
+	if envelope.IdempotencyKey == "" {
+		t.Error("expected idempotency key to be set")
 	}
 }

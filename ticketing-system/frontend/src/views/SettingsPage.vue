@@ -6,12 +6,19 @@ import { useAdminStore } from "@/stores/admin";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
 import {
+    createAdminUser,
     exportProjectReportingSnapshot,
     getProjectAiTriageSettings,
+    listProjectCapacitySettings,
+    replaceProjectCapacitySettings,
+    syncUsersFromIdentityProvider,
+    updateProject,
     updateProjectAiTriageSettings,
 } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type {
     AiTriageSettings,
+    CapacitySetting,
     Group,
     ProjectRole,
     ReportingExportFormat,
@@ -27,8 +34,11 @@ const router = useRouter();
 const adminStore = useAdminStore();
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
+const { t } = useI18n();
 
-const settingsTab = ref<"projects" | "webhooks" | "workflow" | "reporting">(
+const settingsTab = ref<
+    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints"
+>(
     "projects",
 );
 const selectedProjectId = ref(props.projectId || "");
@@ -54,6 +64,15 @@ const newGroupMember = ref({
 });
 const userSearchQuery = ref("");
 const showCreateGroup = ref(false);
+const syncingUsers = ref(false);
+const creatingUser = ref(false);
+const newAdminUser = ref({
+    username: "",
+    email: "",
+    firstName: "",
+    lastName: "",
+    password: "",
+});
 
 const webhookEvents: WebhookEvent[] = [
     "ticket.created",
@@ -82,6 +101,12 @@ const reportingTo = ref("");
 const reportingExporting = ref<ReportingExportFormat | null>(null);
 const aiTriageSettings = ref<AiTriageSettings>({ enabled: false });
 const aiTriageSettingsLoading = ref(false);
+const sprintDurationDays = ref<number | null>(null);
+const sprintDurationSaving = ref(false);
+const capacitySettings = ref<CapacitySetting[]>([]);
+const capacitySettingsLoading = ref(false);
+const capacitySettingsSaving = ref(false);
+const newCapacityRow = ref({ scope: "team" as "team" | "user", label: "", capacity: 0 });
 
 const projects = computed(() => adminStore.projects);
 const groups = computed(() => adminStore.groups);
@@ -155,6 +180,12 @@ const canCreateWebhook = computed(
     () =>
         newWebhook.value.url.trim().length > 0 &&
         newWebhook.value.events.length > 0,
+);
+const canCreateAdminUser = computed(
+    () =>
+        newAdminUser.value.username.trim().length >= 3 &&
+        newAdminUser.value.email.trim().length > 0 &&
+        newAdminUser.value.password.length >= 8,
 );
 
 const handleAuthError = (err: unknown) => {
@@ -259,6 +290,80 @@ const loadAiTriageSettings = async (projectId?: string) => {
         aiTriageSettings.value = { enabled: false };
     } finally {
         aiTriageSettingsLoading.value = false;
+    }
+};
+
+const loadSprintSettings = async () => {
+    const id = selectedProjectId.value;
+    if (!id) return;
+    capacitySettingsLoading.value = true;
+    try {
+        const project = adminStore.projects.find((p) => p.id === id);
+        sprintDurationDays.value = project?.defaultSprintDurationDays ?? null;
+        const res = await listProjectCapacitySettings(id);
+        capacitySettings.value = res.items;
+    } catch (err) {
+        if (handleAuthError(err)) return;
+    } finally {
+        capacitySettingsLoading.value = false;
+    }
+};
+
+const saveSprintDuration = async () => {
+    const id = selectedProjectId.value;
+    if (!id) return;
+    sprintDurationSaving.value = true;
+    try {
+        await updateProject(id, {
+            defaultSprintDurationDays: sprintDurationDays.value,
+        });
+        setNotice("success", "Sprint duration saved.");
+    } catch (err) {
+        if (!handleAuthError(err)) setNotice("error", "Failed to save sprint duration.");
+    } finally {
+        sprintDurationSaving.value = false;
+    }
+};
+
+const addCapacityRow = () => {
+    if (!newCapacityRow.value.label.trim()) return;
+    capacitySettings.value = [
+        ...capacitySettings.value,
+        {
+            id: crypto.randomUUID(),
+            projectId: selectedProjectId.value,
+            scope: newCapacityRow.value.scope,
+            label: newCapacityRow.value.label.trim(),
+            capacity: newCapacityRow.value.capacity,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        },
+    ];
+    newCapacityRow.value = { scope: "team", label: "", capacity: 0 };
+};
+
+const removeCapacityRow = (index: number) => {
+    capacitySettings.value = capacitySettings.value.filter((_, i) => i !== index);
+};
+
+const saveCapacitySettings = async () => {
+    const id = selectedProjectId.value;
+    if (!id) return;
+    capacitySettingsSaving.value = true;
+    try {
+        const res = await replaceProjectCapacitySettings(id, {
+            items: capacitySettings.value.map((s) => ({
+                scope: s.scope,
+                label: s.label,
+                capacity: s.capacity,
+            })),
+        });
+        capacitySettings.value = res.items;
+        setNotice("success", "Capacity settings saved.");
+    } catch (err) {
+        if (!handleAuthError(err)) setNotice("error", "Failed to save capacity settings.");
+    } finally {
+        capacitySettingsSaving.value = false;
     }
 };
 
@@ -638,6 +743,55 @@ const sortUserResultsByRelevance = (query: string) => {
     adminStore.userResults = scored.map((s) => s.user);
 };
 
+const syncUsersSubmit = async () => {
+    if (syncingUsers.value) return;
+    syncingUsers.value = true;
+    try {
+        const result = await syncUsersFromIdentityProvider();
+        setNotice(
+            "success",
+            `Synced ${result.synced} of ${result.total} users from identity provider.`,
+        );
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to sync users from identity provider.");
+        }
+    } finally {
+        syncingUsers.value = false;
+    }
+};
+
+const createAdminUserSubmit = async () => {
+    if (!canCreateAdminUser.value || creatingUser.value) return;
+    creatingUser.value = true;
+    try {
+        const created = await createAdminUser({
+            username: newAdminUser.value.username.trim(),
+            email: newAdminUser.value.email.trim(),
+            firstName: newAdminUser.value.firstName.trim() || undefined,
+            lastName: newAdminUser.value.lastName.trim() || undefined,
+            password: newAdminUser.value.password,
+        });
+        newAdminUser.value = {
+            username: "",
+            email: "",
+            firstName: "",
+            lastName: "",
+            password: "",
+        };
+        setNotice(
+            "success",
+            `User ${created.name} created successfully. You can add them to groups now.`,
+        );
+    } catch (err) {
+        if (!handleAuthError(err)) {
+            setNotice("error", "Unable to create user.");
+        }
+    } finally {
+        creatingUser.value = false;
+    }
+};
+
 // Workflow editor methods
 const loadWorkflow = async () => {
     if (!selectedProjectId.value) return;
@@ -805,9 +959,9 @@ watch(selectedGroupId, async () => {
     <section class="flex flex-wrap items-center justify-between gap-4">
         <div>
             <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                Settings
+                {{ t("settings.title") }}
             </p>
-            <h2 class="text-2xl font-semibold">Admin workspace</h2>
+            <h2 class="text-2xl font-semibold">{{ t("settings.subtitle") }}</h2>
         </div>
         <div class="flex items-center gap-2">
             <Button
@@ -816,7 +970,16 @@ watch(selectedGroupId, async () => {
                 :disabled="settingsTab === 'projects'"
                 @click="settingsTab = 'projects'"
             >
-                Projects
+                {{ t("settings.tab.projects") }}
+            </Button>
+            <Button
+                data-testid="settings.users-tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'users'"
+                @click="settingsTab = 'users'"
+            >
+                {{ t("settings.tab.users") }}
             </Button>
             <Button
                 variant="ghost"
@@ -824,7 +987,7 @@ watch(selectedGroupId, async () => {
                 :disabled="settingsTab === 'webhooks'"
                 @click="settingsTab = 'webhooks'"
             >
-                Webhooks
+                {{ t("settings.tab.webhooks") }}
             </Button>
             <Button
                 variant="ghost"
@@ -832,7 +995,7 @@ watch(selectedGroupId, async () => {
                 :disabled="settingsTab === 'workflow'"
                 @click="settingsTab = 'workflow'; loadWorkflow()"
             >
-                Workflow
+                {{ t("settings.tab.workflow") }}
             </Button>
             <Button
                 data-testid="settings.reporting-tab"
@@ -841,7 +1004,16 @@ watch(selectedGroupId, async () => {
                 :disabled="settingsTab === 'reporting'"
                 @click="settingsTab = 'reporting'; loadReporting()"
             >
-                Reporting
+                {{ t("settings.tab.reporting") }}
+            </Button>
+            <Button
+                data-testid="settings.sprints-tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'sprints'"
+                @click="settingsTab = 'sprints'; loadSprintSettings()"
+            >
+                Sprints
             </Button>
         </div>
     </section>
@@ -1122,6 +1294,32 @@ watch(selectedGroupId, async () => {
                     </div>
 
                     <div v-else class="grid gap-3">
+                        <div
+                            class="rounded-lg border border-border bg-muted/20 px-3 py-2"
+                        >
+                            <div
+                                class="flex flex-wrap items-center justify-between gap-2"
+                            >
+                                <p class="text-[11px] text-muted-foreground">
+                                    New users missing from search? Sync users
+                                    from identity provider first.
+                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    data-testid="settings.sync-users-button"
+                                    :disabled="syncingUsers"
+                                    @click="syncUsersSubmit"
+                                >
+                                    {{
+                                        syncingUsers
+                                            ? "Syncing..."
+                                            : "Sync users"
+                                    }}
+                                </Button>
+                            </div>
+                        </div>
+
                         <!-- Search input -->
                         <div>
                             <div class="flex gap-2">
@@ -1416,6 +1614,114 @@ watch(selectedGroupId, async () => {
                     </div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <section
+        v-if="settingsTab === 'users'"
+        class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"
+    >
+        <div class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm">
+            <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                Users
+            </p>
+            <h2 class="mt-2 text-2xl font-semibold">Create user account</h2>
+            <p class="mt-2 text-sm text-muted-foreground">
+                Create a user in the identity provider and sync it into the
+                app directory in one step.
+            </p>
+            <div class="mt-6 grid gap-4">
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <div>
+                        <label class="text-xs font-semibold text-muted-foreground"
+                            >Username</label
+                        >
+                        <input
+                            v-model="newAdminUser.username"
+                            data-testid="settings.user-create-username-input"
+                            type="text"
+                            placeholder="jane.doe"
+                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-muted-foreground"
+                            >Email</label
+                        >
+                        <input
+                            v-model="newAdminUser.email"
+                            data-testid="settings.user-create-email-input"
+                            type="email"
+                            placeholder="jane.doe@example.com"
+                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                    </div>
+                </div>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <div>
+                        <label class="text-xs font-semibold text-muted-foreground"
+                            >First name (optional)</label
+                        >
+                        <input
+                            v-model="newAdminUser.firstName"
+                            data-testid="settings.user-create-firstname-input"
+                            type="text"
+                            placeholder="Jane"
+                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-muted-foreground"
+                            >Last name (optional)</label
+                        >
+                        <input
+                            v-model="newAdminUser.lastName"
+                            data-testid="settings.user-create-lastname-input"
+                            type="text"
+                            placeholder="Doe"
+                            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-muted-foreground"
+                        >Initial password</label
+                    >
+                    <input
+                        v-model="newAdminUser.password"
+                        data-testid="settings.user-create-password-input"
+                        type="password"
+                        placeholder="Minimum 8 characters"
+                        class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                </div>
+                <div class="flex items-center justify-end">
+                    <Button
+                        data-testid="settings.user-create-submit-button"
+                        :disabled="!canCreateAdminUser || creatingUser"
+                        @click="createAdminUserSubmit"
+                    >
+                        {{ creatingUser ? "Creating..." : "Create user" }}
+                    </Button>
+                </div>
+            </div>
+        </div>
+        <div class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm">
+            <h3 class="text-sm font-semibold text-foreground">
+                Next steps
+            </h3>
+            <ul class="mt-3 space-y-2 text-xs text-muted-foreground">
+                <li>
+                    1. Create user account here.
+                </li>
+                <li>
+                    2. Go to <span class="font-semibold">Projects</span> tab
+                    and add the user to a group.
+                </li>
+                <li>
+                    3. Assign group role per project.
+                </li>
+            </ul>
         </div>
     </section>
 
@@ -2041,5 +2347,96 @@ watch(selectedGroupId, async () => {
                 </div>
             </div>
         </div>
+    </section>
+
+    <section
+        v-if="settingsTab === 'sprints'"
+        data-testid="settings.sprints-view"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div>
+            <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">Sprint Configuration</p>
+            <h3 class="mt-1 text-lg font-semibold">Sprint Duration & Capacity</h3>
+        </div>
+
+        <div v-if="capacitySettingsLoading" class="mt-6 text-sm text-muted-foreground">Loading...</div>
+
+        <template v-else>
+            <div class="mt-6 rounded-2xl border border-border bg-background p-4">
+                <label class="text-xs font-semibold text-muted-foreground">Default Sprint Duration (days)</label>
+                <div class="mt-2 flex items-center gap-3">
+                    <input
+                        data-testid="settings.sprint_duration_input"
+                        v-model.number="sprintDurationDays"
+                        type="number"
+                        min="1"
+                        placeholder="e.g. 14"
+                        class="w-32 rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <Button
+                        size="sm"
+                        :disabled="sprintDurationSaving"
+                        @click="saveSprintDuration"
+                    >
+                        {{ sprintDurationSaving ? "Saving..." : "Save" }}
+                    </Button>
+                </div>
+            </div>
+
+            <div class="mt-6 rounded-2xl border border-border bg-background p-4">
+                <label class="text-xs font-semibold text-muted-foreground">Capacity Settings</label>
+                <div data-testid="settings.capacity_table" class="mt-3 space-y-2">
+                    <div
+                        v-for="(setting, index) in capacitySettings"
+                        :key="setting.id || index"
+                        class="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs"
+                    >
+                        <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase">{{ setting.scope }}</span>
+                        <span class="font-semibold text-foreground">{{ setting.label }}</span>
+                        <span class="ml-auto text-muted-foreground">{{ setting.capacity }} SP/sprint</span>
+                        <button
+                            type="button"
+                            class="text-[10px] text-destructive hover:text-destructive/80 transition ml-2"
+                            @click="removeCapacityRow(index)"
+                        >
+                            Remove
+                        </button>
+                    </div>
+                    <p v-if="!capacitySettings.length" class="text-[10px] text-muted-foreground">No capacity settings yet.</p>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                    <select
+                        v-model="newCapacityRow.scope"
+                        class="rounded-xl border border-input bg-background px-2 py-1.5 text-xs"
+                    >
+                        <option value="team">team</option>
+                        <option value="user">user</option>
+                    </select>
+                    <input
+                        v-model="newCapacityRow.label"
+                        type="text"
+                        placeholder="Label"
+                        class="flex-1 rounded-xl border border-input bg-background px-2 py-1.5 text-xs"
+                    />
+                    <input
+                        v-model.number="newCapacityRow.capacity"
+                        type="number"
+                        min="0"
+                        placeholder="SP"
+                        class="w-20 rounded-xl border border-input bg-background px-2 py-1.5 text-xs"
+                    />
+                    <Button variant="outline" size="sm" @click="addCapacityRow">Add</Button>
+                </div>
+                <div class="mt-3">
+                    <Button
+                        size="sm"
+                        :disabled="capacitySettingsSaving"
+                        @click="saveCapacitySettings"
+                    >
+                        {{ capacitySettingsSaving ? "Saving..." : "Save Capacity Settings" }}
+                    </Button>
+                </div>
+            </div>
+        </template>
     </section>
 </template>

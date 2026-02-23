@@ -41,9 +41,14 @@ import {
   uploadTicketAttachment,
   createTicketDependency as apiCreateTicketDependency,
   createProjectSprint as apiCreateProjectSprint,
+  addSprintTickets as apiAddSprintTickets,
+  removeSprintTickets as apiRemoveSprintTickets,
   createBoardFilterPreset as apiCreateBoardFilterPreset,
   deleteBoardFilterPreset as apiDeleteBoardFilterPreset,
   getSharedBoardFilterPreset,
+  listTicketTimeEntries as apiListTicketTimeEntries,
+  createTicketTimeEntry as apiCreateTicketTimeEntry,
+  deleteTicketTimeEntry as apiDeleteTicketTimeEntry,
   type Attachment,
   type BoardFilter,
   type BoardFilterPreset,
@@ -72,6 +77,8 @@ import {
   type CapacitySettingInput,
   type WebhookDelivery,
   type WebhookEvent,
+  type TimeEntry,
+  type TimeEntryCreateRequest,
   type WebhookResponse,
   type WorkflowState,
   type WorkflowStateInput,
@@ -266,6 +273,9 @@ export const useBoardStore = defineStore("board", {
       assignmentEnabled: true,
     } as NotificationPreferences,
     notificationPreferencesSaving: false,
+    ticketTimeEntries: [] as TimeEntry[],
+    ticketTimeEntriesTotalMinutes: 0,
+    ticketTimeEntriesLoading: false,
   }),
   getters: {
     canEditTickets(): boolean {
@@ -333,6 +343,9 @@ export const useBoardStore = defineStore("board", {
         assignmentEnabled: true,
       };
       this.notificationPreferencesSaving = false;
+      this.ticketTimeEntries = [];
+      this.ticketTimeEntriesTotalMinutes = 0;
+      this.ticketTimeEntriesLoading = false;
     },
     applyDemo() {
       const demo = makeDemoData();
@@ -364,8 +377,21 @@ export const useBoardStore = defineStore("board", {
           this.loading = false;
           throw err;
         }
-        this.errorMessage = "Backend unavailable. Showing demo data.";
-        this.applyDemo();
+        const error = err as Error & { status?: number };
+        if (typeof error.status === "number") {
+          this.errorMessage = `Unable to load board (HTTP ${error.status}).`;
+          this.loading = false;
+          return;
+        }
+        this.errorMessage = "Unable to load board.";
+        this.apiMode = "live";
+        this.states = [];
+        this.tickets = [];
+        this.stories = [];
+        if (error.message) {
+          this.errorMessage = `Unable to load board. ${error.message}`;
+        }
+        this.loading = false;
         return;
       }
       this.loading = false;
@@ -412,7 +438,7 @@ export const useBoardStore = defineStore("board", {
     },
     async createStory(
       projectId: string,
-      payload: { title: string; description?: string },
+      payload: { title: string; description?: string; storyPoints?: number | null },
     ) {
       this.storyError = "";
       try {
@@ -638,6 +664,16 @@ export const useBoardStore = defineStore("board", {
       const created = await apiCreateProjectSprint(projectId, payload);
       this.sprints = [created, ...this.sprints.filter((s) => s.id !== created.id)];
       return created;
+    },
+    async addSprintTickets(projectId: string, sprintId: string, ticketIds: string[]) {
+      const updated = await apiAddSprintTickets(projectId, sprintId, ticketIds);
+      this.sprints = this.sprints.map((s) => (s.id === updated.id ? updated : s));
+      return updated;
+    },
+    async removeSprintTickets(projectId: string, sprintId: string, ticketIds: string[]) {
+      const updated = await apiRemoveSprintTickets(projectId, sprintId, ticketIds);
+      this.sprints = this.sprints.map((s) => (s.id === updated.id ? updated : s));
+      return updated;
     },
     async loadCapacitySettings(projectId: string) {
       this.capacitySettingsLoading = true;
@@ -1151,6 +1187,46 @@ export const useBoardStore = defineStore("board", {
         throw err;
       } finally {
         this.workflowEditorSaving = false;
+      }
+    },
+    async loadTicketTimeEntries(projectId: string, ticketId: string) {
+      this.ticketTimeEntriesLoading = true;
+      try {
+        const result = await apiListTicketTimeEntries(projectId, ticketId);
+        this.ticketTimeEntries = result.items;
+        this.ticketTimeEntriesTotalMinutes = result.totalMinutes;
+      } catch (err) {
+        if (isAuthError(err)) {
+          throw err;
+        }
+        this.ticketTimeEntries = [];
+        this.ticketTimeEntriesTotalMinutes = 0;
+      } finally {
+        this.ticketTimeEntriesLoading = false;
+      }
+    },
+    async createTicketTimeEntry(
+      projectId: string,
+      ticketId: string,
+      payload: TimeEntryCreateRequest,
+    ) {
+      const created = await apiCreateTicketTimeEntry(projectId, ticketId, payload);
+      this.ticketTimeEntries = [created, ...this.ticketTimeEntries];
+      this.ticketTimeEntriesTotalMinutes += created.minutes;
+      return created;
+    },
+    async removeTicketTimeEntry(
+      projectId: string,
+      ticketId: string,
+      timeEntryId: string,
+    ) {
+      const entry = this.ticketTimeEntries.find((e) => e.id === timeEntryId);
+      await apiDeleteTicketTimeEntry(projectId, ticketId, timeEntryId);
+      this.ticketTimeEntries = this.ticketTimeEntries.filter(
+        (e) => e.id !== timeEntryId,
+      );
+      if (entry) {
+        this.ticketTimeEntriesTotalMinutes -= entry.minutes;
       }
     },
   },

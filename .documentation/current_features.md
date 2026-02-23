@@ -1,6 +1,6 @@
 # Current Features
 
-Snapshot date: February 19, 2026
+Snapshot date: February 20, 2026
 
 ## Core Platform
 - OpenAPI-defined backend API (`ticketing-system/openapi.yaml`) with generated backend/frontend types.
@@ -119,7 +119,14 @@ Snapshot date: February 19, 2026
 ## Webhooks
 - Project-scoped webhook CRUD: list, create, get, update, delete.
 - Async webhook dispatcher with goroutine-based delivery.
+- Versioned outbound payload envelope (`v1`) with:
+  - `version`
+  - `event`
+  - `eventTimestamp`
+  - `idempotencyKey`
+  - `data` (event-specific payload)
 - HMAC-SHA256 request signing (`X-Ticketing-Signature` header) when secret is configured.
+- Delivery metadata headers: `X-Ticketing-Webhook-Version` and `X-Ticketing-Idempotency-Key`.
 - Supported events: `ticket.created`, `ticket.updated`, `ticket.deleted`, `ticket.state_changed`.
 - Exponential backoff retry on failed deliveries: 3 attempts (immediate, 30s, 5min).
 - `webhook_deliveries` table logging every delivery attempt with status code, response body, error, duration, and timestamp.
@@ -148,6 +155,11 @@ Snapshot date: February 19, 2026
 
 ## Admin and Operations
 - Admin endpoint to sync users from Keycloak (`/admin/sync-users`).
+- Admin endpoint to create users in identity provider and upsert app directory (`/admin/users`).
+- Admin authorization enforced for user sync endpoint (`/admin/sync-users`).
+- Settings UI includes:
+  - one-click "Sync users" action in group member management to make new identity-provider users discoverable before assignment.
+  - dedicated Users tab for admin user creation (username, email, optional names, password) backed by `/admin/users`.
 - Health check endpoint (`/health`).
 - Docker Compose for local dev: Postgres, Keycloak (with realm import), n8n, backend API, codex-agent, MinIO.
 - Production Docker Compose with Traefik reverse proxy and HTTPS.

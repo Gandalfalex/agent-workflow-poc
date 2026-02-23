@@ -159,6 +159,7 @@ type fakeStore struct {
 	notificationsErr               error
 	notification                   store.Notification
 	notificationErr                error
+	createNotificationInputs       []store.NotificationCreateInput
 	unreadNotificationCount        int
 	unreadNotificationCountErr     error
 	markAllNotificationsUpdated    int
@@ -412,6 +413,27 @@ func (f *fakeStore) CreateSprint(ctx context.Context, projectID uuid.UUID, input
 	return f.sprint, nil
 }
 
+func (f *fakeStore) GetSprint(ctx context.Context, projectID, sprintID uuid.UUID) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
+func (f *fakeStore) AddSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
+func (f *fakeStore) RemoveSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
 func (f *fakeStore) ListCapacitySettings(ctx context.Context, projectID uuid.UUID) ([]store.CapacitySetting, error) {
 	if f.capacitySettingsErr != nil {
 		return nil, f.capacitySettingsErr
@@ -497,6 +519,7 @@ func (f *fakeStore) ListTicketWebhookEvents(ctx context.Context, ticketID uuid.U
 }
 
 func (f *fakeStore) CreateNotification(ctx context.Context, input store.NotificationCreateInput) (store.Notification, error) {
+	f.createNotificationInputs = append(f.createNotificationInputs, input)
 	if f.notificationErr != nil {
 		return store.Notification{}, f.notificationErr
 	}
@@ -695,6 +718,18 @@ func (f *fakeStore) GetSharedBoardFilterPreset(ctx context.Context, projectID uu
 	return f.sharedBoardFilterPreset, nil
 }
 
+func (f *fakeStore) ListTimeEntries(ctx context.Context, ticketID uuid.UUID) ([]store.TimeEntry, int, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeStore) CreateTimeEntry(ctx context.Context, ticketID uuid.UUID, input store.TimeEntryCreateInput) (store.TimeEntry, error) {
+	return store.TimeEntry{}, nil
+}
+
+func (f *fakeStore) DeleteTimeEntry(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
 type fakeAuth struct {
 	loginUser  auth.User
 	loginToken auth.TokenSet
@@ -703,6 +738,8 @@ type fakeAuth struct {
 	verifyErr  error
 	listUsers  []auth.User
 	listErr    error
+	createUser auth.User
+	createErr  error
 }
 
 func (f *fakeAuth) Login(ctx context.Context, username, password string) (auth.User, auth.TokenSet, error) {
@@ -724,6 +761,13 @@ func (f *fakeAuth) ListUsers(ctx context.Context) ([]auth.User, error) {
 		return nil, f.listErr
 	}
 	return f.listUsers, nil
+}
+
+func (f *fakeAuth) CreateUser(ctx context.Context, input auth.UserCreateInput) (auth.User, error) {
+	if f.createErr != nil {
+		return auth.User{}, f.createErr
+	}
+	return f.createUser, nil
 }
 
 type fakeWebhookDispatcher struct {
@@ -810,6 +854,137 @@ func TestHealth(t *testing.T) {
 
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected status 503, got %d", rec.Code)
+		}
+	})
+}
+
+func TestSyncUsers(t *testing.T) {
+	t.Run("admin can sync users", func(t *testing.T) {
+		fs := &fakeStore{}
+		fa := &fakeAuth{
+			listUsers: []auth.User{
+				{
+					ID:    "11111111-1111-1111-1111-111111111111",
+					Email: "one@example.com",
+					Name:  "One",
+				},
+				{
+					ID:    "22222222-2222-2222-2222-222222222222",
+					Email: "two@example.com",
+					Name:  "Two",
+				},
+			},
+		}
+		h := NewHandler(fs, fa, &fakeWebhookDispatcher{}, HandlerOptions{})
+		req := newTestRequest(http.MethodPost, "/admin/sync-users", nil)
+		rec := httptest.NewRecorder()
+
+		h.SyncUsers(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		var resp SyncUsersResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Total != 2 {
+			t.Fatalf("expected total=2, got %d", resp.Total)
+		}
+		if resp.Synced != 2 {
+			t.Fatalf("expected synced=2, got %d", resp.Synced)
+		}
+	})
+
+	t.Run("non-admin gets forbidden", func(t *testing.T) {
+		fs := &fakeStore{}
+		fa := &fakeAuth{
+			listUsers: []auth.User{
+				{
+					ID:    "11111111-1111-1111-1111-111111111111",
+					Email: "one@example.com",
+					Name:  "One",
+				},
+			},
+		}
+		h := NewHandler(fs, fa, &fakeWebhookDispatcher{}, HandlerOptions{})
+		req := newTestRequestAsUser(http.MethodPost, "/admin/sync-users", nil)
+		rec := httptest.NewRecorder()
+
+		h.SyncUsers(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+	})
+}
+
+func TestCreateAdminUser(t *testing.T) {
+	body := `{"username":"new.user","email":"new.user@example.com","firstName":"New","lastName":"User","password":"supersecret123"}`
+
+	t.Run("admin can create user", func(t *testing.T) {
+		fs := &fakeStore{}
+		fa := &fakeAuth{
+			createUser: auth.User{
+				ID:    "33333333-3333-3333-3333-333333333333",
+				Email: "new.user@example.com",
+				Name:  "New User",
+			},
+		}
+		h := NewHandler(fs, fa, &fakeWebhookDispatcher{}, HandlerOptions{})
+		req := newTestRequest(http.MethodPost, "/admin/users", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.CreateAdminUser(rec, req)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected status 201, got %d", rec.Code)
+		}
+		var resp UserSummary
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if resp.Name != "New User" {
+			t.Fatalf("expected name 'New User', got %q", resp.Name)
+		}
+		if resp.Email == nil || string(*resp.Email) != "new.user@example.com" {
+			t.Fatalf("expected email to be set")
+		}
+	})
+
+	t.Run("non-admin forbidden", func(t *testing.T) {
+		fs := &fakeStore{}
+		fa := &fakeAuth{
+			createUser: auth.User{
+				ID:    "33333333-3333-3333-3333-333333333333",
+				Email: "new.user@example.com",
+				Name:  "New User",
+			},
+		}
+		h := NewHandler(fs, fa, &fakeWebhookDispatcher{}, HandlerOptions{})
+		req := newTestRequestAsUser(http.MethodPost, "/admin/users", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.CreateAdminUser(rec, req)
+
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403, got %d", rec.Code)
+		}
+	})
+
+	t.Run("conflict returns 409", func(t *testing.T) {
+		fs := &fakeStore{}
+		fa := &fakeAuth{
+			createErr: errors.New("user already exists"),
+		}
+		h := NewHandler(fs, fa, &fakeWebhookDispatcher{}, HandlerOptions{})
+		req := newTestRequest(http.MethodPost, "/admin/users", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		h.CreateAdminUser(rec, req)
+
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("expected status 409, got %d", rec.Code)
 		}
 	})
 }
@@ -1030,6 +1205,59 @@ func TestCreateTicket(t *testing.T) {
 			t.Fatalf("expected key, got %q", resp.Key)
 		}
 	})
+
+	t.Run("creates assignment notification for assigned user", func(t *testing.T) {
+		id := uuid.New()
+		stateID := uuid.New()
+		projectID := openapiUUID("11111111-1111-1111-1111-111111111111")
+		assigneeID := openapiUUID("33333333-3333-3333-3333-333333333333")
+		fs := &fakeStore{
+			createTicket: store.Ticket{
+				ID:         id,
+				ProjectID:  uuid.UUID(projectID),
+				Key:        "TIC-2001",
+				Number:     2001,
+				Title:      "Assigned",
+				StateID:    stateID,
+				StateName:  "Backlog",
+				StateOrder: 1,
+				Priority:   "urgent",
+				Position:   1,
+				AssigneeID: func() *uuid.UUID { v := uuid.UUID(assigneeID); return &v }(),
+				CreatedAt:  time.Now().UTC(),
+				UpdatedAt:  time.Now().UTC(),
+			},
+		}
+		h := newHandlerWith(fs)
+		req := newTestRequestAsUser(
+			http.MethodPost,
+			"/tickets",
+			strings.NewReader(`{"title":"Assigned","storyId":"44444444-4444-4444-4444-444444444444","assigneeId":"33333333-3333-3333-3333-333333333333"}`),
+		)
+		rec := httptest.NewRecorder()
+
+		h.CreateTicket(rec, req, projectID)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected status 201, got %d", rec.Code)
+		}
+		if len(fs.createNotificationInputs) != 1 {
+			t.Fatalf("expected 1 notification, got %d", len(fs.createNotificationInputs))
+		}
+		created := fs.createNotificationInputs[0]
+		if created.Type != "assignment" {
+			t.Fatalf("expected assignment notification, got %q", created.Type)
+		}
+		if created.UserID != uuid.UUID(assigneeID) {
+			t.Fatalf("expected assignee user id %s, got %s", assigneeID, created.UserID)
+		}
+		if created.ProjectID != uuid.UUID(projectID) {
+			t.Fatalf("expected project id %s, got %s", projectID, created.ProjectID)
+		}
+		if created.TicketID != id {
+			t.Fatalf("expected ticket id %s, got %s", id, created.TicketID)
+		}
+	})
 }
 
 func TestUpdateTicketNotFound(t *testing.T) {
@@ -1046,6 +1274,113 @@ func TestUpdateTicketNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestUpdateTicketNotifiesAssigneeOnStateTypePriorityChange(t *testing.T) {
+	projectID := uuid.New()
+	ticketID := uuid.New()
+	assigneeID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	beforeStateID := uuid.New()
+	afterStateID := uuid.New()
+	fs := &fakeStore{
+		getTicket: store.Ticket{
+			ID:         ticketID,
+			ProjectID:  projectID,
+			Key:        "TIC-9000",
+			Title:      "Before",
+			StateID:    beforeStateID,
+			StateName:  "Backlog",
+			Priority:   "medium",
+			Type:       "feature",
+			AssigneeID: func() *uuid.UUID { v := assigneeID; return &v }(),
+		},
+		updateTicket: store.Ticket{
+			ID:         ticketID,
+			ProjectID:  projectID,
+			Key:        "TIC-9000",
+			Title:      "Before",
+			StateID:    afterStateID,
+			StateName:  "Review",
+			Priority:   "urgent",
+			Type:       "bug",
+			AssigneeID: func() *uuid.UUID { v := assigneeID; return &v }(),
+		},
+		hasNotificationPreferences: true,
+		notificationPreferences: store.NotificationPreferences{
+			MentionEnabled:    true,
+			AssignmentEnabled: true,
+		},
+	}
+	h := newHandlerWith(fs)
+	req := newTestRequest(http.MethodPatch, "/tickets/"+ticketID.String(), strings.NewReader(`{"stateId":"`+afterStateID.String()+`","type":"bug","priority":"urgent"}`))
+	rec := httptest.NewRecorder()
+
+	h.UpdateTicket(rec, req, openapiUUID(ticketID.String()))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if len(fs.createNotificationInputs) != 1 {
+		t.Fatalf("expected 1 notification, got %d", len(fs.createNotificationInputs))
+	}
+	created := fs.createNotificationInputs[0]
+	if created.Type != "assignment" {
+		t.Fatalf("expected assignment notification type, got %q", created.Type)
+	}
+	if created.UserID != assigneeID {
+		t.Fatalf("expected assignee user id %s, got %s", assigneeID, created.UserID)
+	}
+	if !strings.Contains(created.Message, "updated TIC-9000") {
+		t.Fatalf("expected update message, got %q", created.Message)
+	}
+}
+
+func TestAddTicketCommentNotifiesAssignee(t *testing.T) {
+	projectID := uuid.New()
+	ticketID := uuid.New()
+	assigneeID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	fs := &fakeStore{
+		getTicket: store.Ticket{
+			ID:         ticketID,
+			ProjectID:  projectID,
+			Key:        "TIC-9010",
+			Title:      "Ticket",
+			AssigneeID: func() *uuid.UUID { v := assigneeID; return &v }(),
+		},
+		createComment: store.Comment{
+			ID:         uuid.New(),
+			TicketID:   ticketID,
+			AuthorID:   uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+			AuthorName: "Regular User",
+			Message:    "Please review",
+			CreatedAt:  time.Now().UTC(),
+		},
+		hasNotificationPreferences: true,
+		notificationPreferences: store.NotificationPreferences{
+			MentionEnabled:    true,
+			AssignmentEnabled: true,
+		},
+		projectRoleForUser: "contributor",
+	}
+	h := newHandlerWith(fs)
+	req := newTestRequestAsUser(http.MethodPost, "/tickets/"+ticketID.String()+"/comments", strings.NewReader(`{"message":"Please review"}`))
+	rec := httptest.NewRecorder()
+
+	h.AddTicketComment(rec, req, openapiUUID(ticketID.String()))
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+	if len(fs.createNotificationInputs) != 1 {
+		t.Fatalf("expected 1 notification, got %d", len(fs.createNotificationInputs))
+	}
+	created := fs.createNotificationInputs[0]
+	if created.UserID != assigneeID {
+		t.Fatalf("expected assignee user id %s, got %s", assigneeID, created.UserID)
+	}
+	if !strings.Contains(created.Message, "commented on TIC-9010") {
+		t.Fatalf("expected comment notification message, got %q", created.Message)
 	}
 }
 

@@ -15,6 +15,7 @@ type Story struct {
 	ProjectID   uuid.UUID
 	Title       string
 	Description *string
+	StoryPoints *int
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -22,11 +23,13 @@ type Story struct {
 type StoryCreateInput struct {
 	Title       string
 	Description *string
+	StoryPoints *int
 }
 
 type StoryUpdateInput struct {
 	Title       *string
 	Description *string
+	StoryPoints *int
 }
 
 func (s *Store) ListStories(ctx context.Context, projectID uuid.UUID) ([]Story, error) {
@@ -47,7 +50,7 @@ func (s *Store) CreateStory(ctx context.Context, projectID uuid.UUID, input Stor
 
 	query := mustSQL("stories_insert", nil)
 	var id uuid.UUID
-	if err := s.db.QueryRow(ctx, query, projectID, title, input.Description).Scan(&id); err != nil {
+	if err := s.db.QueryRow(ctx, query, projectID, title, input.Description, input.StoryPoints).Scan(&id); err != nil {
 		return Story{}, err
 	}
 	return s.GetStory(ctx, id)
@@ -64,7 +67,7 @@ func (s *Store) UpdateStory(ctx context.Context, id uuid.UUID, input StoryUpdate
 
 	query := mustSQL("stories_update", nil)
 	var updatedID uuid.UUID
-	if err := s.db.QueryRow(ctx, query, id, input.Title, input.Description).Scan(&updatedID); err != nil {
+	if err := s.db.QueryRow(ctx, query, id, input.Title, input.Description, input.StoryPoints).Scan(&updatedID); err != nil {
 		return Story{}, err
 	}
 	return s.GetStory(ctx, updatedID)
@@ -82,6 +85,7 @@ func scanStory(row pgx.Row) (Story, error) {
 		&story.ProjectID,
 		&story.Title,
 		&story.Description,
+		&story.StoryPoints,
 		&story.CreatedAt,
 		&story.UpdatedAt,
 	)

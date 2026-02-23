@@ -1,6 +1,6 @@
 # Feature Roadmap
 
-Date: February 19, 2026
+Date: February 20, 2026
 Source baseline: `.documentation/current_features.md`
 
 ## Completed
@@ -141,11 +141,10 @@ Source baseline: `.documentation/current_features.md`
 
 ## Phase 4 (P2): Integrations and Reporting
 
-### 11. Outbound webhook payload versioning
-- Add `v1` envelope with schema version, event timestamp, idempotency key.
-- Document payload schema per event type.
-- Optional per-event-type subscription granularity.
-- Why: Integrators need stable, documented contracts.
+### ~~11. Outbound webhook payload versioning~~ ✓ Completed (TKT-023)
+- Implemented: `v1` outbound envelope (`version`, `event`, `eventTimestamp`, `idempotencyKey`, `data`) and matching delivery headers (`X-Ticketing-Webhook-Version`, `X-Ticketing-Idempotency-Key`).
+- Implemented: OpenAPI-documented payload schemas per webhook event type.
+- Why: Integrators get stable, explicit delivery contracts and replay-safe idempotency.
 
 ### ~~12. Lightweight project reporting~~ ✓ Completed
 - Implemented: reporting summary endpoint, settings reporting tab, and export endpoint (`json`/`csv`) with E2E coverage.
@@ -218,15 +217,15 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 ---
 
 ## Recommended Next 5 Tickets
-1. WebSocket live-update transport with polling fallback (P1-P2)
-2. Webhook payload versioning (`v1` envelope + idempotency key) (P2)
-3. Attachment download caching layer (Nginx/CDN fronting backend) (P2)
-4. RBAC/admin audit trail for sensitive actions (P2)
-5. TKT-021: Portfolio command center (P2)
+1. Attachment download caching layer (Nginx/CDN fronting backend) (P2)
+2. RBAC/admin audit trail for sensitive actions (P2)
+3. TKT-021: Portfolio command center (P2)
+4. Rule-based automation engine (P2-P3)
+5. Live collaboration mode (P3)
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.
-- WebSocket rollout needs connection lifecycle handling (reconnect, auth refresh, backpressure, and graceful fallback to polling).
+- Real-time collaboration still depends on robust WebSocket lifecycle handling (reconnect, auth refresh, backpressure, and conflict-aware UX).
 - Channel integrations (Slack/Teams/email) are intentionally deferred pending product/channel decisions.
 - Feature throughput depends on maintaining OpenAPI-first workflow and generated type sync.
 - AI-assisted features require prompt/version governance and careful data privacy boundaries.

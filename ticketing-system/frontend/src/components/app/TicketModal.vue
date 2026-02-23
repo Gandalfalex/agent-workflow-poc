@@ -7,6 +7,7 @@ import type {
     Attachment,
     DependencyRelationType,
     IncidentTimelineItem,
+    Sprint,
     TicketActivity,
     TicketComment,
     TicketDependency,
@@ -14,6 +15,7 @@ import type {
     TicketDependencyGraphResponse,
     TicketPriority,
     TicketType,
+    TimeEntry,
     WorkflowState,
 } from "@/lib/api";
 import { downloadTicketAttachmentUrl } from "@/lib/api";
@@ -29,6 +31,8 @@ type TicketEditor = {
     incidentSeverity: TicketIncidentSeverity | undefined;
     incidentImpact: string;
     incidentCommanderId: string;
+    storyPoints: number | null;
+    timeEstimate: number | null;
 };
 
 const props = defineProps<{
@@ -60,11 +64,18 @@ const props = defineProps<{
     dependencyError: string;
     incidentTimeline: IncidentTimelineItem[];
     incidentTimelineLoading: boolean;
+    timeEntries: TimeEntry[];
+    timeEntriesTotalMinutes: number;
+    timeEntriesLoading: boolean;
+    ticketSprints: Sprint[];
+    availableSprints: Sprint[];
     assigneeOptions: Array<{ id: string; name: string }>;
     projectId: string;
     ticketId: string;
     readOnly?: boolean;
 }>();
+
+const sprintToAdd = ref("");
 
 const emit = defineEmits<{
     (e: "update:editor", value: TicketEditor): void;
@@ -81,12 +92,36 @@ const emit = defineEmits<{
     (e: "delete-dependency", dependencyId: string): void;
     (e: "export-postmortem"): void;
     (e: "open-dependency-ticket", ticketId: string): void;
+    (e: "create-time-entry", payload: { minutes: number; description?: string; loggedAt?: string }): void;
+    (e: "delete-time-entry", timeEntryId: string): void;
+    (e: "add-to-sprint", sprintId: string): void;
+    (e: "remove-from-sprint", sprintId: string): void;
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
 const incidentExpanded = ref(false);
 const showDependencyGraphOverlay = ref(false);
+const timeEntryMinutes = ref<number | null>(null);
+const timeEntryDescription = ref("");
 const { t } = useI18n();
+
+const submitTimeEntry = () => {
+    if (!timeEntryMinutes.value || timeEntryMinutes.value <= 0) return;
+    emit("create-time-entry", {
+        minutes: timeEntryMinutes.value,
+        description: timeEntryDescription.value.trim() || undefined,
+    });
+    timeEntryMinutes.value = null;
+    timeEntryDescription.value = "";
+};
+
+const formatMinutes = (minutes: number): string => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+};
 
 const triggerFileUpload = () => {
     fileInput.value?.click();
@@ -333,7 +368,7 @@ const relationLabel = (relationType: string): string => {
     <div
         v-if="props.show"
         data-testid="ticket.modal"
-        class="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 px-6"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-[2px] px-6"
         @click.self="emit('close')"
     >
         <div
@@ -521,6 +556,46 @@ const relationLabel = (relationType: string): string => {
                                         {{ state.name }}
                                     </option>
                                 </select>
+                            </div>
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <div>
+                                <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.storyPoints") }}</label>
+                                <input
+                                    data-testid="ticket.story_points_input"
+                                    :value="props.editor.storyPoints"
+                                    type="number"
+                                    min="0"
+                                    placeholder="Optional"
+                                    class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :disabled="props.readOnly"
+                                    @input="
+                                        updateEditor({
+                                            storyPoints: ($event.target as HTMLInputElement).value
+                                                ? Number(($event.target as HTMLInputElement).value)
+                                                : null,
+                                        })
+                                    "
+                                />
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.timeEstimate") }}</label>
+                                <input
+                                    data-testid="ticket.time_estimate_input"
+                                    :value="props.editor.timeEstimate"
+                                    type="number"
+                                    min="0"
+                                    placeholder="Optional"
+                                    class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    :disabled="props.readOnly"
+                                    @input="
+                                        updateEditor({
+                                            timeEstimate: ($event.target as HTMLInputElement).value
+                                                ? Number(($event.target as HTMLInputElement).value)
+                                                : null,
+                                        })
+                                    "
+                                />
                             </div>
                         </div>
                         <div class="rounded-xl border border-border bg-background/40 p-3" data-testid="ticket.incident-section">
@@ -790,6 +865,119 @@ const relationLabel = (relationType: string): string => {
                                 </template>
                             </div>
                         </div>
+
+                        <!-- Time Tracking -->
+                        <div data-testid="ticket.time-tracking-section" class="mt-3">
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.timeTracking") }}</label>
+                                <span v-if="props.timeEntriesLoading" class="text-[10px] text-muted-foreground">{{ t("ticket.loading") }}</span>
+                            </div>
+                            <div class="mt-2 flex items-center gap-3 text-xs">
+                                <span class="font-semibold text-foreground">
+                                    {{ t("ticket.totalLogged") }}: {{ formatMinutes(props.timeEntriesTotalMinutes) }}
+                                </span>
+                                <span v-if="props.editor.timeEstimate" class="text-muted-foreground">
+                                    / {{ formatMinutes(props.editor.timeEstimate) }}
+                                </span>
+                                <span
+                                    v-if="props.editor.timeEstimate && props.timeEntriesTotalMinutes > props.editor.timeEstimate"
+                                    class="rounded-md border border-amber-400/30 bg-amber-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase text-amber-300"
+                                >
+                                    {{ t("board.view.overBudget") }}
+                                </span>
+                            </div>
+                            <div v-if="!props.readOnly" class="mt-2 grid grid-cols-[80px_minmax(0,1fr)_auto] gap-2">
+                                <input
+                                    data-testid="ticket.time_entry_minutes_input"
+                                    v-model.number="timeEntryMinutes"
+                                    type="number"
+                                    min="1"
+                                    placeholder="min"
+                                    class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                                <input
+                                    v-model="timeEntryDescription"
+                                    type="text"
+                                    :placeholder="t('ticket.timeTracking')"
+                                    class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                                <Button
+                                    data-testid="ticket.time_entry_submit"
+                                    variant="outline"
+                                    size="sm"
+                                    :disabled="!timeEntryMinutes || timeEntryMinutes <= 0"
+                                    @click="submitTimeEntry"
+                                >
+                                    {{ t("ticket.logTime") }}
+                                </Button>
+                            </div>
+                            <div v-if="props.timeEntries.length" data-testid="ticket.time_entries_list" class="mt-2 space-y-1.5">
+                                <div
+                                    v-for="entry in props.timeEntries"
+                                    :key="entry.id"
+                                    class="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-2 text-xs"
+                                >
+                                    <div class="min-w-0">
+                                        <span class="font-semibold text-foreground">{{ formatMinutes(entry.minutes) }}</span>
+                                        <span v-if="entry.description" class="ml-2 text-muted-foreground">{{ entry.description }}</span>
+                                        <span class="ml-2 text-muted-foreground/60">{{ entry.userName }} · {{ new Date(entry.loggedAt).toLocaleDateString() }}</span>
+                                    </div>
+                                    <button
+                                        v-if="!props.readOnly"
+                                        type="button"
+                                        class="text-[10px] text-destructive hover:text-destructive/80 transition ml-2 whitespace-nowrap"
+                                        @click="emit('delete-time-entry', entry.id)"
+                                    >
+                                        {{ t("common.delete") }}
+                                    </button>
+                                </div>
+                            </div>
+                            <p v-else-if="!props.timeEntriesLoading" class="mt-2 text-[10px] text-muted-foreground">{{ t("ticket.noTimeEntries") }}</p>
+                        </div>
+
+                        <!-- Sprints -->
+                        <div data-testid="ticket.sprints-section" class="mt-3">
+                            <label class="text-xs font-semibold text-muted-foreground">{{ t("ticket.sprints") }}</label>
+                            <div v-if="props.ticketSprints.length" class="mt-2 space-y-1.5">
+                                <div
+                                    v-for="sprint in props.ticketSprints"
+                                    :key="sprint.id"
+                                    data-testid="ticket.sprint-item"
+                                    class="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-2 text-xs"
+                                >
+                                    <span class="font-semibold text-foreground">{{ sprint.name }}</span>
+                                    <button
+                                        v-if="!props.readOnly"
+                                        type="button"
+                                        data-testid="ticket.remove-from-sprint-button"
+                                        class="text-[10px] text-destructive hover:text-destructive/80 transition ml-2 whitespace-nowrap"
+                                        @click="emit('remove-from-sprint', sprint.id)"
+                                    >
+                                        {{ t("ticket.removeFromSprint") }}
+                                    </button>
+                                </div>
+                            </div>
+                            <p v-else class="mt-2 text-[10px] text-muted-foreground">{{ t("ticket.noSprints") }}</p>
+                            <div v-if="!props.readOnly && props.availableSprints.length" class="mt-2 flex items-center gap-2">
+                                <select
+                                    data-testid="ticket.add-to-sprint-select"
+                                    v-model="sprintToAdd"
+                                    class="flex-1 rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    <option value="" disabled>{{ t("ticket.selectSprint") }}</option>
+                                    <option v-for="s in props.availableSprints" :key="s.id" :value="s.id">{{ s.name }}</option>
+                                </select>
+                                <Button
+                                    data-testid="ticket.add-to-sprint-button"
+                                    variant="outline"
+                                    size="sm"
+                                    :disabled="!sprintToAdd"
+                                    @click="emit('add-to-sprint', sprintToAdd); sprintToAdd = '';"
+                                >
+                                    {{ t("ticket.addToSprint") }}
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1007,7 +1195,7 @@ const relationLabel = (relationType: string): string => {
     <div
         v-if="showDependencyGraphOverlay"
         data-testid="ticket.dependency-graph-overlay"
-        class="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-6"
+        class="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 backdrop-blur-[2px] p-6"
         @click.self="showDependencyGraphOverlay = false"
     >
         <div class="flex h-[74vh] w-full max-w-5xl flex-col rounded-2xl border border-border bg-card shadow-2xl">

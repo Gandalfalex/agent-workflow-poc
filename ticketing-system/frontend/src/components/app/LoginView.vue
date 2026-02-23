@@ -22,7 +22,7 @@ const onSubmit = () => emit("submit");
 <template>
     <div
         data-testid="login.view"
-        class="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-20 lg:flex-row"
+        class="relative z-10 flex w-full flex-col gap-10 px-6 py-20 lg:flex-row"
     >
         <div class="flex-1 space-y-4">
             <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">

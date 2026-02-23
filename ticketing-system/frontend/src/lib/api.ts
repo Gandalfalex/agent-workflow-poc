@@ -49,6 +49,9 @@ export type IncidentTimelineResponse =
 export type AuthUser = components["schemas"]["User"];
 export type UserSummary = components["schemas"]["UserSummary"];
 export type UserListResponse = components["schemas"]["UserListResponse"];
+export type SyncUsersResponse = components["schemas"]["SyncUsersResponse"];
+export type AdminUserCreateRequest =
+  components["schemas"]["AdminUserCreateRequest"];
 export type LoginResponse = components["schemas"]["AuthLoginResponse"];
 export type WebhookResponse = components["schemas"]["Webhook"];
 export type WebhookCreateRequest =
@@ -145,13 +148,21 @@ export type BoardFilterPresetUpdateRequest =
   components["schemas"]["BoardFilterPresetUpdateRequest"];
 export type BoardFilterPresetListResponse =
   components["schemas"]["BoardFilterPresetListResponse"];
+export type TimeEntry = components["schemas"]["TimeEntry"];
+export type TimeEntryCreateRequest =
+  components["schemas"]["TimeEntryCreateRequest"];
+export type TimeEntryListResponse =
+  components["schemas"]["TimeEntryListResponse"];
 
 const API_BASE = (
   import.meta.env.VITE_API_BASE ||
-  (import.meta.env.BASE_URL === "/"
-    ? ""
-    : import.meta.env.BASE_URL.replace(/\/$/, ""))
+  (import.meta.env.BASE_URL || "/").replace(/\/$/, "") + "/rest/v1"
 ).replace(/\/$/, "");
+
+const buildApiUrl = (path: string, base = API_BASE) => `${base}${path}`;
+
+const shouldRetryWithoutBase = (res: Response) =>
+  !!API_BASE && (res.status === 404 || res.status === 405);
 const DEFAULT_PROJECT_ID = import.meta.env.VITE_PROJECT_ID || "";
 
 function resolveProjectId(projectId?: string): string {
@@ -165,37 +176,89 @@ function resolveProjectId(projectId?: string): string {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const bases = API_BASE ? [API_BASE, ""] : [API_BASE];
 
-  if (!res.ok) {
-    const message = await res.text().catch(() => "");
-    const error = new Error(message || res.statusText);
-    (error as Error & { status?: number }).status = res.status;
-    throw error;
+  for (const base of bases) {
+    let res: Response;
+    try {
+      res = await fetch(buildApiUrl(path, base), {
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+        },
+        ...options,
+      });
+    } catch (cause) {
+      if (base === API_BASE && API_BASE) {
+        continue;
+      }
+      const error = new Error(`request_failed:${path}`);
+      (
+        error as Error & {
+          status?: number;
+          cause?: unknown;
+        }
+      ).status = 0;
+      (error as Error & { cause?: unknown }).cause = cause;
+      throw error;
+    }
+
+    if (!res.ok) {
+      if (base === API_BASE && shouldRetryWithoutBase(res)) {
+        continue;
+      }
+      const message = await res.text().catch(() => "");
+      const error = new Error(message || res.statusText);
+      (error as Error & { status?: number }).status = res.status;
+      throw error;
+    }
+
+    if (res.status === 204) {
+      return undefined as T;
+    }
+
+    try {
+      return (await res.json()) as T;
+    } catch {
+      // When frontend and API base paths are misaligned, the frontend shell can
+      // be returned as HTML with 200. Retry once against root API path.
+      if (base === API_BASE && API_BASE) {
+        continue;
+      }
+      const error = new Error("invalid_api_response");
+      (error as Error & { status?: number }).status = res.status;
+      throw error;
+    }
   }
 
-  if (res.status === 204) {
-    return undefined as T;
-  }
-
-  return (await res.json()) as T;
+  const error = new Error(`request_failed:${path}`);
+  (error as Error & { status?: number }).status = 0;
+  throw error;
 }
 
 async function requestText(path: string, options: RequestInit = {}): Promise<string> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  let res = await fetch(buildApiUrl(path), {
     credentials: "include",
     headers: {
+      Accept: "text/plain, */*",
       ...(options.headers || {}),
     },
     ...options,
   });
+
+  if (!res.ok && shouldRetryWithoutBase(res)) {
+    res = await fetch(buildApiUrl(path, ""), {
+      credentials: "include",
+      headers: {
+        Accept: "text/plain, */*",
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+  }
+
   if (!res.ok) {
     const message = await res.text().catch(() => "");
     const error = new Error(message || res.statusText);
@@ -373,6 +436,21 @@ export async function getMe(): Promise<AuthUser> {
 export async function listUsers(query?: string): Promise<UserListResponse> {
   const params = query ? `?q=${encodeURIComponent(query)}` : "";
   return request<UserListResponse>(`/users${params}`);
+}
+
+export async function syncUsersFromIdentityProvider(): Promise<SyncUsersResponse> {
+  return request<SyncUsersResponse>("/admin/sync-users", {
+    method: "POST",
+  });
+}
+
+export async function createAdminUser(
+  payload: AdminUserCreateRequest,
+): Promise<UserSummary> {
+  return request<UserSummary>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function listStories(
@@ -712,6 +790,30 @@ export async function createProjectSprint(
   });
 }
 
+export async function addSprintTickets(
+  projectId: string,
+  sprintId: string,
+  ticketIds: string[],
+): Promise<Sprint> {
+  const id = resolveProjectId(projectId);
+  return request<Sprint>(`/projects/${id}/sprints/${sprintId}/tickets`, {
+    method: "POST",
+    body: JSON.stringify({ ticketIds }),
+  });
+}
+
+export async function removeSprintTickets(
+  projectId: string,
+  sprintId: string,
+  ticketIds: string[],
+): Promise<Sprint> {
+  const id = resolveProjectId(projectId);
+  return request<Sprint>(`/projects/${id}/sprints/${sprintId}/tickets`, {
+    method: "DELETE",
+    body: JSON.stringify({ ticketIds }),
+  });
+}
+
 export async function listProjectCapacitySettings(
   projectId: string,
 ): Promise<CapacitySettingsResponse> {
@@ -823,12 +925,23 @@ export async function exportProjectReportingSnapshot(
   };
 }
 
-export function buildProjectEventsWebSocketUrl(projectId: string): string {
+export function buildProjectEventsWebSocketUrls(projectId: string): string[] {
   const id = resolveProjectId(projectId);
-  const basePath = API_BASE || "";
-  const url = new URL(`${basePath}/projects/${id}/events/ws`, window.location.origin);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  return url.toString();
+  const paths = API_BASE
+    ? [`${API_BASE}/projects/${id}/events/ws`, `/projects/${id}/events/ws`]
+    : [`/projects/${id}/events/ws`];
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const path of paths) {
+    const url = new URL(path, window.location.origin);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    const value = url.toString();
+    if (!seen.has(value)) {
+      seen.add(value);
+      urls.push(value);
+    }
+  }
+  return urls;
 }
 
 export async function listNotifications(
@@ -945,6 +1058,37 @@ export async function deleteTicketAttachment(
 ): Promise<void> {
   await request<void>(
     `/projects/${projectId}/tickets/${ticketId}/attachments/${attachmentId}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function listTicketTimeEntries(
+  projectId: string,
+  ticketId: string,
+): Promise<TimeEntryListResponse> {
+  return request<TimeEntryListResponse>(
+    `/projects/${projectId}/tickets/${ticketId}/time-entries`,
+  );
+}
+
+export async function createTicketTimeEntry(
+  projectId: string,
+  ticketId: string,
+  payload: TimeEntryCreateRequest,
+): Promise<TimeEntry> {
+  return request<TimeEntry>(
+    `/projects/${projectId}/tickets/${ticketId}/time-entries`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function deleteTicketTimeEntry(
+  projectId: string,
+  ticketId: string,
+  timeEntryId: string,
+): Promise<void> {
+  await request<void>(
+    `/projects/${projectId}/tickets/${ticketId}/time-entries/${timeEntryId}`,
     { method: "DELETE" },
   );
 }

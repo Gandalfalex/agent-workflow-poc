@@ -55,13 +55,43 @@ func TestWithFrontend_APIRequestStillHitsAPI(t *testing.T) {
 
 	h := WithFrontend(api, dir, "")
 
-	req := httptest.NewRequest(http.MethodGet, "/projects/abc/board", nil)
+	req := httptest.NewRequest(http.MethodGet, "/rest/v1/projects/abc/board", nil)
 	req.Header.Set("Accept", "application/json")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
 	if !apiCalled {
 		t.Fatal("expected API request to hit API handler")
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204 from API, got %d", rec.Code)
+	}
+}
+
+func TestWithFrontend_APIFetchMetadataBypassesSPAFallback(t *testing.T) {
+	dir := t.TempDir()
+	indexPath := filepath.Join(dir, "index.html")
+	if err := os.WriteFile(indexPath, []byte("<html><body>spa</body></html>"), 0o644); err != nil {
+		t.Fatalf("write index: %v", err)
+	}
+
+	apiCalled := false
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiCalled = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	h := WithFrontend(api, dir, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/rest/v1/projects/abc/board", nil)
+	req.Header.Set("Accept", "text/html,application/json")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if !apiCalled {
+		t.Fatal("expected API fetch request to hit API handler")
 	}
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected status 204 from API, got %d", rec.Code)

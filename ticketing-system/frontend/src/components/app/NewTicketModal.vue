@@ -20,6 +20,7 @@ type NewTicketForm = {
     storyId: string;
     assignee: string;
     stateId: string;
+    storyPoints: number | null;
 };
 
 const props = defineProps<{
@@ -122,7 +123,7 @@ const closeModal = (event?: Event) => {
     <div
         v-if="props.show"
         data-testid="new-ticket.modal"
-        class="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 px-6"
+        class="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 backdrop-blur-[2px] px-6"
         @click.self="emit('close')"
     >
         <div
@@ -365,6 +366,18 @@ const closeModal = (event?: Event) => {
                             </option>
                         </select>
                     </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-muted-foreground">{{ t("newTicket.storyPoints") }}</label>
+                    <input
+                        data-testid="new-ticket.story_points_input"
+                        :value="props.ticket.storyPoints"
+                        type="number"
+                        min="0"
+                        placeholder="Optional"
+                        class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        @input="updateField({ storyPoints: ($event.target as HTMLInputElement).value ? Number(($event.target as HTMLInputElement).value) : null })"
+                    />
                 </div>
                 <div>
                     <label class="text-xs font-semibold text-muted-foreground"

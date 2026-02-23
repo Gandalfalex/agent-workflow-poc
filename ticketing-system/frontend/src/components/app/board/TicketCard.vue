@@ -6,7 +6,9 @@ const props = defineProps<{
     ticket: TicketResponse;
     stateId: string;
     rowId: string;
+    nextStateId: string;
     canEditTickets: boolean;
+    canQuickAssignToMe: boolean;
     bulkSelectMode: boolean;
     selectedTicketIds: string[];
     onOpenTicket: (ticket: TicketResponse) => void;
@@ -14,6 +16,9 @@ const props = defineProps<{
     onDragStart: (ticketId: string) => void;
     onDragEnd: () => void;
     onDropCard: (ticketId: string, stateId: string, storyId: string) => void;
+    onQuickMoveNext: (ticket: TicketResponse, nextStateId: string) => void;
+    onQuickCyclePriority: (ticket: TicketResponse) => void;
+    onQuickAssignToMe: (ticket: TicketResponse) => void;
 }>();
 
 const { t } = useI18n();
@@ -65,6 +70,20 @@ const assigneeInitials = (name?: string) => {
     return name.slice(0, 2).toUpperCase();
 };
 
+const priorityShort = (priority: string) => priority.substring(0, 3);
+
+const formatTitleForDisplay = (title: string) => {
+    const match = title.match(/^(.*?)(\d{10,})$/);
+    if (!match) {
+        return { title, longId: "" };
+    }
+    const prefix = (match[1] || "").trimEnd();
+    const longId = match[2] || "";
+    const suffix = longId.slice(-4);
+    const display = prefix.length > 0 ? `${prefix} …${suffix}` : `…${suffix}`;
+    return { title: display, longId };
+};
+
 </script>
 
 <template>
@@ -113,6 +132,41 @@ const assigneeInitials = (name?: string) => {
         >
             ⋮⋮
         </div>
+        <div
+            v-if="props.canEditTickets && !props.bulkSelectMode"
+            class="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+            :aria-label="t('board.view.quickActions')"
+        >
+            <button
+                data-testid="board.ticket-quick-move-button"
+                type="button"
+                class="rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-40"
+                :title="t('board.view.quickMove')"
+                :disabled="!props.nextStateId"
+                @click.stop="props.onQuickMoveNext(props.ticket, props.nextStateId)"
+            >
+                →
+            </button>
+            <button
+                data-testid="board.ticket-quick-priority-button"
+                type="button"
+                class="rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                :title="t('board.view.quickPriority')"
+                @click.stop="props.onQuickCyclePriority(props.ticket)"
+            >
+                P
+            </button>
+            <button
+                v-if="props.canQuickAssignToMe"
+                data-testid="board.ticket-quick-assign-button"
+                type="button"
+                class="rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                :title="t('board.view.quickAssignMe')"
+                @click.stop="props.onQuickAssignToMe(props.ticket)"
+            >
+                @
+            </button>
+        </div>
 
         <div class="mb-2 flex items-start justify-between gap-2">
             <div class="flex items-center gap-1.5">
@@ -136,7 +190,7 @@ const assigneeInitials = (name?: string) => {
                     class="rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
                     :class="priorityColor(props.ticket.priority)"
                 >
-                    {{ props.ticket.priority.substring(0, 3) }}
+                    {{ priorityShort(props.ticket.priority) }}
                 </span>
                 <span
                     class="rounded-md px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
@@ -152,7 +206,13 @@ const assigneeInitials = (name?: string) => {
             class="mb-2 line-clamp-1 text-sm font-bold leading-snug text-foreground"
             :title="props.ticket.title"
         >
-            {{ props.ticket.title }}
+            {{ formatTitleForDisplay(props.ticket.title).title }}
+        </p>
+        <p
+            v-if="formatTitleForDisplay(props.ticket.title).longId"
+            class="mb-2 font-mono text-[10px] tracking-wide text-slate-400"
+        >
+            {{ t("board.view.ticketId") }} · {{ props.ticket.title }}
         </p>
 
         <p
@@ -163,9 +223,18 @@ const assigneeInitials = (name?: string) => {
         </p>
 
         <div class="flex items-center justify-between border-t border-border/50 pt-2">
-            <span class="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {{ props.ticket.type }}
-            </span>
+            <div class="flex items-center gap-1.5">
+                <span class="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {{ props.ticket.type }}
+                </span>
+                <span
+                    v-if="props.ticket.storyPoints != null"
+                    data-testid="board.ticket_story_points_badge"
+                    class="rounded-md border border-violet-400/30 bg-violet-500/10 px-1.5 py-0.5 text-[8px] font-bold text-violet-300"
+                >
+                    {{ props.ticket.storyPoints }} SP
+                </span>
+            </div>
             <div class="flex items-center gap-1.5">
                 <span
                     v-if="props.ticket.assignee?.name"

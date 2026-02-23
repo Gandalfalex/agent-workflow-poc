@@ -401,3 +401,112 @@ func TestPasswordGrant(t *testing.T) {
 		}
 	})
 }
+
+func TestUserIDFromLocationHeader(t *testing.T) {
+	tests := []struct {
+		name     string
+		location string
+		want     string
+	}{
+		{name: "full URL", location: "http://localhost:8081/admin/realms/test/users/abc-123", want: "abc-123"},
+		{name: "trailing slash", location: "http://localhost:8081/admin/realms/test/users/abc-123/", want: "abc-123"},
+		{name: "empty", location: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := userIDFromLocationHeader(tt.location)
+			if got != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestCreateUser(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == "/realms/test/protocol/openid-connect/token":
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token": "admin-token",
+					"expires_in":   3600,
+				})
+				return
+			case r.URL.Path == "/admin/realms/test/users" && r.Method == http.MethodPost:
+				w.Header().Set("Location", "/admin/realms/test/users/44444444-4444-4444-4444-444444444444")
+				w.WriteHeader(http.StatusCreated)
+				return
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		client := New(Config{
+			BaseURL:  server.URL,
+			Realm:    "test",
+			ClientID: "testclient",
+			Username: "admin",
+			Password: "admin123",
+		})
+
+		created, err := client.CreateUser(context.Background(), UserCreateInput{
+			Username:  "new.user",
+			Email:     "new.user@example.com",
+			FirstName: "New",
+			LastName:  "User",
+			Password:  "supersecret123",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if created.ID != "44444444-4444-4444-4444-444444444444" {
+			t.Fatalf("unexpected id: %q", created.ID)
+		}
+		if created.Name != "New User" {
+			t.Fatalf("unexpected name: %q", created.Name)
+		}
+		if created.Email != "new.user@example.com" {
+			t.Fatalf("unexpected email: %q", created.Email)
+		}
+	})
+
+	t.Run("conflict", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == "/realms/test/protocol/openid-connect/token":
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token": "admin-token",
+					"expires_in":   3600,
+				})
+				return
+			case r.URL.Path == "/admin/realms/test/users" && r.Method == http.MethodPost:
+				http.Error(w, "already exists", http.StatusConflict)
+				return
+			default:
+				t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			}
+		}))
+		defer server.Close()
+
+		client := New(Config{
+			BaseURL:  server.URL,
+			Realm:    "test",
+			ClientID: "testclient",
+			Username: "admin",
+			Password: "admin123",
+		})
+
+		_, err := client.CreateUser(context.Background(), UserCreateInput{
+			Username: "new.user",
+			Email:    "new.user@example.com",
+			Password: "supersecret123",
+		})
+		if err == nil {
+			t.Fatal("expected conflict error")
+		}
+	})
+}

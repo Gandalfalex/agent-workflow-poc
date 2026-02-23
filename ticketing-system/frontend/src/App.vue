@@ -6,7 +6,7 @@ import LoginView from "@/components/app/LoginView.vue";
 import { useAdminStore } from "@/stores/admin";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
-import { buildProjectEventsWebSocketUrl } from "@/lib/api";
+import { buildProjectEventsWebSocketUrls } from "@/lib/api";
 import type { NotificationPreferences, ProjectLiveEvent } from "@/lib/api";
 
 const adminStore = useAdminStore();
@@ -206,40 +206,58 @@ const startProjectEventsSocket = () => {
     }
 
     stopProjectEventsSocket();
-    const socket = new WebSocket(
-        buildProjectEventsWebSocketUrl(activeProjectId.value),
-    );
-    projectEventsSocket = socket;
+    const socketURLs = buildProjectEventsWebSocketUrls(activeProjectId.value);
 
-    socket.onopen = async () => {
-        wsConnected.value = true;
-        stopNotificationPolling();
-        try {
-            await boardStore.loadNotificationUnreadCount(activeProjectId.value);
-        } catch (err) {
-            handleAuthError(err);
+    const openSocket = (index: number) => {
+        if (index >= socketURLs.length) {
+            wsConnected.value = false;
+            if (showLogin.value) return;
+            startNotificationPolling();
+            scheduleWsReconnect();
+            return;
         }
+
+        const socket = new WebSocket(socketURLs[index]!);
+        projectEventsSocket = socket;
+        let opened = false;
+
+        socket.onopen = async () => {
+            opened = true;
+            wsConnected.value = true;
+            stopNotificationPolling();
+            try {
+                await boardStore.loadNotificationUnreadCount(activeProjectId.value);
+            } catch (err) {
+                handleAuthError(err);
+            }
+        };
+
+        socket.onmessage = async (message) => {
+            try {
+                const event = JSON.parse(message.data) as ProjectLiveEvent;
+                await handleProjectLiveEvent(event);
+            } catch {
+                // Ignore malformed or unexpected events.
+            }
+        };
+
+        socket.onerror = () => {
+            socket.close();
+        };
+
+        socket.onclose = () => {
+            if (!opened && index + 1 < socketURLs.length) {
+                openSocket(index + 1);
+                return;
+            }
+            wsConnected.value = false;
+            if (showLogin.value) return;
+            startNotificationPolling();
+            scheduleWsReconnect();
+        };
     };
 
-    socket.onmessage = async (message) => {
-        try {
-            const event = JSON.parse(message.data) as ProjectLiveEvent;
-            await handleProjectLiveEvent(event);
-        } catch {
-            // Ignore malformed or unexpected events.
-        }
-    };
-
-    socket.onerror = () => {
-        socket.close();
-    };
-
-    socket.onclose = () => {
-        wsConnected.value = false;
-        if (showLogin.value) return;
-        startNotificationPolling();
-        scheduleWsReconnect();
-    };
+    openSocket(0);
 };
 
 const submitLogin = async () => {
@@ -434,14 +452,15 @@ watch(
     <div class="min-h-screen bg-background text-foreground">
         <div class="relative">
             <div
-                class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(120,160,255,0.18),_transparent_55%)]"
+                class="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,_rgba(120,160,255,0.18),_transparent_55%)]"
             ></div>
             <div
-                class="pointer-events-none absolute inset-0 opacity-40 [background-size:24px_24px] [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)]"
+                class="pointer-events-none absolute inset-0 z-0 opacity-40 [background-size:24px_24px] [background-image:linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)]"
             ></div>
 
             <LoginView
                 v-if="showLogin"
+                class="relative z-10"
                 v-model:identifier="loginForm.identifier"
                 v-model:password="loginForm.password"
                 :login-error="loginError"
@@ -451,7 +470,7 @@ watch(
                 @submit="submitLogin"
             />
 
-            <div v-else>
+            <div v-else class="relative z-10">
                 <AppHeader
                     :active-project-label="activeProjectLabel"
                     :active-page="activePage"
@@ -480,7 +499,7 @@ watch(
                 />
 
                 <main
-                    class="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 pb-20"
+                    class="relative flex w-full flex-col gap-8 px-6 pb-20"
                 >
                     <RouterView />
                 </main>

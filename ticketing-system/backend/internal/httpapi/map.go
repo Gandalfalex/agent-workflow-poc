@@ -78,6 +78,7 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 		ProjectId:   projectID,
 		Title:       ticket.StoryTitle,
 		Description: ticket.StorySummary,
+		StoryPoints: ticket.StoryStoryPoints,
 		CreatedAt:   ticket.StoryCreated,
 		UpdatedAt:   ticket.StoryUpdated,
 	}
@@ -103,6 +104,9 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 		IncidentImpact:      incidentImpact,
 		IncidentCommanderId: incidentCommanderID,
 		IncidentCommander:   incidentCommander,
+		StoryPoints:         ticket.StoryPoints,
+		TimeEstimate:        ticket.TimeEstimate,
+		TimeLogged:          &ticket.TimeLogged,
 		Position:            float32(ticket.Position),
 		BlockedByCount:      ticket.BlockedByCount,
 		IsBlocked:           ticket.IsBlocked,
@@ -133,12 +137,13 @@ func mapWebhookEvents(events []string) []WebhookEvent {
 
 func mapProject(project store.Project) projectResponse {
 	return projectResponse{
-		Id:          toOpenapiUUID(project.ID),
-		Key:         ProjectKey(project.Key),
-		Name:        project.Name,
-		Description: project.Description,
-		CreatedAt:   project.CreatedAt,
-		UpdatedAt:   project.UpdatedAt,
+		Id:                        toOpenapiUUID(project.ID),
+		Key:                       ProjectKey(project.Key),
+		Name:                      project.Name,
+		Description:               project.Description,
+		DefaultSprintDurationDays: project.DefaultSprintDurationDays,
+		CreatedAt:                 project.CreatedAt,
+		UpdatedAt:                 project.UpdatedAt,
 	}
 }
 
@@ -207,6 +212,7 @@ func mapStory(story store.Story) storyResponse {
 		ProjectId:   toOpenapiUUID(story.ProjectID),
 		Title:       story.Title,
 		Description: story.Description,
+		StoryPoints: story.StoryPoints,
 		CreatedAt:   story.CreatedAt,
 		UpdatedAt:   story.UpdatedAt,
 	}
@@ -538,5 +544,18 @@ func mapNotificationPreferences(p store.NotificationPreferences) notificationPre
 	return notificationPreferencesResponse{
 		MentionEnabled:    p.MentionEnabled,
 		AssignmentEnabled: p.AssignmentEnabled,
+	}
+}
+
+func mapTimeEntry(entry store.TimeEntry) timeEntryResponse {
+	return timeEntryResponse{
+		Id:          toOpenapiUUID(entry.ID),
+		TicketId:    toOpenapiUUID(entry.TicketID),
+		UserId:      toOpenapiUUID(entry.UserID),
+		UserName:    entry.UserName,
+		Minutes:     entry.Minutes,
+		Description: entry.Description,
+		LoggedAt:    openapi_types.Date{Time: entry.LoggedAt},
+		CreatedAt:   entry.CreatedAt,
 	}
 }

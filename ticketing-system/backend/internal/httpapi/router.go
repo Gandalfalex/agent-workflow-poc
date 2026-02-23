@@ -19,6 +19,7 @@ func Router(h *API) http.Handler {
 
 	return HandlerWithOptions(h, ChiServerOptions{
 		BaseRouter:  r,
+		BaseURL:     "/rest/v1",
 		Middlewares: []MiddlewareFunc{requireAuth(h)},
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())

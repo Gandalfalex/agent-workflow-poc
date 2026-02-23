@@ -22,6 +22,16 @@ const totalTickets = computed(() =>
     ),
 );
 
+const usedStoryPoints = computed(() => {
+    let sum = 0;
+    for (const state of props.states) {
+        for (const ticket of props.row.ticketsByState[state.id] || []) {
+            if (ticket.storyPoints != null) sum += ticket.storyPoints;
+        }
+    }
+    return sum;
+});
+
 const segmentWidth = (stateId: string) => {
     const count = props.row.ticketsByState[stateId]?.length || 0;
     return (count / Math.max(1, totalTickets.value)) * 100;
@@ -80,6 +90,28 @@ const closeMenu = () => {
         >
             {{ props.row.description }}
         </p>
+
+        <div
+            v-if="props.row.storyPoints != null"
+            class="mt-2 flex items-center gap-2"
+        >
+            <div class="flex h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div
+                    class="h-full rounded-full transition-all"
+                    :class="usedStoryPoints > (props.row.storyPoints || 0) ? 'bg-amber-500' : 'bg-violet-500'"
+                    :style="{ width: Math.min(100, (usedStoryPoints / Math.max(1, props.row.storyPoints || 1)) * 100) + '%' }"
+                />
+            </div>
+            <span class="whitespace-nowrap text-[10px] font-semibold" :class="usedStoryPoints > (props.row.storyPoints || 0) ? 'text-amber-400' : 'text-violet-400'">
+                {{ usedStoryPoints }}/{{ props.row.storyPoints }} SP
+            </span>
+            <span
+                v-if="usedStoryPoints > (props.row.storyPoints || 0)"
+                class="rounded-md border border-amber-400/30 bg-amber-500/10 px-1 py-0.5 text-[8px] font-bold uppercase text-amber-300"
+            >
+                {{ t("board.view.overBudget") }}
+            </span>
+        </div>
 
         <div class="mt-auto space-y-2 pt-4">
             <div class="flex items-center gap-2">

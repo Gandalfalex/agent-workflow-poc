@@ -1,5 +1,5 @@
 {{define "story_fields"}}
-id, project_id, title, description, created_at, updated_at
+id, project_id, title, description, story_points, created_at, updated_at
 {{end}}
 
 {{define "webhook_fields"}}
@@ -27,8 +27,8 @@ WHERE id = $1
 {{end}}
 
 {{define "stories_insert.sql"}}
-INSERT INTO stories (project_id, title, description)
-VALUES ($1, $2, $3)
+INSERT INTO stories (project_id, title, description, story_points)
+VALUES ($1, $2, $3, $4)
 RETURNING id
 {{end}}
 
@@ -43,6 +43,7 @@ ORDER BY created_at DESC
 UPDATE stories
 SET title = COALESCE($2, title),
     description = COALESCE($3, description),
+    story_points = COALESCE($4, story_points),
     updated_at = now()
 WHERE id = $1
 RETURNING id

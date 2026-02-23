@@ -5,7 +5,7 @@ info:
   description: |
     Jira-like ticketing system API with auth, Kanban workflow, projects, groups, and webhooks.
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8080/rest/v1
 
 tags:
   - name: auth
@@ -105,6 +105,49 @@ paths:
                 $ref: "#/components/schemas/SyncUsersResponse"
         "500":
           description: Sync failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    post:
+      summary: Create user in identity provider and app directory
+      operationId: createAdminUser
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserCreateRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSummary"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Create failed
           content:
             application/json:
               schema:
@@ -1112,6 +1155,90 @@ paths:
         "204":
           description: Deleted
 
+  /projects/{projectId}/tickets/{ticketId}/time-entries:
+    get:
+      summary: List time entries for a ticket
+      operationId: listTicketTimeEntries
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Time entry list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeEntryListResponse"
+    post:
+      summary: Log time on a ticket
+      operationId: createTicketTimeEntry
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimeEntryCreateRequest"
+      responses:
+        "201":
+          description: Time entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeEntry"
+
+  /projects/{projectId}/tickets/{ticketId}/time-entries/{timeEntryId}:
+    delete:
+      summary: Delete a time entry
+      operationId: deleteTicketTimeEntry
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: timeEntryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
   /projects/{projectId}/stats:
     get:
       summary: Get project statistics
@@ -1171,6 +1298,68 @@ paths:
       responses:
         "201":
           description: Created sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+
+  /projects/{projectId}/sprints/{sprintId}/tickets:
+    post:
+      summary: Add tickets to sprint
+      operationId: addSprintTickets
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: sprintId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintTicketsRequest"
+      responses:
+        "200":
+          description: Updated sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+    delete:
+      summary: Remove tickets from sprint
+      operationId: removeSprintTickets
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: sprintId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintTicketsRequest"
+      responses:
+        "200":
+          description: Updated sprint
           content:
             application/json:
               schema:
@@ -2086,6 +2275,24 @@ components:
           description: Total users in Keycloak
       required: [synced, total]
 
+    AdminUserCreateRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        password:
+          type: string
+          minLength: 8
+      required: [username, email, password]
+
     ProjectKey:
       type: string
       description: 4-character uppercase alphanumeric project key.
@@ -2124,6 +2331,9 @@ components:
         updatedAt:
           type: string
           format: date-time
+        defaultSprintDurationDays:
+          type: integer
+          nullable: true
       required: [id, key, name, createdAt, updatedAt]
 
     ProjectCreateRequest:
@@ -2144,6 +2354,9 @@ components:
           type: string
         description:
           type: string
+        defaultSprintDurationDays:
+          type: integer
+          nullable: true
 
     ProjectListResponse:
       type: object
@@ -2428,6 +2641,9 @@ components:
           type: string
         description:
           type: string
+        storyPoints:
+          type: integer
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2443,6 +2659,9 @@ components:
           type: string
         description:
           type: string
+        storyPoints:
+          type: integer
+          nullable: true
       required: [title]
 
     StoryUpdateRequest:
@@ -2452,6 +2671,9 @@ components:
           type: string
         description:
           type: string
+        storyPoints:
+          type: integer
+          nullable: true
 
     StoryListResponse:
       type: object
@@ -2594,6 +2816,17 @@ components:
           format: float
         blockedByCount:
           type: integer
+        storyPoints:
+          type: integer
+          nullable: true
+        timeEstimate:
+          type: integer
+          nullable: true
+          description: Estimated effort in minutes
+        timeLogged:
+          type: integer
+          readOnly: true
+          description: Total logged time in minutes (computed)
         isBlocked:
           type: boolean
         createdAt:
@@ -2734,6 +2967,12 @@ components:
           type: string
           format: uuid
           nullable: true
+        storyPoints:
+          type: integer
+          nullable: true
+        timeEstimate:
+          type: integer
+          nullable: true
       required: [title, storyId]
 
     TicketUpdateRequest:
@@ -2768,6 +3007,12 @@ components:
         incidentCommanderId:
           type: string
           format: uuid
+          nullable: true
+        storyPoints:
+          type: integer
+          nullable: true
+        timeEstimate:
+          type: integer
           nullable: true
         position:
           type: number
@@ -2901,6 +3146,9 @@ components:
 
     Webhook:
       type: object
+      description: |
+        Webhook subscription configuration.
+        Outbound webhook POST bodies use `WebhookPayloadV1`.
       properties:
         id:
           type: string
@@ -2991,6 +3239,63 @@ components:
           type: string
       required: [delivered]
 
+    WebhookPayloadV1:
+      type: object
+      description: Versioned outbound webhook body (`version=v1`).
+      properties:
+        version:
+          type: string
+          enum: [v1]
+        event:
+          $ref: "#/components/schemas/WebhookEvent"
+        eventTimestamp:
+          type: string
+          format: date-time
+        idempotencyKey:
+          type: string
+          format: uuid
+        data:
+          oneOf:
+            - $ref: "#/components/schemas/WebhookTicketCreatedData"
+            - $ref: "#/components/schemas/WebhookTicketUpdatedData"
+            - $ref: "#/components/schemas/WebhookTicketDeletedData"
+            - $ref: "#/components/schemas/WebhookTicketStateChangedData"
+      required: [version, event, eventTimestamp, idempotencyKey, data]
+
+    WebhookTicketCreatedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticket]
+
+    WebhookTicketUpdatedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticket]
+
+    WebhookTicketDeletedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticket]
+
+    WebhookTicketStateChangedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+        fromStateId:
+          type: string
+          format: uuid
+        toStateId:
+          type: string
+          format: uuid
+      required: [ticket, fromStateId, toStateId]
+
     WebhookDelivery:
       type: object
       properties:
@@ -3062,6 +3367,56 @@ components:
           items:
             $ref: "#/components/schemas/Attachment"
       required: [items]
+
+    TimeEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        minutes:
+          type: integer
+        description:
+          type: string
+        loggedAt:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, userId, userName, minutes, loggedAt, createdAt]
+
+    TimeEntryCreateRequest:
+      type: object
+      properties:
+        minutes:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+        loggedAt:
+          type: string
+          format: date
+      required: [minutes]
+
+    TimeEntryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeEntry"
+        totalMinutes:
+          type: integer
+      required: [items, totalMinutes]
 
     ProjectActivity:
       type: object
@@ -3302,6 +3657,16 @@ components:
             type: string
             format: uuid
       required: [name, startDate, endDate]
+
+    SprintTicketsRequest:
+      type: object
+      required: [ticketIds]
+      properties:
+        ticketIds:
+          type: array
+          items:
+            type: string
+            format: uuid
 
     CapacitySettingScope:
       type: string

@@ -67,7 +67,7 @@ func WithFrontend(api http.Handler, dir string, basePath string) http.Handler {
 			}
 
 			// SPA fallback - serve index.html for non-API routes
-			if !isAPIPath(r.URL.Path) {
+			if !strings.HasPrefix(r.URL.Path, "/rest/v1") {
 				http.ServeFile(w, r, indexPath)
 				return
 			}
@@ -77,27 +77,21 @@ func WithFrontend(api http.Handler, dir string, basePath string) http.Handler {
 	})
 }
 
-func isAPIPath(path string) bool {
-	apiPrefixes := []string{
-		"/api/",
-		"/auth/",
-		"/groups",
-		"/projects",
-		"/stories",
-		"/tickets",
-		"/users",
-		"/health",
-	}
-
-	for _, prefix := range apiPrefixes {
-		if path == strings.TrimSuffix(prefix, "/") || strings.HasPrefix(path, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 func wantsHTML(r *http.Request) bool {
 	accept := strings.ToLower(r.Header.Get("Accept"))
-	return strings.Contains(accept, "text/html")
+	if !strings.Contains(accept, "text/html") {
+		return false
+	}
+	// Only treat true browser page navigations as SPA document requests.
+	// Fetch/XHR API calls can still carry broad Accept headers in some clients.
+	if strings.EqualFold(r.Header.Get("X-Requested-With"), "XMLHttpRequest") {
+		return false
+	}
+	if dest := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Dest"))); dest != "" && dest != "document" {
+		return false
+	}
+	if mode := strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Mode"))); mode != "" && mode != "navigate" && mode != "nested-navigate" {
+		return false
+	}
+	return true
 }

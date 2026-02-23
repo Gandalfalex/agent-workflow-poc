@@ -38,6 +38,14 @@ type User struct {
 	Roles []string
 }
 
+type UserCreateInput struct {
+	Username  string
+	Email     string
+	FirstName string
+	LastName  string
+	Password  string
+}
+
 type Client struct {
 	cfg        Config
 	httpClient *http.Client
@@ -72,6 +80,79 @@ func (c *Client) Login(ctx context.Context, username, password string) (User, To
 	}
 
 	return user, token, nil
+}
+
+func (c *Client) CreateUser(ctx context.Context, input UserCreateInput) (User, error) {
+	token, err := c.adminAccessToken(ctx)
+	if err != nil {
+		return User{}, fmt.Errorf("failed to get admin token: %w", err)
+	}
+
+	usersURL := strings.TrimRight(c.cfg.BaseURL, "/") + "/admin/realms/" + c.cfg.Realm + "/users"
+	payload := map[string]any{
+		"username":      strings.TrimSpace(input.Username),
+		"email":         strings.TrimSpace(input.Email),
+		"enabled":       true,
+		"emailVerified": true,
+		"firstName":     strings.TrimSpace(input.FirstName),
+		"lastName":      strings.TrimSpace(input.LastName),
+		"credentials": []map[string]any{
+			{
+				"type":      "password",
+				"value":     input.Password,
+				"temporary": false,
+			},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return User{}, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, usersURL, strings.NewReader(string(body)))
+	if err != nil {
+		return User{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return User{}, err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		// continue
+	case http.StatusConflict:
+		raw, _ := io.ReadAll(resp.Body)
+		return User{}, fmt.Errorf("user already exists: %s", strings.TrimSpace(string(raw)))
+	default:
+		raw, _ := io.ReadAll(resp.Body)
+		return User{}, fmt.Errorf("keycloak create user error: %d - %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+
+	id := userIDFromLocationHeader(resp.Header.Get("Location"))
+	if id == "" {
+		foundID, findErr := c.findUserIDByUsername(ctx, token, input.Username)
+		if findErr != nil {
+			return User{}, findErr
+		}
+		id = foundID
+	}
+
+	name := strings.TrimSpace(input.FirstName + " " + input.LastName)
+	if name == "" {
+		name = strings.TrimSpace(input.Username)
+	}
+	email := strings.TrimSpace(input.Email)
+
+	return User{
+		ID:    id,
+		Name:  name,
+		Email: email,
+	}, nil
 }
 
 func (c *Client) Verify(ctx context.Context, tokenString string) (User, error) {
@@ -150,8 +231,7 @@ func (c *Client) passwordGrant(ctx context.Context, username, password string) (
 
 // ListUsers retrieves all users from Keycloak admin API
 func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
-	// Get admin token using configured credentials
-	tokenSet, err := c.passwordGrant(ctx, c.cfg.Username, c.cfg.Password)
+	token, err := c.adminAccessToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get admin token: %w", err)
 	}
@@ -163,7 +243,7 @@ func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+tokenSet.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -215,6 +295,57 @@ func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
 	}
 
 	return users, nil
+}
+
+func (c *Client) adminAccessToken(ctx context.Context) (string, error) {
+	tokenSet, err := c.passwordGrant(ctx, c.cfg.Username, c.cfg.Password)
+	if err != nil {
+		return "", err
+	}
+	return tokenSet.AccessToken, nil
+}
+
+func userIDFromLocationHeader(location string) string {
+	trimmed := strings.TrimSpace(location)
+	if trimmed == "" {
+		return ""
+	}
+	parts := strings.Split(strings.TrimRight(trimmed, "/"), "/")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
+}
+
+func (c *Client) findUserIDByUsername(ctx context.Context, token, username string) (string, error) {
+	lookupURL := strings.TrimRight(c.cfg.BaseURL, "/") + "/admin/realms/" + c.cfg.Realm + "/users?exact=true&max=1&username=" + url.QueryEscape(strings.TrimSpace(username))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, lookupURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("keycloak user lookup error: %d - %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var users []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		return "", err
+	}
+	if len(users) == 0 || strings.TrimSpace(users[0].ID) == "" {
+		return "", errors.New("created user id not returned by identity provider")
+	}
+	return strings.TrimSpace(users[0].ID), nil
 }
 
 func (c *Client) initJWKS() error {

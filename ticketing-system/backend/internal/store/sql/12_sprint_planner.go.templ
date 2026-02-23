@@ -27,6 +27,19 @@ VALUES ($1, $2)
 ON CONFLICT DO NOTHING
 {{end}}
 
+{{define "sprint_tickets_delete.sql"}}
+DELETE FROM sprint_tickets WHERE sprint_id = $1 AND ticket_id = $2
+{{end}}
+
+{{define "sprints_get.sql"}}
+SELECT s.id, s.project_id, s.name, s.goal, s.start_date, s.end_date, s.created_at, s.updated_at,
+       COUNT(st.ticket_id)::int AS committed_tickets
+FROM sprints s
+LEFT JOIN sprint_tickets st ON st.sprint_id = s.id
+WHERE s.id = $1 AND s.project_id = $2
+GROUP BY s.id
+{{end}}
+
 {{define "capacity_settings_list.sql"}}
 SELECT id, project_id, scope, user_id, label, capacity, created_at, updated_at
 FROM capacity_settings

@@ -48,19 +48,17 @@ type NotificationPreferencesUpdateInput struct {
 
 func (s *Store) CreateNotification(ctx context.Context, input NotificationCreateInput) (Notification, error) {
 	query := mustSQL("notifications_insert", nil)
-	var id uuid.UUID
-	if err := s.db.QueryRow(
+	return queryOne(
 		ctx,
+		s.db,
 		query,
+		scanNotification,
 		input.ProjectID,
 		input.UserID,
 		input.TicketID,
 		input.Type,
 		input.Message,
-	).Scan(&id); err != nil {
-		return Notification{}, err
-	}
-	return s.MarkNotificationRead(ctx, id, input.ProjectID, input.UserID)
+	)
 }
 
 func (s *Store) ListNotifications(ctx context.Context, filter NotificationFilter) ([]Notification, error) {

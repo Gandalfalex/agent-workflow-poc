@@ -74,21 +74,22 @@ func TestDependenciesBlockedFilterAndGraph(t *testing.T) {
 		}).
 		WhenIClickRefresh().
 		ThenISeeSelectorKey("board.ticket_blocked_badge").
+		WhenIClickKey("board.filter_toggle_button").
 		WhenIClickKey("board.filter_blocked_checkbox").
 		Then("blocked filter hides unblocked ticket and keeps blocked ticket visible", func(s *Scenario) error {
-			aVisible, err := ticketTitleVisible(s.Harness(), ticketA.Title)
+			aVisible, err := ticketTitleVisible(s.Harness(), ticketA.Key)
 			if err != nil {
 				return err
 			}
 			if aVisible {
-				return fmt.Errorf("expected unblocked ticket %q to be hidden", ticketA.Title)
+				return fmt.Errorf("expected unblocked ticket %q to be hidden", ticketA.Key)
 			}
-			bVisible, err := ticketTitleVisible(s.Harness(), ticketB.Title)
+			bVisible, err := ticketTitleVisible(s.Harness(), ticketB.Key)
 			if err != nil {
 				return err
 			}
 			if !bVisible {
-				return fmt.Errorf("expected blocked ticket %q to be visible", ticketB.Title)
+				return fmt.Errorf("expected blocked ticket %q to be visible", ticketB.Key)
 			}
 			return nil
 		}).
@@ -99,7 +100,7 @@ func TestDependenciesBlockedFilterAndGraph(t *testing.T) {
 		ThenISeeSelectorKey("ticket.dependencies_section").
 		AndISeeSelectorKey("ticket.dependency_graph").
 		When("I close ticket modal", func(s *Scenario) error {
-			return s.Harness().page.GetByText("Close").First().Click()
+			return s.Harness().Click("[data-testid=\"ticket.close-button\"]")
 		}).
 		WhenIClickKey("nav.dashboard_tab").
 		ThenURLContains("/projects/" + seed.ProjectID + "/dashboard").

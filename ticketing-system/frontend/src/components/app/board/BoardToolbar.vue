@@ -105,6 +105,7 @@ defineExpose({ focusSearch });
                 </option>
             </select>
             <button
+                data-testid="board.filter-toggle-button"
                 class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
                 @click="emit('toggle-filter-panel')"
             >
@@ -115,7 +116,9 @@ defineExpose({ focusSearch });
                 }}
             </button>
             <button
+                data-testid="board.shortcuts-help-button"
                 class="rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                :title="t('board.toolbar.shortcutsHelp')"
                 @click="emit('toggle-shortcut-help')"
             >
                 ?
@@ -238,27 +241,44 @@ defineExpose({ focusSearch });
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                <input
-                    :value="props.presetName"
-                    type="text"
-                    data-testid="board.preset-name-input"
-                    :placeholder="t('board.filter.presetName')"
-                    class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    @input="
-                        emit(
-                            'update:presetName',
-                            ($event.target as HTMLInputElement).value,
-                        )
-                    "
-                />
                 <button
-                    data-testid="board.preset-save-button"
+                    v-if="!props.showPresetEditor"
+                    data-testid="board.preset-open-editor-button"
                     class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
-                    :disabled="props.presetBusy"
-                    @click="emit('save-preset-from-editor')"
+                    @click="emit('open-preset-editor')"
                 >
-                    {{ t("board.preset.save") }}
+                    {{ t("board.preset.openEditor") }}
                 </button>
+                <template v-else>
+                    <input
+                        :value="props.presetName"
+                        type="text"
+                        data-testid="board.preset-name-input"
+                        :placeholder="t('board.filter.presetName')"
+                        class="rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        @input="
+                            emit(
+                                'update:presetName',
+                                ($event.target as HTMLInputElement).value,
+                            )
+                        "
+                    />
+                    <button
+                        data-testid="board.preset-save-button"
+                        class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                        :disabled="props.presetBusy"
+                        @click="emit('save-preset-from-editor')"
+                    >
+                        {{ t("board.preset.save") }}
+                    </button>
+                    <button
+                        data-testid="board.preset-cancel-button"
+                        class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
+                        @click="emit('cancel-preset-editor')"
+                    >
+                        {{ t("board.preset.cancel") }}
+                    </button>
+                </template>
                 <button
                     data-testid="board.preset-rename-button"
                     class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-50"

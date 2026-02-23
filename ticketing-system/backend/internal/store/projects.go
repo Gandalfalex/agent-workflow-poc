@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -14,12 +15,13 @@ import (
 var projectKeyPattern = regexp.MustCompile(`^[A-Z0-9]{4}$`)
 
 type Project struct {
-	ID          uuid.UUID
-	Key         string
-	Name        string
-	Description *string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                       uuid.UUID
+	Key                      string
+	Name                     string
+	Description              *string
+	DefaultSprintDurationDays *int
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
 }
 
 type ProjectCreateInput struct {
@@ -29,8 +31,9 @@ type ProjectCreateInput struct {
 }
 
 type ProjectUpdateInput struct {
-	Name        *string
-	Description *string
+	Name                      *string
+	Description               *string
+	DefaultSprintDurationDays *int
 }
 
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
@@ -81,12 +84,37 @@ func (s *Store) UpdateProject(ctx context.Context, id uuid.UUID, input ProjectUp
 		input.Name = &name
 	}
 
-	query := mustSQL("projects_update", nil)
-	var updatedID uuid.UUID
-	if err := s.db.QueryRow(ctx, query, id, input.Name, input.Description).Scan(&updatedID); err != nil {
+	updates := []string{"updated_at = now()"}
+	args := []any{}
+	arg := func(value any) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+
+	if input.Name != nil {
+		updates = append(updates, fmt.Sprintf("name = %s", arg(*input.Name)))
+	}
+	if input.Description != nil {
+		updates = append(updates, fmt.Sprintf("description = %s", arg(*input.Description)))
+	}
+	if input.DefaultSprintDurationDays != nil {
+		updates = append(updates, fmt.Sprintf("default_sprint_duration_days = %s", arg(*input.DefaultSprintDurationDays)))
+	}
+
+	if len(updates) == 1 {
+		return s.GetProject(ctx, id)
+	}
+
+	args = append(args, id)
+	query := mustSQL("projects_update", map[string]any{
+		"Updates": strings.Join(updates, ", "),
+		"IDArg":   len(args),
+	})
+
+	if _, err := s.db.Exec(ctx, query, args...); err != nil {
 		return Project{}, err
 	}
-	return s.GetProject(ctx, updatedID)
+	return s.GetProject(ctx, id)
 }
 
 func (s *Store) DeleteProject(ctx context.Context, id uuid.UUID) error {
@@ -119,6 +147,7 @@ func scanProject(row pgx.Row) (Project, error) {
 		&project.Key,
 		&project.Name,
 		&project.Description,
+		&project.DefaultSprintDurationDays,
 		&project.CreatedAt,
 		&project.UpdatedAt,
 	)

@@ -61,7 +61,7 @@ const bulkPriority = ref<TicketPriority>("medium");
 const bulkBusy = ref(false);
 const bulkMessage = ref("");
 const boardToolbarRef = ref<{ focusSearch: () => void } | null>(null);
-const showFilterPanel = ref(true);
+const showFilterPanel = ref(false);
 const showShortcutHelp = ref(false);
 const showPresetEditor = ref(false);
 const selectedTicket = ref<TicketResponse | null>(null);
@@ -75,6 +75,8 @@ const ticketEditor = ref({
     incidentSeverity: undefined as TicketIncidentSeverity | undefined,
     incidentImpact: "",
     incidentCommanderId: "",
+    storyPoints: null as number | null,
+    timeEstimate: null as number | null,
 });
 const incidentTimeline = ref<IncidentTimelineItem[]>([]);
 const incidentTimelineLoading = ref(false);
@@ -93,6 +95,7 @@ const newTicket = ref({
     storyId: "",
     assignee: "",
     stateId: "",
+    storyPoints: null as number | null,
 });
 const aiTriageEnabled = ref(false);
 const aiTriageLoading = ref(false);
@@ -108,6 +111,7 @@ const aiFieldSelection = ref({
 const newStory = ref({
     title: "",
     description: "",
+    storyPoints: null as number | null,
 });
 const storySaving = ref(false);
 
@@ -150,6 +154,9 @@ const persistedPresetKey = computed(
 
 const priorities: TicketPriority[] = ["low", "medium", "high", "urgent"];
 const ticketTypes: TicketType[] = ["feature", "bug"];
+const canQuickAssignToMe = computed(
+    () => canEditTickets.value && !!sessionStore.user?.id,
+);
 
 const defaultWorkflow = [
     { name: "Backlog", order: 1, isDefault: true, isClosed: false },
@@ -257,6 +264,7 @@ const storyRows = computed<StoryRow[]>(() => {
             id: story.id,
             title: story.title,
             description: story.description || undefined,
+            storyPoints: story.storyPoints,
             ticketsByState: createBuckets(),
         });
     });
@@ -407,6 +415,36 @@ const dependencyOptions = computed(() =>
         })),
 );
 
+const ticketSprints = computed(() => {
+    const tid = selectedTicket.value?.id;
+    if (!tid) return [];
+    return boardStore.sprints.filter((s) => s.ticketIds?.includes(tid));
+});
+
+const availableSprints = computed(() => {
+    const tid = selectedTicket.value?.id;
+    if (!tid) return boardStore.sprints;
+    return boardStore.sprints.filter((s) => !s.ticketIds?.includes(tid));
+});
+
+const addToSprintHandler = async (sprintId: string) => {
+    if (!selectedTicket.value || !props.projectId) return;
+    try {
+        await boardStore.addSprintTickets(props.projectId, sprintId, [selectedTicket.value.id]);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const removeFromSprintHandler = async (sprintId: string) => {
+    if (!selectedTicket.value || !props.projectId) return;
+    try {
+        await boardStore.removeSprintTickets(props.projectId, sprintId, [selectedTicket.value.id]);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
 const openTicket = async (ticket: TicketResponse) => {
     selectedTicket.value = ticket;
     ticketEditor.value = {
@@ -419,6 +457,8 @@ const openTicket = async (ticket: TicketResponse) => {
         incidentSeverity: ticket.incidentSeverity || undefined,
         incidentImpact: ticket.incidentImpact || "",
         incidentCommanderId: ticket.incidentCommanderId || "",
+        storyPoints: ticket.storyPoints ?? null,
+        timeEstimate: ticket.timeEstimate ?? null,
     };
     ticketError.value = "";
     dependencyError.value = "";
@@ -442,12 +482,18 @@ const openTicket = async (ticket: TicketResponse) => {
                 incidentTimeline.value = [];
             }
             await boardStore.loadTicketAttachments(props.projectId, ticket.id);
+            if (props.projectId) {
+                await boardStore.loadTicketTimeEntries(props.projectId, ticket.id);
+            }
             await boardStore.loadTicketDependencies(ticket.id);
             if (props.projectId) {
                 await boardStore.loadDependencyGraph(props.projectId, {
                     rootTicketId: ticket.id,
                     depth: 2,
                 });
+                if (boardStore.sprints.length === 0) {
+                    await boardStore.loadSprints(props.projectId);
+                }
             }
         } catch (err) {
             handleAuthError(err);
@@ -547,6 +593,8 @@ const saveTicket = async () => {
             ticketEditor.value.incidentCommanderId
                 ? ticketEditor.value.incidentCommanderId
                 : undefined,
+        storyPoints: ticketEditor.value.storyPoints,
+        timeEstimate: ticketEditor.value.timeEstimate,
     };
 
     try {
@@ -571,6 +619,7 @@ const createStorySubmit = async () => {
     const payload = {
         title: newStory.value.title.trim(),
         description: newStory.value.description.trim() || undefined,
+        storyPoints: newStory.value.storyPoints,
     };
 
     try {
@@ -578,7 +627,7 @@ const createStorySubmit = async () => {
         if (showNewTicket.value) {
             newTicket.value.storyId = created.id;
         }
-        newStory.value = { title: "", description: "" };
+        newStory.value = { title: "", description: "", storyPoints: null };
         showStoryModal.value = false;
     } catch (err) {
         handleAuthError(err);
@@ -635,6 +684,32 @@ const deleteAttachmentHandler = async (attachmentId: string) => {
     }
 };
 
+const createTimeEntryHandler = async (payload: { minutes: number; description?: string; loggedAt?: string }) => {
+    if (!selectedTicket.value || !props.projectId) return;
+    try {
+        await boardStore.createTicketTimeEntry(
+            props.projectId,
+            selectedTicket.value.id,
+            payload,
+        );
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const deleteTimeEntryHandler = async (timeEntryId: string) => {
+    if (!selectedTicket.value || !props.projectId) return;
+    try {
+        await boardStore.removeTicketTimeEntry(
+            props.projectId,
+            selectedTicket.value.id,
+            timeEntryId,
+        );
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
 const openNewTicket = async (stateId?: string, storyId?: string) => {
     const fallbackState = states.value[0]?.id || "";
     newTicket.value = {
@@ -645,6 +720,7 @@ const openNewTicket = async (stateId?: string, storyId?: string) => {
         storyId: storyId || "",
         assignee: "",
         stateId: stateId || fallbackState,
+        storyPoints: null,
     };
     aiTriageSuggestion.value = null;
     aiTriageError.value = "";
@@ -1132,6 +1208,8 @@ const createTicketSubmit = async () => {
             storyId: newTicket.value.storyId,
             stateId: newTicket.value.stateId,
             priority: newTicket.value.priority,
+            assigneeId: newTicket.value.assignee || undefined,
+            storyPoints: newTicket.value.storyPoints,
         });
         closeNewTicket();
     } catch (err) {
@@ -1204,6 +1282,51 @@ const onDropCard = async (
     const nextPosition = targetStateTickets.length + 1;
     await moveToState(moving.id, stateId, storyId, nextPosition);
     draggingId.value = null;
+};
+
+const cyclePriority = (priority: TicketPriority): TicketPriority => {
+    const idx = priorities.indexOf(priority);
+    if (idx === -1) return "medium";
+    const next = priorities[(idx + 1) % priorities.length];
+    return next || "medium";
+};
+
+const quickMoveToNextState = async (
+    ticket: TicketResponse,
+    nextStateId: string,
+) => {
+    if (!nextStateId || !canEditTickets.value) return;
+    try {
+        await boardStore.updateTicket(ticket.id, {
+            stateId: nextStateId,
+            storyId: ticket.storyId,
+        });
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const quickCycleTicketPriority = async (ticket: TicketResponse) => {
+    if (!canEditTickets.value) return;
+    try {
+        await boardStore.updateTicket(ticket.id, {
+            priority: cyclePriority(ticket.priority),
+        });
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const quickAssignTicketToCurrentUser = async (ticket: TicketResponse) => {
+    const currentUserID = sessionStore.user?.id;
+    if (!canEditTickets.value || !currentUserID) return;
+    try {
+        await boardStore.updateTicket(ticket.id, {
+            assigneeId: currentUserID,
+        });
+    } catch (err) {
+        handleAuthError(err);
+    }
 };
 
 const updateNewTicket = (value: typeof newTicket.value) => {
@@ -1358,6 +1481,7 @@ watch(
         :workflow-setup-busy="workflowSetupBusy"
         :workflow-setup-error="workflowSetupError"
         :can-edit-tickets="canEditTickets"
+        :can-quick-assign-to-me="canQuickAssignToMe"
         :bulk-select-mode="bulkSelectMode"
         :selected-ticket-ids="selectedTicketIds"
         :has-active-filter="hasActiveFilter"
@@ -1375,6 +1499,9 @@ watch(
         :on-drag-end="onDragEnd"
         :on-drop-column="onDropColumn"
         :on-drop-card="onDropCard"
+        :on-quick-move-next="quickMoveToNextState"
+        :on-quick-cycle-priority="quickCycleTicketPriority"
+        :on-quick-assign-to-me="quickAssignTicketToCurrentUser"
     />
     <BoardBulkActionBar
         v-if="canEditTickets && bulkSelectMode"
@@ -1459,6 +1586,11 @@ watch(
         :dependency-error="dependencyError"
         :incident-timeline="incidentTimeline"
         :incident-timeline-loading="incidentTimelineLoading"
+        :time-entries="boardStore.ticketTimeEntries"
+        :time-entries-total-minutes="boardStore.ticketTimeEntriesTotalMinutes"
+        :time-entries-loading="boardStore.ticketTimeEntriesLoading"
+        :ticket-sprints="ticketSprints"
+        :available-sprints="availableSprints"
         :assignee-options="assigneeOptions"
         :project-id="props.projectId"
         :ticket-id="selectedTicket?.id || ''"
@@ -1477,5 +1609,9 @@ watch(
         @open-dependency-ticket="openDependencyTicketFromGraph"
         @upload-attachment="uploadAttachmentHandler"
         @delete-attachment="deleteAttachmentHandler"
+        @create-time-entry="createTimeEntryHandler"
+        @delete-time-entry="deleteTimeEntryHandler"
+        @add-to-sprint="addToSprintHandler"
+        @remove-from-sprint="removeFromSprintHandler"
     />
 </template>

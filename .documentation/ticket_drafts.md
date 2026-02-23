@@ -1,6 +1,6 @@
 # Ticket Drafts (Roadmap Batch 2)
 
-Date: February 19, 2026
+Date: February 20, 2026
 Source: `.documentation/feature_roadmap.md`
 
 ## Previously Completed (Batch 1)
@@ -288,3 +288,99 @@ Source: `.documentation/feature_roadmap.md`
     - `board.filter_toggle_button`
     - `board.preset_open_editor_button`
   - Validation: frontend build and full E2E suite pass (`make -C ticketing-system e2e`).
+
+### TKT-023: Webhook Payload Versioning (`v1` envelope + idempotency key) — **DONE**
+- Priority: `P2`
+- Status: **Completed** (February 20, 2026)
+- Scope:
+  - Introduce stable `v1` outbound webhook envelope with schema versioning.
+  - Include explicit event timestamp and idempotency key per delivered webhook payload.
+  - Document payload schema variants per event type for integrator contracts.
+- What shipped:
+  - Dispatcher envelope upgraded to:
+    - `version`
+    - `event`
+    - `eventTimestamp`
+    - `idempotencyKey`
+    - `data`
+  - Delivery headers now include:
+    - `X-Ticketing-Webhook-Version`
+    - `X-Ticketing-Idempotency-Key`
+  - `openapi.yaml` now documents `WebhookPayloadV1` and event-specific data shapes:
+    - `WebhookTicketCreatedData`
+    - `WebhookTicketUpdatedData`
+    - `WebhookTicketDeletedData`
+    - `WebhookTicketStateChangedData`
+  - Regenerated backend/frontend OpenAPI types.
+  - Added/updated webhook dispatcher unit tests for envelope serialization and delivery headers.
+- Validation:
+  - `go test ./internal/webhook`
+  - `go test -tags=e2e -count=1 -run 'TestWebhookFiresOnTicketCreation|TestWebhookFiresOnTicketStateChange' ./e2e -v`
+  - `npm run -s build` (frontend)
+
+### TKT-024: User Onboarding Sync Flow (Identity Provider -> App Users) — **DONE**
+- Priority: `P1`
+- Status: **Completed** (February 20, 2026)
+- Scope:
+  - Provide an easy, admin-accessible way to introduce newly created identity-provider users into the app's searchable user directory.
+  - Ensure sync operation is properly admin-gated.
+- What shipped:
+  - Backend:
+    - `POST /admin/sync-users` now enforces `requireAdmin()`.
+    - New OpenAPI-backed endpoint `POST /admin/users` to create identity-provider users and upsert local app directory in one step.
+    - Added handler tests for admin success and non-admin forbidden behavior.
+  - Frontend:
+    - Settings > Groups > Add members now includes a one-click `Sync users` button.
+    - Sync action calls `/admin/sync-users` and shows `synced/total` feedback.
+    - New Settings > Users tab with admin user creation form (username, email, optional first/last name, password).
+    - User creation wired to `/admin/users` with success feedback and ready-for-group-assignment workflow.
+    - Added selector: `settings.sync-users-button`.
+- Validation:
+  - `go test ./internal/httpapi`
+  - `go test ./internal/auth`
+  - `npm run -s build` (frontend)
+
+### TKT-025: Sprint Lifecycle Management (Start, Complete, Ticket Rollover)
+- Priority: `P1`
+- Status: **Open**
+- Source: Sprint management UX review (February 23, 2026)
+- Context: Sprints exist (TKT-018) but are static — create-only with no lifecycle. Users need to start sprints, complete them, and roll incomplete tickets to the next sprint. This is critical for iterative planning workflows.
+- Scope:
+  - **Sprint status lifecycle**: `planned` → `active` → `completed` (explicit transitions, one active sprint per project).
+  - **DB migration** (`020_sprint_status.sql`): Add `status` column (enum: planned/active/completed, default planned) and `completed_at` (nullable timestamptz) to `sprints` table.
+  - **API endpoints**:
+    - `POST /projects/{pid}/sprints/{sid}/start` — activates a planned sprint (fails if another is already active).
+    - `POST /projects/{pid}/sprints/{sid}/complete` — completes the active sprint, accepts optional `moveTicketIds: uuid[]` to roll selected tickets into the next planned sprint.
+  - **OpenAPI schema changes**: Add `status` (enum) and `completedAt` to Sprint; new `SprintStartRequest` and `SprintCompleteRequest` schemas.
+  - **Store methods**: `StartSprint`, `CompleteSprint`, `GetActiveSprint`, `GetNextPlannedSprint`. CompleteSprint sets status=completed + completed_at=now(), then moves specified tickets to next planned sprint via existing `sprint_tickets` junction.
+  - **SQL templates**: `sprints_update_status`, `sprints_active_for_project`, `sprints_next_planned`. Update `sprints_list` and `sprints_get` to include status + completed_at columns.
+  - **Handler layer**: StartSprint and CompleteSprint handlers (contributor+ role). Update mapSprint to include new fields. Add fakeStore stubs.
+  - **Board Sprint Sidebar** (new `SprintSidebar.vue`): Collapsible side panel on the board showing:
+    - Active sprint: name, date range, progress bar (done/total tickets), "Complete Sprint" button.
+    - Planned sprints: list with name, dates, ticket count, "Start" button (disabled if active sprint exists).
+    - Completed sprints (collapsed by default): name, dates, completed_at.
+  - **Complete Sprint dialog**: Modal/inline with checkboxes listing all incomplete tickets in the active sprint (pre-checked). Shows next planned sprint name as rollover target. User unchecks tickets they don't want moved. Confirm/Cancel.
+  - **Frontend wiring**: Load sprints on board mount. Computed getters for activeSprint, plannedSprints, completedSprints. Toggle sidebar via toolbar button. Wire start/complete handlers.
+  - **i18n**: ~15 keys (en + de) for sprint sidebar, lifecycle actions, and complete dialog.
+  - **E2E contract selectors**: `board.sprint_sidebar`, `board.sprint_sidebar_toggle`, `sprint.active_section`, `sprint.planned_section`, `sprint.completed_section`, `sprint.start_button`, `sprint.complete_button`, `sprint.complete_dialog`, `sprint.complete_ticket_checkbox`, `sprint.complete_confirm_button`, `sprint.complete_cancel_button`, `sprint.select_all_button`, `sprint.deselect_all_button`.
+- Acceptance criteria:
+  - Only one sprint can be active per project at a time.
+  - Starting a sprint when another is active returns an error.
+  - Completing a sprint shows a dialog with all incomplete tickets (not in closed workflow states), pre-checked.
+  - Selected tickets are moved to the next planned sprint (by start_date ASC). If no next sprint exists, tickets stay unassigned.
+  - Sprint sidebar is togglable on the board and shows accurate state for all sprint statuses.
+  - Existing sprint forecast (TKT-018) continues to work with status-aware sprints.
+- Key files:
+  - `migrations/020_sprint_status.sql`
+  - `openapi.yaml`
+  - `store/sql/12_sprint_planner.go.templ`
+  - `store/sprint_planner.go`
+  - `handlers.go`, `types.go`, `handlers_sprint_planner.go`, `handlers_test.go`, `map.go`
+  - `api.ts`, `board.ts`, `SprintSidebar.vue` (new), `BoardPage.vue`, `i18n.ts`
+  - `frontend_contract.source.json`
+- Validation:
+  - `make generate` — no errors
+  - `go build ./...` — compiles
+  - `npx tsc --noEmit` — types check
+  - `make e2e-frontend-build` — frontend builds
+  - Manual: create sprint → start it → add tickets → complete with rollover → verify next sprint received moved tickets

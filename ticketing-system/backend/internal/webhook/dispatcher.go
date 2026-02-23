@@ -27,9 +27,11 @@ type Dispatcher struct {
 }
 
 type Envelope struct {
-	Event  string    `json:"event"`
-	SentAt time.Time `json:"sentAt"`
-	Data   any       `json:"data"`
+	Version        string    `json:"version"`
+	Event          string    `json:"event"`
+	EventTimestamp time.Time `json:"eventTimestamp"`
+	IdempotencyKey string    `json:"idempotencyKey"`
+	Data           any       `json:"data"`
 }
 
 type Result struct {
@@ -56,9 +58,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, projectID uuid.UUID, event st
 		return
 	}
 
-	envelope := Envelope{Event: event, SentAt: time.Now().UTC(), Data: data}
 	for _, hook := range webhooks {
 		hook := hook
+		envelope := newEnvelope(event, data)
 		go d.deliverWithRetry(hook, envelope)
 	}
 }
@@ -105,11 +107,7 @@ func (d *Dispatcher) deliverWithRetry(hook store.Webhook, envelope Envelope) {
 }
 
 func (d *Dispatcher) Test(ctx context.Context, hook store.Webhook, event string, data any) (Result, error) {
-	envelope := Envelope{
-		Event:  event,
-		SentAt: time.Now().UTC(),
-		Data:   data,
-	}
+	envelope := newEnvelope(event, data)
 	return d.deliver(ctx, hook, envelope)
 }
 
@@ -129,6 +127,8 @@ func (d *Dispatcher) deliver(ctx context.Context, hook store.Webhook, envelope E
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Ticketing-Event", envelope.Event)
+	req.Header.Set("X-Ticketing-Webhook-Version", envelope.Version)
+	req.Header.Set("X-Ticketing-Idempotency-Key", envelope.IdempotencyKey)
 
 	resp, err := d.client.Do(req)
 	if err != nil {
@@ -144,6 +144,16 @@ func (d *Dispatcher) deliver(ctx context.Context, hook store.Webhook, envelope E
 		ResponseBody: string(respBody),
 		Error:        nil,
 	}, nil
+}
+
+func newEnvelope(event string, data any) Envelope {
+	return Envelope{
+		Version:        "v1",
+		Event:          event,
+		EventTimestamp: time.Now().UTC(),
+		IdempotencyKey: uuid.NewString(),
+		Data:           data,
+	}
 }
 
 func sign(secret string, payload []byte) string {

@@ -3,9 +3,14 @@ n.id, n.project_id, n.user_id, n.ticket_id, t.key, t.title, n.type, n.message, n
 {{end}}
 
 {{define "notifications_insert.sql"}}
-INSERT INTO notifications (project_id, user_id, ticket_id, type, message)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id
+WITH inserted AS (
+  INSERT INTO notifications (project_id, user_id, ticket_id, type, message)
+  VALUES ($1, $2, $3, $4, $5)
+  RETURNING id, project_id, user_id, ticket_id, type, message, read_at, created_at
+)
+SELECT inserted.id, inserted.project_id, inserted.user_id, inserted.ticket_id, t.key, t.title, inserted.type, inserted.message, inserted.read_at, inserted.created_at
+FROM inserted
+JOIN tickets t ON t.id = inserted.ticket_id
 {{end}}
 
 {{define "notifications_list.sql"}}

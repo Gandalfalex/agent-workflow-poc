@@ -1,7 +1,10 @@
 {{define "ticket_select_fields"}}
-t.id, t.project_id, p.key, t.key, t.number, t.type, t.story_id, s2.title, s2.description, s2.created_at, s2.updated_at,
+t.id, t.project_id, p.key, t.key, t.number, t.type, t.story_id, s2.title, s2.description, s2.story_points, s2.created_at, s2.updated_at,
 t.title, t.description, t.state_id, t.assignee_id,
-t.priority, t.incident_enabled, t.incident_severity, t.incident_impact, t.incident_commander_id, t.position, t.created_at, t.updated_at,
+t.priority, t.incident_enabled, t.incident_severity, t.incident_impact, t.incident_commander_id, t.position,
+t.story_points, t.time_estimate,
+COALESCE((SELECT SUM(te.minutes) FROM time_entries te WHERE te.ticket_id = t.id), 0)::int AS time_logged,
+t.created_at, t.updated_at,
 s.name, s.sort_order, s.is_default, s.is_closed,
 COALESCE(blockers.blocked_by_count, 0) AS blocked_by_count,
 (COALESCE(blockers.blocked_by_count, 0) > 0) AS is_blocked,
@@ -56,9 +59,10 @@ WHERE t.id = $1
 {{define "tickets_insert.sql"}}
 INSERT INTO tickets (
   project_id, title, description, type, story_id, state_id, assignee_id, priority,
-  incident_enabled, incident_severity, incident_impact, incident_commander_id, position
+  incident_enabled, incident_severity, incident_impact, incident_commander_id, position,
+  story_points, time_estimate
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING id
 {{end}}
 

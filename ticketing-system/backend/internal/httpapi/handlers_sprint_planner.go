@@ -112,6 +112,56 @@ func (h *API) ReplaceProjectCapacitySettings(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, capacitySettingsResponse{Items: mapSlice(items, mapCapacitySetting)})
 }
 
+func (h *API) AddSprintTickets(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+	if !h.requireProjectRole(w, r, projectUUID, roleContributor) {
+		return
+	}
+
+	req, ok := decodeJSON[sprintTicketsRequest](w, r, "sprint_tickets_add")
+	if !ok {
+		return
+	}
+	ticketIDs := make([]uuid.UUID, 0, len(req.TicketIds))
+	for _, id := range req.TicketIds {
+		ticketIDs = append(ticketIDs, uuid.UUID(id))
+	}
+
+	sprint, err := h.store.AddSprintTickets(r.Context(), projectUUID, uuid.UUID(sprintId), ticketIDs)
+	if handleDBErrorWithCode(w, r, err, "sprint tickets", "sprint_tickets_add", "sprint_tickets_add_failed") {
+		return
+	}
+	writeJSON(w, http.StatusOK, mapSprint(sprint))
+}
+
+func (h *API) RemoveSprintTickets(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+	if !h.requireProjectRole(w, r, projectUUID, roleContributor) {
+		return
+	}
+
+	req, ok := decodeJSON[sprintTicketsRequest](w, r, "sprint_tickets_remove")
+	if !ok {
+		return
+	}
+	ticketIDs := make([]uuid.UUID, 0, len(req.TicketIds))
+	for _, id := range req.TicketIds {
+		ticketIDs = append(ticketIDs, uuid.UUID(id))
+	}
+
+	sprint, err := h.store.RemoveSprintTickets(r.Context(), projectUUID, uuid.UUID(sprintId), ticketIDs)
+	if handleDBErrorWithCode(w, r, err, "sprint tickets", "sprint_tickets_remove", "sprint_tickets_remove_failed") {
+		return
+	}
+	writeJSON(w, http.StatusOK, mapSprint(sprint))
+}
+
 func (h *API) GetProjectSprintForecast(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectSprintForecastParams) {
 	projectUUID := uuid.UUID(projectId)
 	if !h.requireProjectAccess(w, r, projectUUID) {

@@ -53,6 +53,16 @@ func TestInboxNotificationsMentionsAssignmentsAndPreferences(t *testing.T) {
 			}
 			return apiAddComment(s.Harness(), ticket.ID.String(), "@NormalUser please review this")
 		}).
+		Then("viewer has unread notifications after assignment and mention", func(s *Scenario) error {
+			count, err := st.CountUnreadNotifications(ctx, projectID, viewerID)
+			if err != nil {
+				return fmt.Errorf("count viewer unread notifications: %w", err)
+			}
+			if count < 2 {
+				return fmt.Errorf("expected at least 2 unread notifications, got %d", count)
+			}
+			return nil
+		}).
 		WhenIClickLogout().
 		WhenILogInAs("NormalUser", "viewer123").
 		WhenISelectProjectByID(seed.ProjectID).

@@ -40,6 +40,7 @@ func (h *API) CreateStory(w http.ResponseWriter, r *http.Request, projectId open
 	story, err := h.store.CreateStory(r.Context(), projectID, store.StoryCreateInput{
 		Title:       req.Title,
 		Description: req.Description,
+		StoryPoints: req.StoryPoints,
 	})
 	if handleDBErrorWithCode(w, r, err, "story", "story_create", "story_create_failed") {
 		return
@@ -90,6 +91,7 @@ func (h *API) UpdateStory(w http.ResponseWriter, r *http.Request, id openapi_typ
 	story, err := h.store.UpdateStory(r.Context(), storyID, store.StoryUpdateInput{
 		Title:       req.Title,
 		Description: req.Description,
+		StoryPoints: req.StoryPoints,
 	})
 	if handleDBErrorWithCode(w, r, err, "story", "story_update", "story_update_failed") {
 		return
@@ -181,6 +183,7 @@ func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openap
 		return
 	}
 
+	h.notifyAssigneeComment(r, ticket, authorID, user.Name)
 	h.notifyMentions(r, ticket.ProjectID, ticket, authorID, user.Name, req.Message)
 
 	writeJSON(w, http.StatusCreated, mapComment(comment))

@@ -247,3 +247,64 @@ func (h *API) notifyAssignment(r *http.Request, before, after store.Ticket, acto
 	}
 	h.publishUserNotificationEvents(r.Context(), after.ProjectID, *after.AssigneeID)
 }
+
+func (h *API) notifyAssigneeTicketUpdate(r *http.Request, before, after store.Ticket, actorID uuid.UUID, actorName string) {
+	if after.AssigneeID == nil || *after.AssigneeID == actorID {
+		return
+	}
+	if before.AssigneeID != nil && *before.AssigneeID != *after.AssigneeID {
+		// Assignment changes are handled by notifyAssignment to avoid duplicates.
+		return
+	}
+	changes := make([]string, 0, 3)
+	if before.StateID != after.StateID {
+		changes = append(changes, "state")
+	}
+	if before.Type != after.Type {
+		changes = append(changes, "type")
+	}
+	if before.Priority != after.Priority {
+		changes = append(changes, "priority")
+	}
+	if len(changes) == 0 {
+		return
+	}
+	prefs, err := h.store.GetNotificationPreferences(r.Context(), *after.AssigneeID)
+	if err != nil || !prefs.AssignmentEnabled {
+		return
+	}
+	_, err = h.store.CreateNotification(r.Context(), store.NotificationCreateInput{
+		ProjectID: after.ProjectID,
+		UserID:    *after.AssigneeID,
+		TicketID:  after.ID,
+		Type:      "assignment",
+		Message:   fmt.Sprintf("%s updated %s (%s)", actorName, after.Key, strings.Join(changes, ", ")),
+	})
+	if err != nil {
+		logRequestError(r, "notification_update_create_failed", err)
+		return
+	}
+	h.publishUserNotificationEvents(r.Context(), after.ProjectID, *after.AssigneeID)
+}
+
+func (h *API) notifyAssigneeComment(r *http.Request, ticket store.Ticket, actorID uuid.UUID, actorName string) {
+	if ticket.AssigneeID == nil || *ticket.AssigneeID == actorID {
+		return
+	}
+	prefs, err := h.store.GetNotificationPreferences(r.Context(), *ticket.AssigneeID)
+	if err != nil || !prefs.AssignmentEnabled {
+		return
+	}
+	_, err = h.store.CreateNotification(r.Context(), store.NotificationCreateInput{
+		ProjectID: ticket.ProjectID,
+		UserID:    *ticket.AssigneeID,
+		TicketID:  ticket.ID,
+		Type:      "assignment",
+		Message:   fmt.Sprintf("%s commented on %s", actorName, ticket.Key),
+	})
+	if err != nil {
+		logRequestError(r, "notification_comment_create_failed", err)
+		return
+	}
+	h.publishUserNotificationEvents(r.Context(), ticket.ProjectID, *ticket.AssigneeID)
+}

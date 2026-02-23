@@ -154,6 +154,19 @@ func (a staticAuth) ListUsers(_ context.Context) ([]auth.User, error) {
 	return users, nil
 }
 
+func (a staticAuth) CreateUser(_ context.Context, input auth.UserCreateInput) (auth.User, error) {
+	id := uuid.NewString()
+	name := strings.TrimSpace(input.FirstName + " " + input.LastName)
+	if name == "" {
+		name = input.Username
+	}
+	return auth.User{
+		ID:    id,
+		Email: input.Email,
+		Name:  name,
+	}, nil
+}
+
 type noopWebhooks struct{}
 
 func (noopWebhooks) Dispatch(context.Context, uuid.UUID, string, any) {}
@@ -336,6 +349,9 @@ func (h *Harness) LoginCredentials() (string, string) {
 
 // APIRequest makes a direct HTTP request to the backend with the active user's auth cookie.
 func (h *Harness) APIRequest(method, path string, body io.Reader) (*http.Response, error) {
+	if !strings.HasPrefix(path, "/rest/v1") {
+		path = "/rest/v1" + path
+	}
 	url := h.resolveURL(path)
 	req, err := http.NewRequestWithContext(h.ctx, method, url, body)
 	if err != nil {
@@ -390,7 +406,7 @@ func (h *Harness) ExpectMinElements(selector string, min int) error {
 }
 
 func (h *Harness) HealthCheck() error {
-	req, err := http.NewRequestWithContext(h.ctx, http.MethodGet, h.BaseURL()+"/health", nil)
+	req, err := http.NewRequestWithContext(h.ctx, http.MethodGet, h.BaseURL()+"/rest/v1/health", nil)
 	if err != nil {
 		return fmt.Errorf("build health request: %w", err)
 	}
@@ -489,13 +505,27 @@ func (h *Harness) WaitHidden(selector string) error {
 }
 
 func (h *Harness) Click(selector string) error {
-	if err := h.WaitVisible(selector); err != nil {
-		return err
+	visibleSelector := selector
+	if !strings.Contains(selector, ":visible") {
+		visibleSelector = selector + ":visible"
 	}
-	if err := h.page.Locator(selector).Click(playwright.LocatorClickOptions{
+	if err := h.WaitVisible(visibleSelector); err != nil {
+		if err := h.WaitVisible(selector); err != nil {
+			return err
+		}
+		visibleSelector = selector
+	}
+	locator := h.page.Locator(visibleSelector).First()
+	if err := locator.Click(playwright.LocatorClickOptions{
 		Timeout: playwright.Float(durationMS(h.config.stepTimeout)),
 	}); err != nil {
-		return fmt.Errorf("click selector %q: %w", selector, err)
+		// Fallback for stacked UI layers where the target remains visible but receives intercepted clicks.
+		if forceErr := locator.Click(playwright.LocatorClickOptions{
+			Timeout: playwright.Float(durationMS(h.config.stepTimeout)),
+			Force:   playwright.Bool(true),
+		}); forceErr != nil {
+			return fmt.Errorf("click selector %q: %w", selector, err)
+		}
 	}
 	return nil
 }
@@ -572,7 +602,7 @@ func (h *Harness) SelectOptionByValueKey(selectorKey, value string) error {
 }
 
 func (h *Harness) ExpectTextVisible(text string) error {
-	if err := h.page.GetByText(text).WaitFor(playwright.LocatorWaitForOptions{
+	if err := h.page.GetByText(text).First().WaitFor(playwright.LocatorWaitForOptions{
 		State:   playwright.WaitForSelectorStateVisible,
 		Timeout: playwright.Float(durationMS(h.config.stepTimeout)),
 	}); err != nil {

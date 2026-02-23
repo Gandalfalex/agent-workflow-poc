@@ -50,8 +50,10 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
 		ThenURLContains("/projects/"+seed.ProjectID+"/board").
+		WhenIClickKey("board.filter_toggle_button").
 		WhenISelectOptionByValueKey("board.filter_priority_select", "high").
 		WhenIFillKey("board.filter_search_input", searchQuery).
+		WhenIClickKey("board.preset_open_editor_button").
 		WhenIFillKey("board.preset_name_input", presetName).
 		WhenIClickKey("board.preset_save_button").
 		Then("preset saved via API", func(s *Scenario) error {
@@ -103,6 +105,7 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 			}
 			return nil
 		}).
+		WhenIClickKey("board.preset_open_editor_button").
 		WhenIFillKey("board.preset_name_input", renamedPreset).
 		WhenIClickKey("board.preset_rename_button").
 		Then("preset rename persists via API", func(s *Scenario) error {

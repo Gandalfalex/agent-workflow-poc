@@ -150,9 +150,8 @@ func TestCreateTicketModalClosesOnCancel(t *testing.T) {
 		WhenIClickRefresh().
 		WhenIClickKey("board.add_ticket_button").
 		ThenISeeSelectorKey("new_ticket.modal").
-		// Click the Close button in the modal
-		When("I click the Close button in new ticket modal", func(s *Scenario) error {
-			return s.Harness().Click("button:has-text('Close')")
+		When("I click Cancel in new ticket modal", func(s *Scenario) error {
+			return s.Harness().Click("[data-testid=\"new-ticket.cancel-button\"]")
 		}).
 		ThenIDoNotSeeSelectorKey("new_ticket.modal")
 }

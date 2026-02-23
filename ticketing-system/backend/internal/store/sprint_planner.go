@@ -128,6 +128,72 @@ func (s *Store) CreateSprint(ctx context.Context, projectID uuid.UUID, input Spr
 	return Sprint{}, pgx.ErrNoRows
 }
 
+func (s *Store) GetSprint(ctx context.Context, projectID, sprintID uuid.UUID) (Sprint, error) {
+	sprint, err := queryOne(ctx, s.db, mustSQL("sprints_get", nil), scanSprintRow, sprintID, projectID)
+	if err != nil {
+		return Sprint{}, err
+	}
+	ticketIDs, err := queryMany(ctx, s.db, mustSQL("sprint_tickets_list", nil), scanSprintTicketID, sprintID)
+	if err != nil {
+		return Sprint{}, err
+	}
+	sprint.TicketIDs = ticketIDs
+	return sprint, nil
+}
+
+func (s *Store) AddSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (Sprint, error) {
+	_, err := withTx(ctx, s.db, func(tx pgx.Tx) (struct{}, error) {
+		// Verify sprint belongs to project
+		var exists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM sprints WHERE id = $1 AND project_id = $2)", sprintID, projectID).Scan(&exists); err != nil {
+			return struct{}{}, err
+		}
+		if !exists {
+			return struct{}{}, fmt.Errorf("sprint %s not in project", sprintID)
+		}
+		for _, ticketID := range ticketIDs {
+			var ticketExists bool
+			if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tickets WHERE id = $1 AND project_id = $2)", ticketID, projectID).Scan(&ticketExists); err != nil {
+				return struct{}{}, err
+			}
+			if !ticketExists {
+				return struct{}{}, fmt.Errorf("ticket %s not in project", ticketID)
+			}
+			if _, err := tx.Exec(ctx, mustSQL("sprint_tickets_insert", nil), sprintID, ticketID); err != nil {
+				return struct{}{}, err
+			}
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return Sprint{}, err
+	}
+	return s.GetSprint(ctx, projectID, sprintID)
+}
+
+func (s *Store) RemoveSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (Sprint, error) {
+	_, err := withTx(ctx, s.db, func(tx pgx.Tx) (struct{}, error) {
+		// Verify sprint belongs to project
+		var exists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM sprints WHERE id = $1 AND project_id = $2)", sprintID, projectID).Scan(&exists); err != nil {
+			return struct{}{}, err
+		}
+		if !exists {
+			return struct{}{}, fmt.Errorf("sprint %s not in project", sprintID)
+		}
+		for _, ticketID := range ticketIDs {
+			if _, err := tx.Exec(ctx, mustSQL("sprint_tickets_delete", nil), sprintID, ticketID); err != nil {
+				return struct{}{}, err
+			}
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return Sprint{}, err
+	}
+	return s.GetSprint(ctx, projectID, sprintID)
+}
+
 func (s *Store) ListCapacitySettings(ctx context.Context, projectID uuid.UUID) ([]CapacitySetting, error) {
 	return queryMany(ctx, s.db, mustSQL("capacity_settings_list", nil), scanCapacitySetting, projectID)
 }

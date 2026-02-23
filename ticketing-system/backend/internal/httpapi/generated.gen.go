@@ -112,6 +112,15 @@ const (
 	Json ExportProjectReportingSnapshotParamsFormat = "json"
 )
 
+// AdminUserCreateRequest defines model for AdminUserCreateRequest.
+type AdminUserCreateRequest struct {
+	Email     openapi_types.Email `json:"email"`
+	FirstName *string             `json:"firstName,omitempty"`
+	LastName  *string             `json:"lastName,omitempty"`
+	Password  string              `json:"password"`
+	Username  string              `json:"username"`
+}
+
 // AiTriageConfidence defines model for AiTriageConfidence.
 type AiTriageConfidence struct {
 	Assignee float32 `json:"assignee"`
@@ -445,9 +454,10 @@ type NotificationUnreadCountResponse struct {
 
 // Project defines model for Project.
 type Project struct {
-	CreatedAt   time.Time          `json:"createdAt"`
-	Description *string            `json:"description,omitempty"`
-	Id          openapi_types.UUID `json:"id"`
+	CreatedAt                 time.Time          `json:"createdAt"`
+	DefaultSprintDurationDays *int               `json:"defaultSprintDurationDays"`
+	Description               *string            `json:"description,omitempty"`
+	Id                        openapi_types.UUID `json:"id"`
 
 	// Key 4-character uppercase alphanumeric project key.
 	Key       ProjectKey `json:"key"`
@@ -550,8 +560,9 @@ type ProjectStats struct {
 
 // ProjectUpdateRequest defines model for ProjectUpdateRequest.
 type ProjectUpdateRequest struct {
-	Description *string `json:"description,omitempty"`
-	Name        *string `json:"name,omitempty"`
+	DefaultSprintDurationDays *int    `json:"defaultSprintDurationDays"`
+	Description               *string `json:"description,omitempty"`
+	Name                      *string `json:"name,omitempty"`
 }
 
 // Sprint defines model for Sprint.
@@ -593,6 +604,11 @@ type SprintListResponse struct {
 	Items []Sprint `json:"items"`
 }
 
+// SprintTicketsRequest defines model for SprintTicketsRequest.
+type SprintTicketsRequest struct {
+	TicketIds []openapi_types.UUID `json:"ticketIds"`
+}
+
 // StatCount defines model for StatCount.
 type StatCount struct {
 	Label string `json:"label"`
@@ -611,6 +627,7 @@ type Story struct {
 	Description *string            `json:"description,omitempty"`
 	Id          openapi_types.UUID `json:"id"`
 	ProjectId   openapi_types.UUID `json:"projectId"`
+	StoryPoints *int               `json:"storyPoints"`
 	Title       string             `json:"title"`
 	UpdatedAt   time.Time          `json:"updatedAt"`
 }
@@ -618,6 +635,7 @@ type Story struct {
 // StoryCreateRequest defines model for StoryCreateRequest.
 type StoryCreateRequest struct {
 	Description *string `json:"description,omitempty"`
+	StoryPoints *int    `json:"storyPoints"`
 	Title       string  `json:"title"`
 }
 
@@ -629,6 +647,7 @@ type StoryListResponse struct {
 // StoryUpdateRequest defines model for StoryUpdateRequest.
 type StoryUpdateRequest struct {
 	Description *string `json:"description,omitempty"`
+	StoryPoints *int    `json:"storyPoints"`
 	Title       *string `json:"title,omitempty"`
 }
 
@@ -664,14 +683,21 @@ type Ticket struct {
 	ProjectId openapi_types.UUID `json:"projectId"`
 
 	// ProjectKey 4-character uppercase alphanumeric project key.
-	ProjectKey ProjectKey         `json:"projectKey"`
-	State      *WorkflowState     `json:"state,omitempty"`
-	StateId    openapi_types.UUID `json:"stateId"`
-	Story      *Story             `json:"story,omitempty"`
-	StoryId    openapi_types.UUID `json:"storyId"`
-	Title      string             `json:"title"`
-	Type       TicketType         `json:"type"`
-	UpdatedAt  time.Time          `json:"updatedAt"`
+	ProjectKey  ProjectKey         `json:"projectKey"`
+	State       *WorkflowState     `json:"state,omitempty"`
+	StateId     openapi_types.UUID `json:"stateId"`
+	Story       *Story             `json:"story,omitempty"`
+	StoryId     openapi_types.UUID `json:"storyId"`
+	StoryPoints *int               `json:"storyPoints"`
+
+	// TimeEstimate Estimated effort in minutes
+	TimeEstimate *int `json:"timeEstimate"`
+
+	// TimeLogged Total logged time in minutes (computed)
+	TimeLogged *int       `json:"timeLogged,omitempty"`
+	Title      string     `json:"title"`
+	Type       TicketType `json:"type"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
 }
 
 // TicketActivity defines model for TicketActivity.
@@ -724,6 +750,8 @@ type TicketCreateRequest struct {
 	Priority            *TicketPriority         `json:"priority,omitempty"`
 	StateId             *openapi_types.UUID     `json:"stateId,omitempty"`
 	StoryId             openapi_types.UUID      `json:"storyId"`
+	StoryPoints         *int                    `json:"storyPoints"`
+	TimeEstimate        *int                    `json:"timeEstimate"`
 	Title               string                  `json:"title"`
 	Type                *TicketType             `json:"type,omitempty"`
 }
@@ -800,8 +828,35 @@ type TicketUpdateRequest struct {
 	Priority            *TicketPriority         `json:"priority,omitempty"`
 	StateId             *openapi_types.UUID     `json:"stateId,omitempty"`
 	StoryId             *openapi_types.UUID     `json:"storyId,omitempty"`
+	StoryPoints         *int                    `json:"storyPoints"`
+	TimeEstimate        *int                    `json:"timeEstimate"`
 	Title               *string                 `json:"title,omitempty"`
 	Type                *TicketType             `json:"type,omitempty"`
+}
+
+// TimeEntry defines model for TimeEntry.
+type TimeEntry struct {
+	CreatedAt   time.Time          `json:"createdAt"`
+	Description *string            `json:"description,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+	LoggedAt    openapi_types.Date `json:"loggedAt"`
+	Minutes     int                `json:"minutes"`
+	TicketId    openapi_types.UUID `json:"ticketId"`
+	UserId      openapi_types.UUID `json:"userId"`
+	UserName    string             `json:"userName"`
+}
+
+// TimeEntryCreateRequest defines model for TimeEntryCreateRequest.
+type TimeEntryCreateRequest struct {
+	Description *string             `json:"description,omitempty"`
+	LoggedAt    *openapi_types.Date `json:"loggedAt,omitempty"`
+	Minutes     int                 `json:"minutes"`
+}
+
+// TimeEntryListResponse defines model for TimeEntryListResponse.
+type TimeEntryListResponse struct {
+	Items        []TimeEntry `json:"items"`
+	TotalMinutes int         `json:"totalMinutes"`
 }
 
 // User defines model for User.
@@ -824,7 +879,8 @@ type UserSummary struct {
 	Name  string               `json:"name"`
 }
 
-// Webhook defines model for Webhook.
+// Webhook Webhook subscription configuration.
+// Outbound webhook POST bodies use `WebhookPayloadV1`.
 type Webhook struct {
 	CreatedAt time.Time          `json:"createdAt"`
 	Enabled   bool               `json:"enabled"`
@@ -982,6 +1038,9 @@ type ListUsersParams struct {
 	Q *string `form:"q,omitempty" json:"q,omitempty"`
 }
 
+// CreateAdminUserJSONRequestBody defines body for CreateAdminUser for application/json ContentType.
+type CreateAdminUserJSONRequestBody = AdminUserCreateRequest
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = AuthLoginRequest
 
@@ -1030,6 +1089,12 @@ type UpdateNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdat
 // CreateProjectSprintJSONRequestBody defines body for CreateProjectSprint for application/json ContentType.
 type CreateProjectSprintJSONRequestBody = SprintCreateRequest
 
+// RemoveSprintTicketsJSONRequestBody defines body for RemoveSprintTickets for application/json ContentType.
+type RemoveSprintTicketsJSONRequestBody = SprintTicketsRequest
+
+// AddSprintTicketsJSONRequestBody defines body for AddSprintTickets for application/json ContentType.
+type AddSprintTicketsJSONRequestBody = SprintTicketsRequest
+
 // CreateStoryJSONRequestBody defines body for CreateStory for application/json ContentType.
 type CreateStoryJSONRequestBody = StoryCreateRequest
 
@@ -1041,6 +1106,9 @@ type BulkTicketOperationJSONRequestBody = BulkTicketOperationRequest
 
 // UploadTicketAttachmentMultipartRequestBody defines body for UploadTicketAttachment for multipart/form-data ContentType.
 type UploadTicketAttachmentMultipartRequestBody UploadTicketAttachmentMultipartBody
+
+// CreateTicketTimeEntryJSONRequestBody defines body for CreateTicketTimeEntry for application/json ContentType.
+type CreateTicketTimeEntryJSONRequestBody = TimeEntryCreateRequest
 
 // CreateWebhookJSONRequestBody defines body for CreateWebhook for application/json ContentType.
 type CreateWebhookJSONRequestBody = WebhookCreateRequest
@@ -1071,6 +1139,9 @@ type ServerInterface interface {
 	// Sync all Keycloak users to database
 	// (POST /admin/sync-users)
 	SyncUsers(w http.ResponseWriter, r *http.Request)
+	// Create user in identity provider and app directory
+	// (POST /admin/users)
+	CreateAdminUser(w http.ResponseWriter, r *http.Request)
 	// Login
 	// (POST /auth/login)
 	Login(w http.ResponseWriter, r *http.Request)
@@ -1215,6 +1286,12 @@ type ServerInterface interface {
 	// Create a project sprint
 	// (POST /projects/{projectId}/sprints)
 	CreateProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Remove tickets from sprint
+	// (DELETE /projects/{projectId}/sprints/{sprintId}/tickets)
+	RemoveSprintTickets(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID)
+	// Add tickets to sprint
+	// (POST /projects/{projectId}/sprints/{sprintId}/tickets)
+	AddSprintTickets(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID)
 	// Get project statistics
 	// (GET /projects/{projectId}/stats)
 	GetProjectStats(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -1245,6 +1322,15 @@ type ServerInterface interface {
 	// Download attachment file
 	// (GET /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download)
 	DownloadTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, attachmentId openapi_types.UUID)
+	// List time entries for a ticket
+	// (GET /projects/{projectId}/tickets/{ticketId}/time-entries)
+	ListTicketTimeEntries(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID)
+	// Log time on a ticket
+	// (POST /projects/{projectId}/tickets/{ticketId}/time-entries)
+	CreateTicketTimeEntry(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID)
+	// Delete a time entry
+	// (DELETE /projects/{projectId}/tickets/{ticketId}/time-entries/{timeEntryId})
+	DeleteTicketTimeEntry(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, timeEntryId openapi_types.UUID)
 	// List webhooks
 	// (GET /projects/{projectId}/webhooks)
 	ListWebhooks(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -1329,6 +1415,12 @@ type Unimplemented struct{}
 // Sync all Keycloak users to database
 // (POST /admin/sync-users)
 func (_ Unimplemented) SyncUsers(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create user in identity provider and app directory
+// (POST /admin/users)
+func (_ Unimplemented) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1620,6 +1712,18 @@ func (_ Unimplemented) CreateProjectSprint(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Remove tickets from sprint
+// (DELETE /projects/{projectId}/sprints/{sprintId}/tickets)
+func (_ Unimplemented) RemoveSprintTickets(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Add tickets to sprint
+// (POST /projects/{projectId}/sprints/{sprintId}/tickets)
+func (_ Unimplemented) AddSprintTickets(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Get project statistics
 // (GET /projects/{projectId}/stats)
 func (_ Unimplemented) GetProjectStats(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
@@ -1677,6 +1781,24 @@ func (_ Unimplemented) DeleteTicketAttachment(w http.ResponseWriter, r *http.Req
 // Download attachment file
 // (GET /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download)
 func (_ Unimplemented) DownloadTicketAttachment(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, attachmentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List time entries for a ticket
+// (GET /projects/{projectId}/tickets/{ticketId}/time-entries)
+func (_ Unimplemented) ListTicketTimeEntries(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Log time on a ticket
+// (POST /projects/{projectId}/tickets/{ticketId}/time-entries)
+func (_ Unimplemented) CreateTicketTimeEntry(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete a time entry
+// (DELETE /projects/{projectId}/tickets/{ticketId}/time-entries/{timeEntryId})
+func (_ Unimplemented) DeleteTicketTimeEntry(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ticketId openapi_types.UUID, timeEntryId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1850,6 +1972,26 @@ func (siw *ServerInterfaceWrapper) SyncUsers(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SyncUsers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAdminUser operation middleware
+func (siw *ServerInterfaceWrapper) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAdminUser(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3433,6 +3575,86 @@ func (siw *ServerInterfaceWrapper) CreateProjectSprint(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// RemoveSprintTickets operation middleware
+func (siw *ServerInterfaceWrapper) RemoveSprintTickets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sprintId" -------------
+	var sprintId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sprintId", chi.URLParam(r, "sprintId"), &sprintId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sprintId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveSprintTickets(w, r, projectId, sprintId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddSprintTickets operation middleware
+func (siw *ServerInterfaceWrapper) AddSprintTickets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sprintId" -------------
+	var sprintId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sprintId", chi.URLParam(r, "sprintId"), &sprintId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sprintId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddSprintTickets(w, r, projectId, sprintId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProjectStats operation middleware
 func (siw *ServerInterfaceWrapper) GetProjectStats(w http.ResponseWriter, r *http.Request) {
 
@@ -3839,6 +4061,135 @@ func (siw *ServerInterfaceWrapper) DownloadTicketAttachment(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DownloadTicketAttachment(w, r, projectId, ticketId, attachmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTicketTimeEntries operation middleware
+func (siw *ServerInterfaceWrapper) ListTicketTimeEntries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTicketTimeEntries(w, r, projectId, ticketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTicketTimeEntry operation middleware
+func (siw *ServerInterfaceWrapper) CreateTicketTimeEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTicketTimeEntry(w, r, projectId, ticketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTicketTimeEntry operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTicketTimeEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "timeEntryId" -------------
+	var timeEntryId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "timeEntryId", chi.URLParam(r, "timeEntryId"), &timeEntryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "timeEntryId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTicketTimeEntry(w, r, projectId, ticketId, timeEntryId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4805,6 +5156,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/admin/sync-users", wrapper.SyncUsers)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/admin/users", wrapper.CreateAdminUser)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/auth/login", wrapper.Login)
 	})
 	r.Group(func(r chi.Router) {
@@ -4949,6 +5303,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/projects/{projectId}/sprints", wrapper.CreateProjectSprint)
 	})
 	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/sprints/{sprintId}/tickets", wrapper.RemoveSprintTickets)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/sprints/{sprintId}/tickets", wrapper.AddSprintTickets)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/stats", wrapper.GetProjectStats)
 	})
 	r.Group(func(r chi.Router) {
@@ -4977,6 +5337,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download", wrapper.DownloadTicketAttachment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/time-entries", wrapper.ListTicketTimeEntries)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/time-entries", wrapper.CreateTicketTimeEntry)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/tickets/{ticketId}/time-entries/{timeEntryId}", wrapper.DeleteTicketTimeEntry)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/webhooks", wrapper.ListWebhooks)

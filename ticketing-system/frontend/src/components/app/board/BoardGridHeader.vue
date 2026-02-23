@@ -11,12 +11,12 @@ const { t } = useI18n();
 
 <template>
     <div
-        class="grid min-w-max items-center gap-4 rounded-3xl border border-border bg-card/70 p-4 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+        class="grid w-full items-center gap-4 rounded-3xl border border-border bg-card/70 p-4 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
         :style="{
             'grid-template-columns':
-                'minmax(170px, 15vw) repeat(' +
+                'minmax(160px, 15vw) repeat(' +
                 props.states.length +
-                ', minmax(260px, 1fr))',
+                ', minmax(0, 1fr))',
         }"
     >
         <div>{{ t("board.view.storyGroup") }}</div>

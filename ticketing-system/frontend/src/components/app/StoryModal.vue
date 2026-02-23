@@ -5,6 +5,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 type StoryDraft = {
   title: string;
   description: string;
+  storyPoints: number | null;
 };
 
 const props = defineProps<{
@@ -30,7 +31,7 @@ const updateStory = (patch: Partial<StoryDraft>) => {
   <div
     v-if="props.show"
     data-testid="story.modal"
-    class="fixed inset-0 z-20 flex items-center justify-center bg-black/30 px-6"
+    class="fixed inset-0 z-[120] flex items-center justify-center bg-black/65 backdrop-blur-[2px] px-6"
     @click.self="emit('close')"
   >
     <div class="w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-xl">
@@ -66,6 +67,18 @@ const updateStory = (patch: Partial<StoryDraft>) => {
             placeholder="Shared goal or summary"
             data-testid="story.description-input"
             compact
+          />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-muted-foreground">Story Points (budget)</label>
+          <input
+            data-testid="story.story_points_input"
+            :value="props.story.storyPoints"
+            type="number"
+            min="0"
+            placeholder="Optional"
+            class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            @input="updateStory({ storyPoints: ($event.target as HTMLInputElement).value ? Number(($event.target as HTMLInputElement).value) : null })"
           />
         </div>
         <div class="flex items-center gap-3">

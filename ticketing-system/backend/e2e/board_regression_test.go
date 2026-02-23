@@ -3,7 +3,11 @@
 package e2e
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +76,57 @@ func TestTicketStateChangeViaAPIReflectsOnBoard(t *testing.T) {
 			}
 			return nil
 		})
+}
+
+func TestBoardAutoRefreshesOnLiveEventWithoutManualRefresh(t *testing.T) {
+	t.Parallel()
+
+	scenario := NewScenario(t)
+	defer scenario.Close()
+
+	seed := scenario.SeedData()
+	var createdTitle string
+
+	scenario.
+		GivenAppIsRunning().
+		WhenIGoToRoute("home").
+		WhenILogInAs("AdminUser", "admin123").
+		WhenISelectProjectByID(seed.ProjectID).
+		ThenURLContains("/projects/" + seed.ProjectID + "/board").
+		Then("a ticket is created via API while board is open", func(s *Scenario) error {
+			title, err := apiCreateTicketWithTitle(s.Harness(), seed.ProjectID, seed.StoryID)
+			if err != nil {
+				return err
+			}
+			createdTitle = title
+			return nil
+		}).
+		Then("the new ticket appears on the board without clicking refresh", func(s *Scenario) error {
+			if strings.TrimSpace(createdTitle) == "" {
+				return fmt.Errorf("created title is empty")
+			}
+			return s.Harness().ExpectTextVisible(createdTitle)
+		})
+}
+
+func apiCreateTicketWithTitle(h *Harness, projectID, storyID string) (string, error) {
+	title := fmt.Sprintf("Live Event Ticket %d", time.Now().UnixNano())
+	payload := map[string]any{
+		"title":   title,
+		"storyId": storyID,
+		"type":    "feature",
+	}
+	raw, _ := json.Marshal(payload)
+	resp, err := h.APIRequest(http.MethodPost, fmt.Sprintf("/projects/%s/tickets", projectID), bytes.NewReader(raw))
+	if err != nil {
+		return "", fmt.Errorf("create ticket request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("create ticket status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return title, nil
 }
 
 func TestStoryWithZeroTicketsDisplaysCorrectly(t *testing.T) {

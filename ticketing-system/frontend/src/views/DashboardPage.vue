@@ -2,11 +2,13 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
+import { useI18n } from "@/lib/i18n";
 
 const props = defineProps<{ projectId: string }>();
 
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
+const { t } = useI18n();
 
 const stats = computed(() => boardStore.dashboardStats);
 const loading = computed(() => boardStore.dashboardLoading);
@@ -71,15 +73,17 @@ import type { ProjectActivity } from "@/lib/api";
 const activityLabel = (a: ProjectActivity): string => {
     switch (a.action) {
         case "state_changed":
-            return `changed state to ${a.newValue}`;
+            return t("dashboard.activity.stateChanged", { value: a.newValue || "-" });
         case "priority_changed":
-            return `changed priority to ${a.newValue}`;
+            return t("dashboard.activity.priorityChanged", { value: a.newValue || "-" });
         case "assignee_changed":
-            return a.newValue ? `assigned to ${a.newValue}` : "removed assignee";
+            return a.newValue
+                ? t("dashboard.activity.assignedTo", { value: a.newValue })
+                : t("dashboard.activity.removedAssignee");
         case "type_changed":
-            return `changed type to ${a.newValue}`;
+            return t("dashboard.activity.typeChanged", { value: a.newValue || "-" });
         case "title_changed":
-            return "renamed ticket";
+            return t("dashboard.activity.renamed");
         default:
             return a.action;
     }
@@ -162,10 +166,10 @@ watch(selectedSprintId, reloadForecast);
             &empty;
         </div>
         <p class="text-sm font-medium text-muted-foreground">
-            No tickets yet
+            {{ t("dashboard.empty.title") }}
         </p>
         <p class="text-xs text-muted-foreground/60">
-            Create tickets on the board to see project statistics here.
+            {{ t("dashboard.empty.body") }}
         </p>
     </div>
 
@@ -179,7 +183,7 @@ watch(selectedSprintId, reloadForecast);
                 <p
                     class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
                 >
-                    Total
+                    {{ t("dashboard.summary.total") }}
                 </p>
                 <p class="mt-2 text-3xl font-bold tabular-nums">
                     {{ totalTickets }}
@@ -191,7 +195,7 @@ watch(selectedSprintId, reloadForecast);
                 <p
                     class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
                 >
-                    Open
+                    {{ t("dashboard.summary.open") }}
                 </p>
                 <p class="mt-2 text-3xl font-bold tabular-nums text-blue-400">
                     {{ stats.totalOpen }}
@@ -203,7 +207,7 @@ watch(selectedSprintId, reloadForecast);
                 <p
                     class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
                 >
-                    Closed
+                    {{ t("dashboard.summary.closed") }}
                 </p>
                 <p
                     class="mt-2 text-3xl font-bold tabular-nums text-emerald-400"
@@ -217,7 +221,7 @@ watch(selectedSprintId, reloadForecast);
                 <p
                     class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
                 >
-                    Blocked Open
+                    {{ t("dashboard.summary.blockedOpen") }}
                 </p>
                 <p class="mt-2 text-3xl font-bold tabular-nums text-rose-300">
                     {{ stats.blockedOpen }}
@@ -232,7 +236,7 @@ watch(selectedSprintId, reloadForecast);
             <p
                 class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
             >
-                By State
+                {{ t("dashboard.byState") }}
             </p>
             <div class="mt-4 flex flex-col gap-3">
                 <div
@@ -266,20 +270,25 @@ watch(selectedSprintId, reloadForecast);
 
         <section data-testid="dashboard.dependency-graph" class="rounded-2xl border border-border bg-card/70 px-5 py-5">
             <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-                Dependency Graph
+                {{ t("dashboard.dependencyGraph") }}
             </p>
             <div v-if="dependencyGraphLoading" class="mt-4 text-xs text-muted-foreground">
-                Loading dependency graph...
+                {{ t("dashboard.loadingDependencyGraph") }}
             </div>
             <div v-else class="mt-4 space-y-2">
                 <p class="text-xs text-muted-foreground">
-                    {{ dependencyGraph.nodes.length }} nodes · {{ dependencyGraph.edges.length }} edges (up to 2-hop expansion)
+                    {{
+                        t("dashboard.graphNodesEdges", {
+                            nodes: dependencyGraph.nodes.length,
+                            edges: dependencyGraph.edges.length,
+                        })
+                    }}
                 </p>
                 <div
                     v-if="dependencyGraph.edges.length === 0"
                     class="text-xs text-muted-foreground"
                 >
-                    No dependencies yet.
+                    {{ t("dashboard.noDependencies") }}
                 </div>
                 <div v-else class="max-h-56 space-y-1 overflow-y-auto">
                     <div
@@ -314,7 +323,7 @@ watch(selectedSprintId, reloadForecast);
                 <p
                     class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
                 >
-                    By Priority
+                    {{ t("dashboard.byPriority") }}
                 </p>
                 <div class="mt-4 flex flex-col gap-3">
                     <div
@@ -360,7 +369,7 @@ watch(selectedSprintId, reloadForecast);
                 <p
                     class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
                 >
-                    By Type
+                    {{ t("dashboard.byType") }}
                 </p>
                 <div class="mt-4 flex flex-col gap-3">
                     <div
@@ -407,7 +416,7 @@ watch(selectedSprintId, reloadForecast);
             <p
                 class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
             >
-                By Assignee
+                    {{ t("dashboard.byAssignee") }}
             </p>
             <div class="mt-4 flex flex-col gap-3">
                 <div
@@ -456,13 +465,13 @@ watch(selectedSprintId, reloadForecast);
         <!-- Recent Activity -->
         <section data-testid="dashboard.recent-activity" class="rounded-2xl border border-border bg-card/70 px-5 py-5">
             <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-                Recent Activity
+                {{ t("dashboard.recentActivity") }}
             </p>
             <div v-if="activitiesLoading" class="mt-4 space-y-3">
                 <div v-for="i in 5" :key="i" class="h-4 rounded bg-muted animate-pulse" />
             </div>
             <div v-else-if="activities.length === 0" class="mt-4 text-xs text-muted-foreground">
-                No activity yet.
+                {{ t("dashboard.noActivity") }}
             </div>
             <div v-else class="mt-4 flex flex-col gap-3">
                 <div
@@ -475,7 +484,9 @@ watch(selectedSprintId, reloadForecast);
                     </div>
                     <div class="flex-1 min-w-0">
                         <span class="font-medium text-foreground">{{ activity.actorName }}</span>
-                        <span class="text-muted-foreground"> {{ activityLabel(activity) }} on </span>
+                        <span class="text-muted-foreground">
+                            {{ activityLabel(activity) }} {{ t("dashboard.activity.on") }}
+                        </span>
                         <span class="font-medium text-foreground">{{ activity.ticketKey }}</span>
                         <span class="text-muted-foreground truncate"> · {{ activity.ticketTitle }}</span>
                     </div>
@@ -490,7 +501,7 @@ watch(selectedSprintId, reloadForecast);
             <div class="flex flex-wrap items-end gap-3">
                 <div class="min-w-52">
                     <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-                        Sprint Forecast
+                        {{ t("dashboard.sprintForecast") }}
                     </p>
                     <select
                         data-testid="dashboard.sprint-select"
@@ -498,7 +509,7 @@ watch(selectedSprintId, reloadForecast);
                         :disabled="sprintsLoading"
                         v-model="selectedSprintId"
                     >
-                        <option value="">Latest sprint</option>
+                        <option value="">{{ t("dashboard.latestSprint") }}</option>
                         <option
                             v-for="sprint in sprints"
                             :key="sprint.id"
@@ -509,7 +520,7 @@ watch(selectedSprintId, reloadForecast);
                     </select>
                 </div>
                 <div>
-                    <label class="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Iterations</label>
+                    <label class="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{{ t("dashboard.iterations") }}</label>
                     <input
                         data-testid="dashboard.sprint-iterations-input"
                         type="number"
@@ -524,35 +535,41 @@ watch(selectedSprintId, reloadForecast);
                     class="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground hover:text-foreground"
                     @click="reloadForecast"
                 >
-                    Recalculate
+                    {{ t("dashboard.recalculate") }}
                 </button>
             </div>
             <div v-if="sprintForecastLoading" class="mt-4 text-xs text-muted-foreground">
-                Running forecast simulation...
+                {{ t("dashboard.runningForecast") }}
             </div>
             <div v-else-if="sprintForecast" class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div data-testid="dashboard.sprint-committed" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
-                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Committed</p>
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{{ t("dashboard.committed") }}</p>
                     <p class="mt-1 text-xl font-bold">{{ sprintForecast.committedTickets }}</p>
                 </div>
                 <div data-testid="dashboard.sprint-projected" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
-                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Projected</p>
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{{ t("dashboard.projected") }}</p>
                     <p class="mt-1 text-xl font-bold">{{ sprintForecast.projectedCompletion }}</p>
                 </div>
                 <div data-testid="dashboard.sprint-capacity" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
-                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Capacity</p>
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{{ t("dashboard.capacity") }}</p>
                     <p class="mt-1 text-xl font-bold">{{ sprintForecast.capacity }}</p>
                 </div>
                 <div data-testid="dashboard.sprint-delta" class="rounded-lg border border-border/70 bg-background/60 px-3 py-3">
-                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Over Capacity</p>
+                    <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{{ t("dashboard.overCapacity") }}</p>
                     <p class="mt-1 text-xl font-bold">{{ sprintForecast.overCapacityDelta }}</p>
                 </div>
                 <div class="col-span-2 md:col-span-4 text-xs text-muted-foreground">
-                    Confidence: {{ Math.round(sprintForecast.confidence * 100) }}% · Iterations: {{ sprintForecast.iterations }} · Capacity entries: {{ capacitySettings.length }}
+                    {{
+                        t("dashboard.confidenceLine", {
+                            confidence: Math.round(sprintForecast.confidence * 100),
+                            iterations: sprintForecast.iterations,
+                            capacity: capacitySettings.length,
+                        })
+                    }}
                 </div>
             </div>
             <div v-else class="mt-4 text-xs text-muted-foreground">
-                No sprint forecast available yet.
+                {{ t("dashboard.noForecast") }}
             </div>
         </section>
     </div>

@@ -68,6 +68,9 @@ type Store interface {
 	GetProjectStats(ctx context.Context, projectID uuid.UUID) (store.ProjectStats, error)
 	ListSprints(ctx context.Context, projectID uuid.UUID) ([]store.Sprint, error)
 	CreateSprint(ctx context.Context, projectID uuid.UUID, input store.SprintCreateInput) (store.Sprint, error)
+	GetSprint(ctx context.Context, projectID, sprintID uuid.UUID) (store.Sprint, error)
+	AddSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (store.Sprint, error)
+	RemoveSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (store.Sprint, error)
 	ListCapacitySettings(ctx context.Context, projectID uuid.UUID) ([]store.CapacitySetting, error)
 	ReplaceCapacitySettings(ctx context.Context, projectID uuid.UUID, inputs []store.CapacitySettingInput) ([]store.CapacitySetting, error)
 	GetSprintForecastSummary(ctx context.Context, projectID uuid.UUID, sprintID *uuid.UUID, iterations int) (store.SprintForecastSummary, error)
@@ -105,12 +108,16 @@ type Store interface {
 	UpdateBoardFilterPreset(ctx context.Context, projectID, ownerID, presetID uuid.UUID, input store.BoardFilterPresetUpdateInput) (store.BoardFilterPreset, error)
 	DeleteBoardFilterPreset(ctx context.Context, projectID, ownerID, presetID uuid.UUID) error
 	GetSharedBoardFilterPreset(ctx context.Context, projectID uuid.UUID, token string) (store.BoardFilterPreset, error)
+	ListTimeEntries(ctx context.Context, ticketID uuid.UUID) ([]store.TimeEntry, int, error)
+	CreateTimeEntry(ctx context.Context, ticketID uuid.UUID, input store.TimeEntryCreateInput) (store.TimeEntry, error)
+	DeleteTimeEntry(ctx context.Context, id uuid.UUID) error
 }
 
 type Authenticator interface {
 	Login(ctx context.Context, username, password string) (auth.User, auth.TokenSet, error)
 	Verify(ctx context.Context, token string) (auth.User, error)
 	ListUsers(ctx context.Context) ([]auth.User, error)
+	CreateUser(ctx context.Context, input auth.UserCreateInput) (auth.User, error)
 }
 
 type WebhookDispatcher interface {
@@ -454,8 +461,9 @@ func (h *API) UpdateProject(w http.ResponseWriter, r *http.Request, projectId op
 	}
 
 	project, err := h.store.UpdateProject(r.Context(), projectID, store.ProjectUpdateInput{
-		Name:        req.Name,
-		Description: req.Description,
+		Name:                      req.Name,
+		Description:               req.Description,
+		DefaultSprintDurationDays: req.DefaultSprintDurationDays,
 	})
 	if handleDBErrorWithCode(w, r, err, "project", "project_update", "project_update_failed") {
 		return
@@ -787,12 +795,19 @@ func (h *API) CreateTicket(w http.ResponseWriter, r *http.Request, projectId ope
 		IncidentSeverity:    mapStringPtr(req.IncidentSeverity, func(v TicketIncidentSeverity) string { return string(v) }),
 		IncidentImpact:      req.IncidentImpact,
 		IncidentCommanderID: parseOpenapiUUIDPtr(req.IncidentCommanderId),
+		StoryPoints:         req.StoryPoints,
+		TimeEstimate:        req.TimeEstimate,
 	})
 	if handleDBErrorWithCode(w, r, err, "ticket", "ticket_create", "ticket_create_failed") {
 		return
 	}
 
 	response := mapTicket(ticket)
+	if actor, ok := authUser(r.Context()); ok {
+		if actorID, err := uuid.Parse(actor.ID); err == nil {
+			h.notifyAssignment(r, store.Ticket{}, ticket, actorID, actor.Name)
+		}
+	}
 	h.dispatchTicketWebhook(r.Context(), projectUUID, ticket.ID, "ticket.created", map[string]any{"ticket": response})
 	h.publishProjectLiveEvent(projectUUID, projectEventBoardRefresh, map[string]any{
 		"reason": "ticket.created",
@@ -1114,6 +1129,12 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 		}
 		input.StoryID = &storyID
 	}
+	if req.StoryPoints != nil {
+		input.StoryPoints = req.StoryPoints
+	}
+	if req.TimeEstimate != nil {
+		input.TimeEstimate = req.TimeEstimate
+	}
 
 	ticket, err := h.store.UpdateTicket(r.Context(), ticketID, input)
 	if handleDBErrorWithCode(w, r, err, "ticket", "ticket_update", "ticket_update_failed") {
@@ -1130,6 +1151,7 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 			actorResolved = true
 			h.recordTicketActivities(r.Context(), current, ticket, actorID, actor.Name)
 			h.notifyAssignment(r, current, ticket, actorID, actor.Name)
+			h.notifyAssigneeTicketUpdate(r, current, ticket, actorID, actor.Name)
 		}
 	}
 	if actorResolved && req.Description != nil && current.Description != ticket.Description {
@@ -1690,6 +1712,10 @@ func (h *API) syncUser(r *http.Request, user auth.User) {
 // SyncUsers syncs all users from Keycloak to the local database
 // POST /admin/sync-users
 func (h *API) SyncUsers(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+
 	// Get all users from Keycloak
 	keycloakUsers, err := h.auth.ListUsers(r.Context())
 	if err != nil {
@@ -1727,6 +1753,73 @@ func (h *API) SyncUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, SyncUsersResponse{
 		Synced: synced,
 		Total:  len(keycloakUsers),
+	})
+}
+
+// CreateAdminUser creates a user in the identity provider and upserts it in app storage.
+// POST /admin/users
+func (h *API) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+
+	req, ok := decodeJSON[AdminUserCreateRequest](w, r, "admin_user_create")
+	if !ok {
+		return
+	}
+	email := strings.TrimSpace(string(req.Email))
+	if strings.TrimSpace(req.Username) == "" || strings.TrimSpace(req.Password) == "" || email == "" {
+		writeError(w, http.StatusBadRequest, "invalid_user_create", "username, email, and password are required")
+		return
+	}
+
+	created, err := h.auth.CreateUser(r.Context(), auth.UserCreateInput{
+		Username:  req.Username,
+		Email:     email,
+		FirstName: derefString(req.FirstName),
+		LastName:  derefString(req.LastName),
+		Password:  req.Password,
+	})
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if strings.Contains(msg, "already exists") || strings.Contains(msg, "409") {
+			writeError(w, http.StatusConflict, "user_exists", "user already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "user_create_failed", "failed to create user")
+		return
+	}
+
+	userID, parseErr := uuid.Parse(created.ID)
+	if parseErr != nil {
+		writeError(w, http.StatusInternalServerError, "user_create_failed", "identity provider returned invalid user id")
+		return
+	}
+
+	createdEmail := strings.TrimSpace(created.Email)
+	name := strings.TrimSpace(created.Name)
+	if createdEmail == "" {
+		createdEmail = created.ID + "@local"
+	}
+	if name == "" {
+		name = createdEmail
+	}
+
+	if err := h.store.UpsertUser(r.Context(), store.UserUpsertInput{
+		ID:    userID,
+		Name:  name,
+		Email: createdEmail,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "user_create_failed", "failed to persist user")
+		return
+	}
+
+	var emailValue openapi_types.Email
+	emailValue = openapi_types.Email(createdEmail)
+	writeJSON(w, http.StatusCreated, UserSummary{
+		Id:    toOpenapiUUID(userID),
+		Name:  name,
+		Email: &emailValue,
 	})
 }
 

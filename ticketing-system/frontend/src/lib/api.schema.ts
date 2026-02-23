@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create user in identity provider and app directory */
+        post: operations["createAdminUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -549,6 +566,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/tickets/{ticketId}/time-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List time entries for a ticket */
+        get: operations["listTicketTimeEntries"];
+        put?: never;
+        /** Log time on a ticket */
+        post: operations["createTicketTimeEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/tickets/{ticketId}/time-entries/{timeEntryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a time entry */
+        delete: operations["deleteTicketTimeEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/stats": {
         parameters: {
             query?: never;
@@ -579,6 +631,24 @@ export interface paths {
         /** Create a project sprint */
         post: operations["createProjectSprint"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/sprints/{sprintId}/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add tickets to sprint */
+        post: operations["addSprintTickets"];
+        /** Remove tickets from sprint */
+        delete: operations["removeSprintTickets"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1033,6 +1103,14 @@ export interface components {
             /** @description Total users in Keycloak */
             total: number;
         };
+        AdminUserCreateRequest: {
+            username: string;
+            /** Format: email */
+            email: string;
+            firstName?: string;
+            lastName?: string;
+            password: string;
+        };
         /**
          * @description 4-character uppercase alphanumeric project key.
          * @example PROJ
@@ -1057,6 +1135,7 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            defaultSprintDurationDays?: number | null;
         };
         ProjectCreateRequest: {
             key: components["schemas"]["ProjectKey"];
@@ -1066,6 +1145,7 @@ export interface components {
         ProjectUpdateRequest: {
             name?: string;
             description?: string;
+            defaultSprintDurationDays?: number | null;
         };
         ProjectListResponse: {
             items: components["schemas"]["Project"][];
@@ -1201,6 +1281,7 @@ export interface components {
             projectId: string;
             title: string;
             description?: string;
+            storyPoints?: number | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1209,10 +1290,12 @@ export interface components {
         StoryCreateRequest: {
             title: string;
             description?: string;
+            storyPoints?: number | null;
         };
         StoryUpdateRequest: {
             title?: string;
             description?: string;
+            storyPoints?: number | null;
         };
         StoryListResponse: {
             items: components["schemas"]["Story"][];
@@ -1284,6 +1367,11 @@ export interface components {
             /** Format: float */
             position: number;
             blockedByCount: number;
+            storyPoints?: number | null;
+            /** @description Estimated effort in minutes */
+            timeEstimate?: number | null;
+            /** @description Total logged time in minutes (computed) */
+            readonly timeLogged?: number;
             isBlocked: boolean;
             /** Format: date-time */
             createdAt: string;
@@ -1345,6 +1433,8 @@ export interface components {
             incidentImpact?: string | null;
             /** Format: uuid */
             incidentCommanderId?: string | null;
+            storyPoints?: number | null;
+            timeEstimate?: number | null;
         };
         TicketUpdateRequest: {
             title?: string;
@@ -1362,6 +1452,8 @@ export interface components {
             incidentImpact?: string | null;
             /** Format: uuid */
             incidentCommanderId?: string | null;
+            storyPoints?: number | null;
+            timeEstimate?: number | null;
             /** Format: float */
             position?: number;
         };
@@ -1417,6 +1509,10 @@ export interface components {
         };
         /** @enum {string} */
         WebhookEvent: "ticket.created" | "ticket.updated" | "ticket.deleted" | "ticket.state_changed";
+        /**
+         * @description Webhook subscription configuration.
+         *     Outbound webhook POST bodies use `WebhookPayloadV1`.
+         */
         Webhook: {
             /** Format: uuid */
             id: string;
@@ -1462,6 +1558,33 @@ export interface components {
             statusCode?: number;
             responseBody?: string;
         };
+        /** @description Versioned outbound webhook body (`version=v1`). */
+        WebhookPayloadV1: {
+            /** @enum {string} */
+            version: "v1";
+            event: components["schemas"]["WebhookEvent"];
+            /** Format: date-time */
+            eventTimestamp: string;
+            /** Format: uuid */
+            idempotencyKey: string;
+            data: components["schemas"]["WebhookTicketCreatedData"] | components["schemas"]["WebhookTicketUpdatedData"] | components["schemas"]["WebhookTicketDeletedData"] | components["schemas"]["WebhookTicketStateChangedData"];
+        };
+        WebhookTicketCreatedData: {
+            ticket: components["schemas"]["Ticket"];
+        };
+        WebhookTicketUpdatedData: {
+            ticket: components["schemas"]["Ticket"];
+        };
+        WebhookTicketDeletedData: {
+            ticket: components["schemas"]["Ticket"];
+        };
+        WebhookTicketStateChangedData: {
+            ticket: components["schemas"]["Ticket"];
+            /** Format: uuid */
+            fromStateId: string;
+            /** Format: uuid */
+            toStateId: string;
+        };
         WebhookDelivery: {
             /** Format: uuid */
             id: string;
@@ -1497,6 +1620,31 @@ export interface components {
         };
         AttachmentListResponse: {
             items: components["schemas"]["Attachment"][];
+        };
+        TimeEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ticketId: string;
+            /** Format: uuid */
+            userId: string;
+            userName: string;
+            minutes: number;
+            description?: string;
+            /** Format: date */
+            loggedAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TimeEntryCreateRequest: {
+            minutes: number;
+            description?: string;
+            /** Format: date */
+            loggedAt?: string;
+        };
+        TimeEntryListResponse: {
+            items: components["schemas"]["TimeEntry"][];
+            totalMinutes: number;
         };
         ProjectActivity: {
             /** Format: uuid */
@@ -1609,6 +1757,9 @@ export interface components {
             /** Format: date */
             endDate: string;
             ticketIds?: string[];
+        };
+        SprintTicketsRequest: {
+            ticketIds: string[];
         };
         /** @enum {string} */
         CapacitySettingScope: "team" | "user";
@@ -1857,6 +2008,66 @@ export interface operations {
                 };
             };
             /** @description Sync failed */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createAdminUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUserCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description User created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSummary"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Admin required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description User already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Create failed */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2921,6 +3132,78 @@ export interface operations {
             };
         };
     };
+    listTicketTimeEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Time entry list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryListResponse"];
+                };
+            };
+        };
+    };
+    createTicketTimeEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeEntryCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Time entry created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntry"];
+                };
+            };
+        };
+    };
+    deleteTicketTimeEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ticketId: string;
+                timeEntryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getProjectStats: {
         parameters: {
             query?: never;
@@ -2982,6 +3265,60 @@ export interface operations {
         responses: {
             /** @description Created sprint */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sprint"];
+                };
+            };
+        };
+    };
+    addSprintTickets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                sprintId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SprintTicketsRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated sprint */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sprint"];
+                };
+            };
+        };
+    };
+    removeSprintTickets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                sprintId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SprintTicketsRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated sprint */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

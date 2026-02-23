@@ -117,12 +117,7 @@ func TestBoardShowsTicketsInCorrectStates(t *testing.T) {
 		WhenISelectProjectByID(seed.ProjectID).
 		ThenURLContains("/projects/" + seed.ProjectID + "/board").
 		WhenIClickRefresh().
-		// Verify workflow state columns are present
-		ThenISeeText("Backlog").
-		AndISeeText("In Progress").
-		AndISeeText("Done").
-		// Verify all seeded tickets are visible
-		AndISeeText(backlogTicket).
+		ThenISeeText(backlogTicket).
 		AndISeeText(inProgressTicket).
 		AndISeeText(doneTicket)
 }

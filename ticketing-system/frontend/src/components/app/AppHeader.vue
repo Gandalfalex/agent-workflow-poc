@@ -52,7 +52,7 @@ const closeInbox = () => {
 
 <template>
     <header
-        class="relative z-40 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5"
+        class="relative z-40 flex w-full items-center justify-between px-6 py-5"
     >
         <!-- Left: Brand + project name -->
         <div class="flex items-center gap-3">

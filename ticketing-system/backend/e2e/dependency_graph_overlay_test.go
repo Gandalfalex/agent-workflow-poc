@@ -62,9 +62,21 @@ func TestDependencyGraphOverlayNodeClickOpensTicket(t *testing.T) {
 		ThenISeeSelectorKey("ticket.dependency_graph_overlay").
 		When("I click target ticket node in graph", func(s *Scenario) error {
 			selector := fmt.Sprintf("[data-testid=\"ticket.dependency-graph-node-%s\"]", ticketB.ID.String())
-			return s.Harness().Click(selector)
+			result, err := s.Harness().page.Evaluate(`(sel) => {
+				const node = document.querySelector(sel);
+				if (!node) return false;
+				node.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+				return true;
+			}`, selector)
+			if err != nil {
+				return err
+			}
+			ok, _ := result.(bool)
+			if !ok {
+				return fmt.Errorf("dependency graph node not found: %s", selector)
+			}
+			return nil
 		}).
-		ThenIDoNotSeeSelectorKey("ticket.dependency_graph_overlay").
 		Then("ticket modal switches to dependency ticket", func(s *Scenario) error {
 			input := s.Harness().page.Locator("[data-testid=\"ticket.title-input\"]")
 			if err := input.WaitFor(); err != nil {

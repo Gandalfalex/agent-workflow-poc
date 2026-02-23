@@ -18,6 +18,9 @@ type DropCardHandler = (
 type OpenTicketHandler = (ticket: TicketResponse) => void;
 type OpenNewTicketHandler = (stateId?: string, storyId?: string) => void;
 type DeleteStoryHandler = (storyId: string) => void;
+type QuickMoveHandler = (ticket: TicketResponse, nextStateId: string) => void;
+type QuickPriorityHandler = (ticket: TicketResponse) => void;
+type QuickAssignHandler = (ticket: TicketResponse) => void;
 
 const props = defineProps<{
     loading: boolean;
@@ -30,6 +33,7 @@ const props = defineProps<{
     workflowSetupBusy: boolean;
     workflowSetupError: string;
     canEditTickets: boolean;
+    canQuickAssignToMe: boolean;
     bulkSelectMode: boolean;
     selectedTicketIds: string[];
     hasActiveFilter: boolean;
@@ -47,6 +51,9 @@ const props = defineProps<{
     onDragEnd: () => void;
     onDropColumn: DropHandler;
     onDropCard: DropCardHandler;
+    onQuickMoveNext: QuickMoveHandler;
+    onQuickCyclePriority: QuickPriorityHandler;
+    onQuickAssignToMe: QuickAssignHandler;
 }>();
 
 const { t } = useI18n();
@@ -109,7 +116,7 @@ const { t } = useI18n();
             @clear-filter="props.onClearFilter"
         />
 
-        <div class="overflow-x-auto pb-2">
+        <div class="w-full pb-2">
             <BoardGridHeader :states="props.states" />
 
             <BoardStoryRow
@@ -118,6 +125,7 @@ const { t } = useI18n();
                 :row="row"
                 :states="props.states"
                 :can-edit-tickets="props.canEditTickets"
+                :can-quick-assign-to-me="props.canQuickAssignToMe"
                 :bulk-select-mode="props.bulkSelectMode"
                 :selected-ticket-ids="props.selectedTicketIds"
                 :on-delete-story="props.onDeleteStory"
@@ -128,6 +136,9 @@ const { t } = useI18n();
                 :on-drag-end="props.onDragEnd"
                 :on-drop-column="props.onDropColumn"
                 :on-drop-card="props.onDropCard"
+                :on-quick-move-next="props.onQuickMoveNext"
+                :on-quick-cycle-priority="props.onQuickCyclePriority"
+                :on-quick-assign-to-me="props.onQuickAssignToMe"
             />
         </div>
     </section>

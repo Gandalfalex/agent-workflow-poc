@@ -21,6 +21,7 @@ type Ticket struct {
 	StoryID               uuid.UUID
 	StoryTitle            string
 	StorySummary          *string
+	StoryStoryPoints      *int
 	StoryCreated          time.Time
 	StoryUpdated          time.Time
 	Title                 string
@@ -41,6 +42,9 @@ type Ticket struct {
 	IncidentCommanderID   *uuid.UUID
 	IncidentCommanderName *string
 	Position              float64
+	StoryPoints           *int
+	TimeEstimate          *int
+	TimeLogged            int
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 }
@@ -67,6 +71,8 @@ type TicketCreateInput struct {
 	IncidentSeverity    *string
 	IncidentImpact      *string
 	IncidentCommanderID *uuid.UUID
+	StoryPoints         *int
+	TimeEstimate        *int
 }
 
 type TicketUpdateInput struct {
@@ -82,6 +88,8 @@ type TicketUpdateInput struct {
 	IncidentImpact      *string
 	IncidentCommanderID *uuid.UUID
 	Position            *float64
+	StoryPoints         *int
+	TimeEstimate        *int
 }
 
 func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket, int, error) {
@@ -208,6 +216,8 @@ func (s *Store) CreateTicket(ctx context.Context, projectID uuid.UUID, input Tic
 		incidentImpact,
 		incidentCommanderID,
 		position,
+		input.StoryPoints,
+		input.TimeEstimate,
 	)
 
 	if err := row.Scan(&ticketID); err != nil {
@@ -298,6 +308,12 @@ func (s *Store) UpdateTicket(ctx context.Context, id uuid.UUID, input TicketUpda
 		if input.IncidentCommanderID != nil {
 			updates = append(updates, fmt.Sprintf("incident_commander_id = %s", arg(*input.IncidentCommanderID)))
 		}
+		if input.StoryPoints != nil {
+			updates = append(updates, fmt.Sprintf("story_points = %s", arg(*input.StoryPoints)))
+		}
+		if input.TimeEstimate != nil {
+			updates = append(updates, fmt.Sprintf("time_estimate = %s", arg(*input.TimeEstimate)))
+		}
 
 		position := input.Position
 		if position == nil && input.StateID != nil && newState != currentState {
@@ -387,6 +403,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&ticket.StoryID,
 		&ticket.StoryTitle,
 		&ticket.StorySummary,
+		&ticket.StoryStoryPoints,
 		&ticket.StoryCreated,
 		&ticket.StoryUpdated,
 		&ticket.Title,
@@ -399,6 +416,9 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&ticket.IncidentImpact,
 		&ticket.IncidentCommanderID,
 		&ticket.Position,
+		&ticket.StoryPoints,
+		&ticket.TimeEstimate,
+		&ticket.TimeLogged,
 		&ticket.CreatedAt,
 		&ticket.UpdatedAt,
 		&ticket.StateName,

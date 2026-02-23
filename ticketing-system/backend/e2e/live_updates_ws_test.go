@@ -86,7 +86,7 @@ func dialProjectEventsWS(h *Harness, projectID, token string) (*websocket.Conn, 
 	if err != nil {
 		return nil, fmt.Errorf("parse base url: %w", err)
 	}
-	base.Path = fmt.Sprintf("/projects/%s/events/ws", projectID)
+	base.Path = fmt.Sprintf("/rest/v1/projects/%s/events/ws", projectID)
 	base.RawQuery = ""
 	if base.Scheme == "https" {
 		base.Scheme = "wss"

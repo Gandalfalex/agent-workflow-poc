@@ -16,6 +16,7 @@ const props = defineProps<{
     row: StoryRow;
     states: WorkflowState[];
     canEditTickets: boolean;
+    canQuickAssignToMe: boolean;
     bulkSelectMode: boolean;
     selectedTicketIds: string[];
     onDeleteStory: (storyId: string) => void;
@@ -26,17 +27,20 @@ const props = defineProps<{
     onDragEnd: () => void;
     onDropColumn: DropHandler;
     onDropCard: DropCardHandler;
+    onQuickMoveNext: (ticket: TicketResponse, nextStateId: string) => void;
+    onQuickCyclePriority: (ticket: TicketResponse) => void;
+    onQuickAssignToMe: (ticket: TicketResponse) => void;
 }>();
 </script>
 
 <template>
     <div
-        class="mt-5 grid min-w-max gap-4 rounded-2xl border-2 border-border/60 bg-card/50 p-4 shadow-sm"
+        class="mt-5 grid w-full gap-4 rounded-2xl border-2 border-border/60 bg-card/50 p-4 shadow-sm"
         :style="{
             'grid-template-columns':
-                'minmax(170px, 15vw) repeat(' +
+                'minmax(160px, 15vw) repeat(' +
                 props.states.length +
-                ', minmax(260px, 1fr))',
+                ', minmax(0, 1fr))',
         }"
     >
         <StoryInfoCell
@@ -48,7 +52,7 @@ const props = defineProps<{
         />
 
         <div
-            v-for="state in props.states"
+            v-for="(state, idx) in props.states"
             :key="state.id"
             class="flex min-h-[180px] flex-col rounded-2xl border border-border bg-card/35 p-3.5"
             @dragover.prevent
@@ -61,7 +65,9 @@ const props = defineProps<{
                     :ticket="ticket"
                     :state-id="state.id"
                     :row-id="props.row.id"
+                    :next-state-id="props.states[idx + 1]?.id || ''"
                     :can-edit-tickets="props.canEditTickets"
+                    :can-quick-assign-to-me="props.canQuickAssignToMe"
                     :bulk-select-mode="props.bulkSelectMode"
                     :selected-ticket-ids="props.selectedTicketIds"
                     :on-open-ticket="props.onOpenTicket"
@@ -69,6 +75,9 @@ const props = defineProps<{
                     :on-drag-start="props.onDragStart"
                     :on-drag-end="props.onDragEnd"
                     :on-drop-card="props.onDropCard"
+                    :on-quick-move-next="props.onQuickMoveNext"
+                    :on-quick-cycle-priority="props.onQuickCyclePriority"
+                    :on-quick-assign-to-me="props.onQuickAssignToMe"
                 />
 
                 <EmptyDropZone
