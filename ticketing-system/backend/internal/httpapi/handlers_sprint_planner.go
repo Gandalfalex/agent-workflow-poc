@@ -162,6 +162,51 @@ func (h *API) RemoveSprintTickets(w http.ResponseWriter, r *http.Request, projec
 	writeJSON(w, http.StatusOK, mapSprint(sprint))
 }
 
+func (h *API) StartProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+	if !h.requireProjectRole(w, r, projectUUID, roleContributor) {
+		return
+	}
+
+	sprint, err := h.store.StartSprint(r.Context(), projectUUID, uuid.UUID(sprintId))
+	if handleDBErrorWithCode(w, r, err, "sprint", "sprint_start", "sprint_start_failed") {
+		return
+	}
+	writeJSON(w, http.StatusOK, mapSprint(sprint))
+}
+
+func (h *API) CompleteProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
+	projectUUID := uuid.UUID(projectId)
+	if !h.requireProjectAccess(w, r, projectUUID) {
+		return
+	}
+	if !h.requireProjectRole(w, r, projectUUID, roleContributor) {
+		return
+	}
+
+	var moveTicketIDs []uuid.UUID
+	if r.Body != nil && r.ContentLength > 0 {
+		req, ok := decodeJSON[sprintCompleteRequest](w, r, "sprint_complete")
+		if !ok {
+			return
+		}
+		if req.MoveTicketIds != nil {
+			for _, id := range *req.MoveTicketIds {
+				moveTicketIDs = append(moveTicketIDs, uuid.UUID(id))
+			}
+		}
+	}
+
+	sprint, err := h.store.CompleteSprint(r.Context(), projectUUID, uuid.UUID(sprintId), moveTicketIDs)
+	if handleDBErrorWithCode(w, r, err, "sprint", "sprint_complete", "sprint_complete_failed") {
+		return
+	}
+	writeJSON(w, http.StatusOK, mapSprint(sprint))
+}
+
 func (h *API) GetProjectSprintForecast(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectSprintForecastParams) {
 	projectUUID := uuid.UUID(projectId)
 	if !h.requireProjectAccess(w, r, projectUUID) {

@@ -151,6 +151,13 @@ Snapshot date: February 20, 2026
   - Forecast API: `GET /projects/{projectId}/sprint-forecast?sprintId=&iterations=`.
   - Dashboard shows committed tickets, projected completion (historical-throughput simulation), capacity, and over-capacity delta.
   - Configurable simulation iteration count (10-5000).
+- Sprint lifecycle management (TKT-025):
+  - Sprint status machine: `planned` → `active` → `completed` (one active sprint per project enforced).
+  - `POST /projects/{projectId}/sprints/{sprintId}/start` — activates a planned sprint (fails if another is active).
+  - `POST /projects/{projectId}/sprints/{sprintId}/complete` — completes active sprint; accepts `moveTicketIds[]` to roll incomplete tickets to next planned sprint.
+  - Sprint sidebar on board: progress bar, start/complete lifecycle buttons, collapsible completed history.
+  - Complete sprint dialog: lists all incomplete tickets (pre-checked), lets user pick which to roll over; shows target sprint name.
+  - i18n keys (en + de). E2E lifecycle and rollover coverage.
 - Loading skeleton and empty state handling.
 
 ## Admin and Operations
@@ -163,6 +170,10 @@ Snapshot date: February 20, 2026
 - Health check endpoint (`/health`).
 - Docker Compose for local dev: Postgres, Keycloak (with realm import), n8n, backend API, codex-agent, MinIO.
 - Production Docker Compose with Traefik reverse proxy and HTTPS.
+- **Audit Log (TKT-026)**: Immutable JSONB-backed audit trail for all admin/security-relevant actions:
+  - Recorded actions: project created/deleted, group created/deleted, project group added/updated, webhook created/deleted, users synced, user created, ticket deleted.
+  - `GET /admin/audit-log` (admin-only) with limit/offset/projectId/resourceType/actorId filters.
+  - Settings → Audit Log tab: paginated table with time, actor, action, resource; load-more pagination.
 
 ## Codex Agent (MCP Server)
 - TypeScript MCP server providing authenticated ticket management tools.
@@ -198,3 +209,15 @@ Snapshot date: February 20, 2026
 - Project dashboard page: summary cards (total/open/closed), bar charts by state, priority, type, and assignee.
 - Project drawer for switching between projects.
 - Header live-update status indicator (`WS` or `POLL`) showing active transport mode.
+
+## Automation Engine (TKT-027, March 5, 2026)
+- Per-project automation rules with trigger events + conditions + ordered actions.
+- `automation_rules` and `automation_executions` tables (migration `023_automation_rules.sql`).
+- Store: `ListAutomationRules`, `ListEnabledAutomationRules`, `GetAutomationRule`, `CreateAutomationRule`, `UpdateAutomationRule`, `DeleteAutomationRule`, `BumpAutomationRuleStats`, `CreateAutomationExecution`, `ListAutomationExecutions`.
+- Automation engine (`internal/automation/engine.go`): fire-and-forget via `go engine.Fire(...)` from `CreateTicket` and `UpdateTicket` handlers; dispatches `ticket.created`, `ticket.updated`, `ticket.state_changed` events.
+- Supported action types: `set_state`, `set_assignee`, `set_priority`, `add_comment` (with `{{ticket.key}}`/`{{ticket.title}}` template vars), `call_webhook`.
+- REST API: 6 endpoints under `/projects/{projectId}/automation/rules` (CRUD + executions list).
+- Frontend: Automation tab in SettingsPage with rule list, inline rule-builder form (event select, conditions for state_changed, action builder), execution history per rule.
+- Pinia store: `useAutomationStore` with CRUD actions and execution loading.
+- i18n: ~18 keys in en + de.
+- E2E tests: API CRUD + UI tab navigation (`automation_rules_test.go`).

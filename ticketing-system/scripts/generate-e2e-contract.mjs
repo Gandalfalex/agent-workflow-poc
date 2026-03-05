@@ -167,7 +167,7 @@ function collectTestIDs(rootDir) {
   for (const file of walkFiles(rootDir)) {
     if (!isFrontendSource(file)) continue;
     const content = readText(file);
-    const testIDRegex = /data-testid\s*=\s*["']([^"']+)["']/g;
+    const testIDRegex = /(?::?data-testid|test-id)\s*=\s*["']([^"']+)["']/g;
     for (const match of content.matchAll(testIDRegex)) {
       out.add(match[1]);
     }

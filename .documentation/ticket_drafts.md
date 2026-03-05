@@ -236,14 +236,41 @@ Source: `.documentation/feature_roadmap.md`
 
 ### TKT-021: Portfolio Command Center
 - Priority: `P2`
+- Status: **Done** (March 4, 2026)
+- Context: Core portfolio infrastructure (GET /portfolio/stats, PortfolioDashboard.vue, portfolio store, E2E test skeleton) was already shipped. This ticket closes the remaining gaps: throughput metrics, group/owner filters, and performance indexes.
 - Scope:
-  - Cross-project roll-up dashboard for open risk, throughput, and SLA breaches.
-  - Milestone tracking across projects with confidence indicators.
-  - Filters by group, owner, and objective/OKR.
+  1. **OpenAPI**: Add `weeklyThroughput` (int) and `avgCycleTimeHours` (float) to `ProjectPortfolioEntry`; add `ownerId` and `groupId` query params to `GET /portfolio/stats`.
+  2. **Migration `021_portfolio_indexes.sql`**: Add indexes `idx_sprints_project_status`, `idx_ticket_deps_blocked_ticket`, `idx_tickets_project_state` to keep portfolio query fast at 50+ projects.
+  3. **SQL template** (`13_portfolio.go.templ`): Add `throughput_stats` CTE computing weekly closed count and avg cycle time (hours) per project; add filter-variant SQL templates for `groupId` and `ownerId` filters.
+  4. **Store** (`store/portfolio.go`): Add `PortfolioFilter{OwnerID, GroupID}` struct; extend `ProjectPortfolioEntry` with two new fields; update `GetPortfolioStats` signature and scan; update Store interface in `handlers.go` and fakeStore stub in `handlers_test.go`.
+  5. **Handler**: Wire `ownerId`/`groupId` params from `GetPortfolioStatsParams` into `PortfolioFilter`; pass to store.
+  6. **Frontend** (`PortfolioDashboard.vue`): Add group filter dropdown (loads groups via existing `ListGroups` API) and owner filter; re-call `portfolioStore.load(filter)` on change. Show `weeklyThroughput` in `ProjectHealthCard.vue`.
+  7. **API** (`api.ts`): Update `getPortfolioStats` to accept optional `{ownerId?, groupId?}` params and append as query string.
+  8. **i18n**: Add 5 keys each for en and de (`portfolio.filter.allGroups`, `portfolio.filter.ownerAll`, `portfolio.closedThisWeek`, `portfolio.avgCycle`, `portfolio.avgCycleHours`).
+  9. **E2E contract**: Add `portfolio.filter_group_select` and `portfolio.throughput_stat` selectors; run `make e2e-contract`.
+  10. **E2E test** (`portfolio_test.go`): Fix CSV content-type prefix check; add group-filter subtest; add throughput field presence assertion.
+- Key files:
+  - `ticketing-system/openapi.yaml`
+  - `ticketing-system/backend/migrations/021_portfolio_indexes.sql`
+  - `ticketing-system/backend/internal/store/sql/13_portfolio.go.templ`
+  - `ticketing-system/backend/internal/store/portfolio.go`
+  - `ticketing-system/backend/internal/httpapi/handlers.go`, `handlers_test.go`, `map.go`
+  - `ticketing-system/frontend/src/views/PortfolioDashboard.vue`
+  - `ticketing-system/frontend/src/components/app/portfolio/ProjectHealthCard.vue`
+  - `ticketing-system/frontend/src/lib/api.ts`, `i18n.ts`
+  - `ticketing-system/backend/e2e/contracts/frontend_contract.source.json`
+  - `ticketing-system/backend/e2e/portfolio_test.go`
 - Acceptance criteria:
-  - Supports at least 50 projects without timing out.
-  - Drill-down from portfolio KPI to project/ticket details.
-  - Snapshot export endpoint for weekly leadership reporting.
+  - Portfolio query stays under 200ms for 50 projects (verified by E2E timing assertion or manual test).
+  - `weeklyThroughput` and `avgCycleTimeHours` populated for each project entry.
+  - Group filter returns only projects in that group; owner filter returns only projects where user is a member.
+  - Snapshot export (existing `?format=csv`) includes the two new fields.
+  - E2E suite remains green via `make -C ticketing-system e2e`.
+- Validation:
+  - `make generate` — no errors
+  - `go build ./...` — compiles
+  - `npx tsc --noEmit` — types check
+  - `make e2e-frontend-build` — frontend builds
 
 ### TKT-022: Board UI Clarity and Density Refresh — **HIGH PRIORITY**
 - Priority: `P0`
@@ -342,7 +369,7 @@ Source: `.documentation/feature_roadmap.md`
 
 ### TKT-025: Sprint Lifecycle Management (Start, Complete, Ticket Rollover)
 - Priority: `P1`
-- Status: **Open**
+- Status: **Done** (March 4, 2026)
 - Source: Sprint management UX review (February 23, 2026)
 - Context: Sprints exist (TKT-018) but are static — create-only with no lifecycle. Users need to start sprints, complete them, and roll incomplete tickets to the next sprint. This is critical for iterative planning workflows.
 - Scope:
@@ -384,3 +411,232 @@ Source: `.documentation/feature_roadmap.md`
   - `npx tsc --noEmit` — types check
   - `make e2e-frontend-build` — frontend builds
   - Manual: create sprint → start it → add tickets → complete with rollover → verify next sprint received moved tickets
+
+### TKT-026: RBAC / Admin Audit Trail
+- Priority: `P1`
+- Status: **Done** (March 5, 2026)
+- Source: Security and compliance review
+- Context: Admin actions (project creation/deletion, group management, webhook configuration, user creation) had no audit trail. Needed an immutable, queryable log for compliance and incident review.
+- What shipped:
+  - **Migration** (`022_audit_log.sql`): `audit_log` table with actor_id, actor_name, action, resource_type, resource_id, resource_name, project_id (nullable FK), details (jsonb), created_at. Indexes on actor_id, project_id, resource_type, created_at DESC.
+  - **SQL templates** (`16_audit_log.go.templ`): `audit_log_insert`, `audit_log_list` (nullable filter params via `$1::uuid IS NULL OR field = $1`), `audit_log_count`.
+  - **Store** (`store/audit_log.go`): `AuditLogEntry`, `AuditLogCreateInput`, `AuditLogFilter` types; `CreateAuditLog`, `ListAuditLog`, `scanAuditLogEntry`.
+  - **OpenAPI**: `GET /admin/audit-log` endpoint (admin-only, limit/offset/projectId/resourceType/actorId filter params). `AuditLogEntry` and `AuditLogListResponse` schemas.
+  - **Handler** (`handlers_audit.go`): `recordAudit()` fire-and-forget helper. `ListAuditLog` handler.
+  - **Instrumented actions**: project.created, project.deleted, group.created, group.deleted, project_group.added, project_group.updated, webhook.created, webhook.deleted, users.synced, user.created, ticket.deleted.
+  - **Frontend**: `listAuditLog` in api.ts. `AuditLogEntry`/`AuditLogListResponse` type exports. `loadAuditLog` action + state in admin.ts. "Audit Log" tab in SettingsPage.vue with table (time, actor, action, resource) and load-more button.
+  - **i18n**: 10 keys en + de (settings.tab.audit, settings.audit.*).
+  - **E2E contract**: 4 new selectors (settings.audit_tab, settings.audit_view, settings.audit_table, settings.audit_load_more). 174 total selectors.
+  - **E2E tests** (`audit_log_test.go`): API test verifies project.created entry is recorded; viewer 403 test; UI test verifies audit tab and view render.
+- Key files:
+  - `migrations/022_audit_log.sql`
+  - `store/sql/16_audit_log.go.templ`
+  - `store/audit_log.go`
+  - `openapi.yaml`
+  - `handlers_audit.go`, `handlers.go`, `handlers_test.go`, `types.go`, `map.go`
+  - `frontend/src/lib/api.ts`, `frontend/src/stores/admin.ts`
+  - `frontend/src/views/SettingsPage.vue`, `frontend/src/lib/i18n.ts`
+  - `e2e/contracts/frontend_contract.source.json`, `e2e/audit_log_test.go`
+
+### TKT-027: Rule-Based Automation Engine
+- Priority: `P2`
+- Status: **Done** (March 5, 2026)
+- Source: Feature roadmap item 15 (March 5, 2026)
+- Context: Teams do repetitive triage and handoff work manually — moving a ticket to "Done" should auto-notify QA, a bug with "urgent" priority should auto-assign a specific group, a stale ticket should auto-comment. The existing webhook system handles external integrations; this feature handles internal automated reactions to ticket events within the system itself.
+
+#### Core Model
+
+An **automation rule** belongs to a project and has:
+- **trigger**: an event + optional condition (e.g. `ticket.state_changed` + `toState = "Done"`)
+- **actions**: ordered list of internal operations to execute
+- **enabled** flag
+- **execution_count** and **last_executed_at** for monitoring
+
+**Triggers** (event + optional field condition):
+| Event key | Description |
+|-----------|-------------|
+| `ticket.created` | Any new ticket |
+| `ticket.state_changed` | State transition — supports `fromState` and/or `toState` condition |
+| `ticket.priority_changed` | Priority transition — supports `toPriority` condition |
+| `ticket.assigned` | Assignee set or changed |
+| `ticket.unassigned` | Assignee cleared |
+| `ticket.type_changed` | Type changed (bug/feature/task/incident) |
+
+Trigger conditions are optional key-value string maps (e.g. `{"toState": "<state-id>", "toPriority": "urgent"}`). Empty condition = match all.
+
+**Actions** (executed in order, failures do not block subsequent actions):
+| Action type | Parameters |
+|-------------|------------|
+| `set_state` | `stateId: uuid` |
+| `set_assignee` | `assigneeId: uuid` |
+| `set_priority` | `priority: string` |
+| `add_comment` | `body: string` (supports `{{ticket.key}}`, `{{ticket.title}}`, `{{actor.name}}` template vars) |
+| `call_webhook` | `webhookId: uuid` (re-uses existing webhook infrastructure) |
+
+#### Scope
+
+**Migration** (`023_automation_rules.sql`):
+```sql
+CREATE TABLE automation_rules (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  enabled bool NOT NULL DEFAULT true,
+  trigger_event text NOT NULL,
+  trigger_conditions jsonb NOT NULL DEFAULT '{}',
+  actions jsonb NOT NULL DEFAULT '[]',
+  execution_count int NOT NULL DEFAULT 0,
+  last_executed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX automation_rules_project_id_idx ON automation_rules(project_id) WHERE enabled = true;
+```
+
+**Execution log** (`023_automation_rules.sql` continued):
+```sql
+CREATE TABLE automation_executions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_id uuid NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+  ticket_id uuid NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  trigger_event text NOT NULL,
+  actions_run jsonb NOT NULL DEFAULT '[]',  -- [{type, params, success, error}]
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX automation_executions_rule_id_idx ON automation_executions(rule_id);
+CREATE INDEX automation_executions_ticket_id_idx ON automation_executions(ticket_id);
+```
+
+**SQL templates** (`17_automation.go.templ`):
+- `automation_rules_list` — list by project_id (all, not just enabled — for settings UI)
+- `automation_rules_list_enabled` — list by project_id WHERE enabled = true (for engine)
+- `automation_rules_get` — by id + project_id
+- `automation_rules_insert`
+- `automation_rules_update`
+- `automation_rules_delete`
+- `automation_rules_bump_stats` — increment execution_count, set last_executed_at
+- `automation_executions_insert`
+- `automation_executions_list` — by rule_id, limit 50
+
+**Store** (`store/automation.go`):
+```go
+type AutomationRule struct {
+    ID                uuid.UUID
+    ProjectID         uuid.UUID
+    Name              string
+    Enabled           bool
+    TriggerEvent      string
+    TriggerConditions map[string]string
+    Actions           []AutomationAction
+    ExecutionCount    int
+    LastExecutedAt    *time.Time
+    CreatedAt         time.Time
+    UpdatedAt         time.Time
+}
+type AutomationAction struct {
+    Type   string         // set_state | set_assignee | set_priority | add_comment | call_webhook
+    Params map[string]string
+}
+type AutomationExecution struct {
+    ID           uuid.UUID
+    RuleID       uuid.UUID
+    TicketID     uuid.UUID
+    TriggerEvent string
+    ActionsRun   []AutomationActionResult
+    CreatedAt    time.Time
+}
+type AutomationActionResult struct {
+    Type    string
+    Params  map[string]string
+    Success bool
+    Error   string
+}
+```
+Methods: `ListAutomationRules`, `ListEnabledAutomationRules`, `GetAutomationRule`, `CreateAutomationRule`, `UpdateAutomationRule`, `DeleteAutomationRule`, `CreateAutomationExecution`, `ListAutomationExecutions`.
+
+**Automation Engine** (`internal/automation/engine.go`):
+- `Engine` struct holds store ref + webhook dispatcher ref.
+- `func (e *Engine) Run(ctx context.Context, projectID uuid.UUID, event string, ticket store.Ticket, extra map[string]string)` — called after ticket mutations.
+- Fetches enabled rules for the project, evaluates trigger conditions, executes matching rules' actions in order.
+- Each action is executed via a typed `actionExecutor` (interface). Failures are logged to `automation_executions` but don't abort subsequent actions.
+- Comment template expansion: replace `{{ticket.key}}`, `{{ticket.title}}`, `{{actor.name}}` with values from context.
+- Non-blocking: called with `go engine.Run(...)` from handlers (fire-and-forget, same pattern as audit log).
+
+**OpenAPI** (`openapi.yaml`):
+- `AutomationRule`, `AutomationRuleCreateRequest`, `AutomationRuleUpdateRequest`, `AutomationRuleListResponse` schemas.
+- `AutomationAction` schema (type + params map).
+- `AutomationExecution`, `AutomationExecutionListResponse` schemas.
+- Endpoints (all scoped under `/projects/{projectId}/automation/rules`):
+  - `GET /projects/{projectId}/automation/rules` → listAutomationRules
+  - `POST /projects/{projectId}/automation/rules` → createAutomationRule (admin/contributor)
+  - `GET /projects/{projectId}/automation/rules/{ruleId}` → getAutomationRule
+  - `PUT /projects/{projectId}/automation/rules/{ruleId}` → updateAutomationRule
+  - `DELETE /projects/{projectId}/automation/rules/{ruleId}` → deleteAutomationRule
+  - `GET /projects/{projectId}/automation/rules/{ruleId}/executions` → listAutomationRuleExecutions
+
+**Handler wiring** (`handlers_automation.go`):
+- Standard CRUD handlers.
+- `Engine.Run` called (goroutine) from `CreateTicket`, `UpdateTicket`, and `BulkTicketOperation` handlers after the mutation succeeds.
+- Engine is injected via `HandlerOptions`.
+
+**Frontend**:
+- `AutomationRulePage.vue` (or section in SettingsPage.vue under new "Automation" tab).
+- Rule list: name, trigger event badge, enabled toggle, execution count, last run time, edit/delete buttons.
+- Rule builder form:
+  - Name input.
+  - Trigger event select (dropdown of event keys with human labels).
+  - Trigger conditions: dynamic key-value inputs shown based on selected event (e.g., "To state" select populated from workflow states for `ticket.state_changed`).
+  - Actions list: add action button, each action has a type select + rendered param inputs (state select, priority select, user search, comment textarea, webhook select).
+  - Drag-to-reorder actions (or up/down buttons).
+  - Enabled toggle.
+  - Save / Cancel.
+- Execution history drawer per rule: last 50 executions with timestamp, ticket key, per-action success/error indicators.
+- API functions: `listAutomationRules`, `createAutomationRule`, `updateAutomationRule`, `deleteAutomationRule`, `listAutomationExecutions`.
+- Pinia store (`automation.ts`): rules list, selected rule, execution history, loading states.
+- i18n: ~20 keys en + de (settings.tab.automation, automation.rule.*, automation.action.*, automation.trigger.*).
+
+**Engine wiring in `main.go`/`server.go`**:
+- Construct `automation.Engine` and inject into `HandlerOptions`.
+
+**E2E contract selectors** (~8 new):
+- `settings.automation_tab`, `settings.automation_view`, `automation.rule_list`, `automation.rule_row`, `automation.add_rule_button`, `automation.rule_name_input`, `automation.rule_trigger_select`, `automation.rule_save_button`, `automation.execution_history`.
+
+**E2E tests** (`automation_rules_test.go`):
+- API: create rule → trigger ticket state change → verify execution logged via `/executions`.
+- API: disabled rule is not executed.
+- UI: create rule via settings, verify it appears in list, toggle enabled.
+
+#### Acceptance Criteria
+1. Admin/contributor can create, update, enable/disable, and delete automation rules per project.
+2. On `ticket.state_changed` to target state, matching enabled rules execute all actions in order.
+3. `set_state`, `set_assignee`, `set_priority`, `add_comment`, `call_webhook` all function correctly.
+4. Failed actions are recorded in execution log with error message; subsequent actions still run.
+5. Execution count and last_executed_at are updated after each rule fires.
+6. Execution history is queryable per rule via API (last 50).
+7. Rules with empty trigger conditions match all events of that type.
+8. Engine is non-blocking — ticket mutation response time is unaffected.
+9. All CRUD endpoints return correct HTTP status codes; delete is idempotent.
+10. Frontend rule builder accurately reflects available trigger events, conditions, and actions using live project data (workflow states, users, webhooks).
+
+#### Key Files
+- `migrations/023_automation_rules.sql`
+- `store/sql/17_automation.go.templ`
+- `store/automation.go`
+- `internal/automation/engine.go`
+- `openapi.yaml`
+- `handlers_automation.go`, `handlers.go` (Store interface + engine wiring), `handlers_test.go`, `types.go`, `map.go`
+- `frontend/src/lib/api.ts`
+- `frontend/src/stores/automation.ts`
+- `frontend/src/views/SettingsPage.vue` (new Automation tab)
+- `frontend/src/components/app/automation/RuleBuilder.vue` (new)
+- `frontend/src/lib/i18n.ts`
+- `e2e/contracts/frontend_contract.source.json`
+- `e2e/automation_rules_test.go`
+
+#### Validation Checklist
+- `make generate` — no errors
+- `go build ./...` — compiles
+- `npx tsc --noEmit` — types check
+- `go test ./internal/...` — passes
+- `make e2e-contract` — contract regenerates
+- Manual: create rule → trigger → verify ticket updated + execution log entry visible in UI

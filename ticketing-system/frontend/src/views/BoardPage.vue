@@ -4,10 +4,12 @@ import { useRoute, useRouter } from "vue-router";
 import BoardView from "@/components/app/BoardView.vue";
 import BoardToolbar from "@/components/app/board/BoardToolbar.vue";
 import BoardBulkActionBar from "@/components/app/board/BoardBulkActionBar.vue";
+import SprintSidebar from "@/components/app/board/SprintSidebar.vue";
 import NewTicketModal from "@/components/app/NewTicketModal.vue";
 import StoryModal from "@/components/app/StoryModal.vue";
 import TicketModal from "@/components/app/TicketModal.vue";
 import { useBoardStore } from "@/stores/board";
+import { useI18n } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/session";
 import { useAdminStore } from "@/stores/admin";
 import {
@@ -26,6 +28,7 @@ import type {
     BoardFilterPreset,
     DependencyRelationType,
     IncidentTimelineItem,
+    SprintCompleteRequest,
     TicketPriority,
     TicketIncidentSeverity,
     TicketResponse,
@@ -39,6 +42,7 @@ const sessionStore = useSessionStore();
 const adminStore = useAdminStore();
 const route = useRoute();
 const router = useRouter();
+const { t } = useI18n();
 
 const showNewTicket = ref(false);
 const showStoryModal = ref(false);
@@ -58,6 +62,7 @@ const bulkAction = ref<BulkTicketAction>("move_state");
 const bulkStateId = ref("");
 const bulkAssigneeId = ref("");
 const bulkPriority = ref<TicketPriority>("medium");
+const showSprintSidebar = ref(false);
 const bulkBusy = ref(false);
 const bulkMessage = ref("");
 const boardToolbarRef = ref<{ focusSearch: () => void } | null>(null);
@@ -182,6 +187,7 @@ const refreshBoard = async () => {
         await boardStore.loadStories(props.projectId);
         await boardStore.loadWebhooks(props.projectId);
         await boardStore.loadBoardFilterPresets(props.projectId);
+        await boardStore.loadSprints(props.projectId);
     } catch (err) {
         handleAuthError(err);
     }
@@ -445,6 +451,25 @@ const removeFromSprintHandler = async (sprintId: string) => {
     }
 };
 
+const startSprintHandler = async (sprintId: string) => {
+    if (!props.projectId) return;
+    try {
+        await boardStore.startSprint(props.projectId, sprintId);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
+const completeSprintHandler = async (sprintId: string, payload?: SprintCompleteRequest) => {
+    if (!props.projectId) return;
+    try {
+        await boardStore.completeSprint(props.projectId, sprintId, payload);
+        await boardStore.loadSprints(props.projectId);
+    } catch (err) {
+        handleAuthError(err);
+    }
+};
+
 const openTicket = async (ticket: TicketResponse) => {
     selectedTicket.value = ticket;
     ticketEditor.value = {
@@ -491,9 +516,7 @@ const openTicket = async (ticket: TicketResponse) => {
                     rootTicketId: ticket.id,
                     depth: 2,
                 });
-                if (boardStore.sprints.length === 0) {
-                    await boardStore.loadSprints(props.projectId);
-                }
+                // sprints are loaded eagerly in refreshBoard
             }
         } catch (err) {
             handleAuthError(err);
@@ -1463,6 +1486,16 @@ watch(
         @share-preset="sharePreset"
     />
 
+    <div class="flex items-center justify-end px-1 py-1">
+        <button
+            data-testid="board.sprint-sidebar-toggle"
+            class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+            @click="showSprintSidebar = !showSprintSidebar"
+        >
+            {{ t("sprint.sidebar.toggle") }}
+        </button>
+    </div>
+
     <section
         v-if="errorMessage"
         class="rounded-2xl border border-border bg-secondary/60 px-4 py-3 text-sm"
@@ -1470,6 +1503,8 @@ watch(
         {{ errorMessage }}
     </section>
 
+    <div class="flex flex-1 min-h-0">
+    <div class="flex-1 min-w-0 overflow-auto">
     <BoardView
         :loading="loading"
         :states="states"
@@ -1521,6 +1556,17 @@ watch(
         @update:bulk-priority="bulkPriority = $event"
         @apply="applyBulkAction"
     />
+    </div>
+    <SprintSidebar
+        v-if="showSprintSidebar"
+        :sprints="boardStore.sprints"
+        :loading="boardStore.sprintsLoading"
+        :project-id="props.projectId"
+        :ticket-key-map="Object.fromEntries(boardStore.tickets.map(t => [t.id, t.key]))"
+        @start-sprint="startSprintHandler"
+        @complete-sprint="completeSprintHandler"
+    />
+    </div>
 
     <NewTicketModal
         v-if="canEditTickets"

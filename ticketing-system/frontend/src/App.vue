@@ -52,12 +52,15 @@ const activeProjectLabel = computed(() =>
         ? `${activeProject.value.key} · ${activeProject.value.name}`
         : "Ticketing Workspace",
 );
-const activePage = computed<"board" | "dashboard" | "settings">(() =>
-    route.name === "settings"
-        ? "settings"
-        : route.name === "dashboard"
-          ? "dashboard"
-          : "board",
+const activePage = computed<"board" | "dashboard" | "settings" | "portfolio">(
+    () =>
+        route.name === "settings"
+            ? "settings"
+            : route.name === "dashboard"
+              ? "dashboard"
+              : route.name === "portfolio"
+                ? "portfolio"
+                : "board",
 );
 
 const canLogin = computed(
@@ -300,13 +303,18 @@ const performLogout = async () => {
 
 const selectProject = async (projectId: string) => {
     if (!projectId) return;
+    const page = activePage.value === "portfolio" ? "board" : activePage.value;
     await router.push({
-        name: activePage.value,
+        name: page,
         params: { projectId },
     });
 };
 
-const setPage = async (page: "board" | "dashboard" | "settings") => {
+const setPage = async (page: "board" | "dashboard" | "settings" | "portfolio") => {
+    if (page === "portfolio") {
+        await router.push({ name: "portfolio" });
+        return;
+    }
     const targetProjectId = activeProjectId.value || projects.value[0]?.id;
     if (!targetProjectId) {
         await adminStore.loadProjects();

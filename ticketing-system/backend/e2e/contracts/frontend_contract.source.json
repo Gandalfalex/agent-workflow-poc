@@ -20,6 +20,9 @@
       "params": [
         "projectId"
       ]
+    },
+    "portfolio": {
+      "routeName": "portfolio"
     }
   },
   "selectorKeys": {
@@ -28,6 +31,7 @@
     "login.password_input": "login.password-input",
     "login.submit_button": "login.submit-button",
     "login.error": "login.error",
+    "nav.portfolio_tab": "nav.portfolio-tab",
     "nav.board_tab": "nav.board-tab",
     "nav.settings_tab": "nav.settings-tab",
     "nav.project_select": "nav.project-select",
@@ -165,10 +169,43 @@
     "ticket.add_to_sprint_select": "ticket.add-to-sprint-select",
     "ticket.add_to_sprint_button": "ticket.add-to-sprint-button",
     "ticket.remove_from_sprint_button": "ticket.remove-from-sprint-button",
+    "board.sprint_sidebar": "board.sprint-sidebar",
+    "board.sprint_sidebar_toggle": "board.sprint-sidebar-toggle",
+    "sprint.active_section": "sprint.active-section",
+    "sprint.planned_section": "sprint.planned-section",
+    "sprint.completed_section": "sprint.completed-section",
+    "sprint.start_button": "sprint.start-button",
+    "sprint.complete_button": "sprint.complete-button",
+    "sprint.complete_dialog": "sprint.complete-dialog",
+    "sprint.complete_ticket_checkbox": "sprint.complete-ticket-checkbox",
+    "sprint.complete_confirm_button": "sprint.complete-confirm-button",
+    "sprint.complete_cancel_button": "sprint.complete-cancel-button",
+    "sprint.select_all_button": "sprint.select-all-button",
+    "sprint.deselect_all_button": "sprint.deselect-all-button",
     "settings.sprints_tab": "settings.sprints-tab",
     "settings.sprints_view": "settings.sprints-view",
     "settings.sprint_duration_input": "settings.sprint_duration_input",
-    "settings.capacity_table": "settings.capacity_table"
+    "settings.capacity_table": "settings.capacity_table",
+    "portfolio.page": "portfolio.page",
+    "portfolio.stats_total": "portfolio.stats-total",
+    "portfolio.stats_open": "portfolio.stats-open",
+    "portfolio.stats_blocked": "portfolio.stats-blocked",
+    "portfolio.stats_at_risk": "portfolio.stats-at-risk",
+    "portfolio.project_card": "portfolio.project-card",
+    "portfolio.project_health": "portfolio.project-health",
+    "portfolio.export_button": "portfolio.export-button",
+    "portfolio.filter_group_select": "portfolio.filter-group-select",
+    "portfolio.throughput_stat": "portfolio.throughput-stat",
+    "settings.audit_tab": "settings.audit-tab",
+    "settings.audit_view": "settings.audit-view",
+    "settings.audit_table": "settings.audit-table",
+    "settings.audit_load_more": "settings.audit-load-more",
+    "settings.automation_tab": "settings.automation_tab",
+    "settings.automation_view": "settings.automation_view",
+    "automation.rule_list": "automation.rule_list",
+    "automation.add_rule_button": "automation.add_rule_button",
+    "automation.rule_name_input": "automation.rule_name_input",
+    "automation.rule_save_button": "automation.rule_save_button"
   },
   "flows": {
     "smoke_login_screen": {

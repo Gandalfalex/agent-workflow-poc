@@ -6,7 +6,7 @@ import { useI18n } from "@/lib/i18n";
 
 const props = defineProps<{
     activeProjectLabel: string;
-    activePage: "board" | "dashboard" | "settings";
+    activePage: "board" | "dashboard" | "settings" | "portfolio";
     currentUserName: string;
     projectLoading: boolean;
     projects: Project[];
@@ -21,7 +21,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    (e: "set-page", value: "board" | "dashboard" | "settings"): void;
+    (e: "set-page", value: "board" | "dashboard" | "settings" | "portfolio"): void;
     (e: "select-project", value: string): void;
     (e: "logout"): void;
     (e: "refresh"): void;
@@ -75,6 +75,18 @@ const closeInbox = () => {
             <nav
                 class="flex items-center rounded-xl border border-border bg-card/60 p-1"
             >
+                <button
+                    data-testid="nav.portfolio-tab"
+                    class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+                    :class="
+                        props.activePage === 'portfolio'
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                    "
+                    @click="emit('set-page', 'portfolio')"
+                >
+                    {{ t("nav.portfolio") }}
+                </button>
                 <button
                     data-testid="nav.board-tab"
                     class="rounded-lg px-3 py-1.5 text-xs font-semibold transition"
@@ -163,29 +175,29 @@ const closeInbox = () => {
                 </button>
                 <div
                     v-if="showInbox"
-                    class="pointer-events-none fixed inset-0 z-[30] bg-slate-950/45 backdrop-blur-[1px]"
+                    class="pointer-events-none fixed inset-0 z-[30] bg-background/60 backdrop-blur-[1px]"
                     @click="closeInbox"
                 ></div>
                 <div
                     v-if="showInbox"
                     data-testid="nav.inbox-panel"
-                    class="absolute right-0 z-[100] mt-2 w-[26rem] rounded-2xl border border-slate-700/80 bg-slate-950 p-3 text-slate-100 shadow-[0_28px_70px_-22px_rgba(0,0,0,0.9)] ring-1 ring-white/10"
+                    class="absolute right-0 z-[100] mt-2 w-[26rem] rounded-2xl border border-border bg-card p-3 text-foreground shadow-[0_28px_70px_-22px_rgba(0,0,0,0.5)] ring-1 ring-border/30"
                     @click.stop
                 >
                     <div class="mb-2 flex items-center justify-between">
-                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                        <p class="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                             {{ t("header.notifications") }}
                         </p>
                         <div class="flex items-center gap-1.5">
                             <button
                                 data-testid="nav.inbox-mark-all-button"
-                                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-200 transition hover:border-slate-500 hover:text-white"
+                                class="rounded border border-border bg-secondary px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
                                 @click="emit('mark-all-notifications-read')"
                             >
                                 {{ t("header.markAllRead") }}
                             </button>
                             <button
-                                class="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-200 transition hover:border-slate-500 hover:text-white"
+                                class="rounded border border-border bg-secondary px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
                                 @click="closeInbox"
                             >
                                 {{ t("header.close") }}
@@ -194,7 +206,7 @@ const closeInbox = () => {
                     </div>
 
                     <div class="mb-2 grid grid-cols-2 gap-2">
-                        <label class="flex items-center gap-2 text-[11px] text-slate-300">
+                        <label class="flex items-center gap-2 text-[11px] text-muted-foreground">
                             <input
                                 data-testid="nav.inbox-pref-mention"
                                 type="checkbox"
@@ -208,7 +220,7 @@ const closeInbox = () => {
                             />
                             {{ t("header.mentions") }}
                         </label>
-                        <label class="flex items-center gap-2 text-[11px] text-slate-300">
+                        <label class="flex items-center gap-2 text-[11px] text-muted-foreground">
                             <input
                                 data-testid="nav.inbox-pref-assignment"
                                 type="checkbox"
@@ -226,13 +238,13 @@ const closeInbox = () => {
 
                     <div
                         v-if="props.notificationsLoading"
-                        class="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300"
+                        class="rounded border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground"
                     >
                         {{ t("common.loading") }}
                     </div>
                     <div
                         v-else-if="props.notifications.length === 0"
-                        class="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300"
+                        class="rounded border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground"
                     >
                         {{ t("header.noNotifications") }}
                     </div>
@@ -244,18 +256,18 @@ const closeInbox = () => {
                             class="rounded-xl border px-2.5 py-2 text-xs"
                             :class="
                                 item.readAt
-                                    ? 'border-slate-700 bg-slate-900'
-                                    : 'border-blue-400/50 bg-blue-500/10'
+                                    ? 'border-border bg-secondary'
+                                    : 'border-ring/30 bg-ring/10'
                             "
                         >
-                            <p class="font-medium text-slate-100">{{ item.message }}</p>
-                            <p class="mt-0.5 text-[10px] text-slate-400">
+                            <p class="font-medium text-foreground">{{ item.message }}</p>
+                            <p class="mt-0.5 text-[10px] text-muted-foreground">
                                 {{ item.ticketKey }} · {{ item.ticketTitle }}
                             </p>
                             <button
                                 v-if="!item.readAt"
                                 data-testid="nav.inbox-item-read-button"
-                                class="mt-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-200 transition hover:border-slate-500 hover:text-white"
+                                class="mt-1 rounded border border-border bg-background px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground transition hover:border-foreground/40 hover:text-foreground"
                                 @click="emit('mark-notification-read', item.id)"
                             >
                                 {{ t("header.markRead") }}

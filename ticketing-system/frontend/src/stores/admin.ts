@@ -6,12 +6,14 @@ import {
   createProject,
   deleteGroupMember,
   deleteProjectGroup,
+  listAuditLog,
   listGroupMembers,
   listGroups,
   listProjectGroups,
   listProjects,
   listUsers,
   updateProjectGroup,
+  type AuditLogEntry,
   type Group,
   type GroupMember,
   type Project,
@@ -39,6 +41,10 @@ export const useAdminStore = defineStore("admin", {
     projectGroupError: "",
     groupMemberError: "",
     userSearchError: "",
+    auditLog: [] as AuditLogEntry[],
+    auditLogTotal: 0,
+    auditLogStatus: "idle" as LoadingState,
+    auditLogError: "",
   }),
   actions: {
     reset() {
@@ -57,6 +63,10 @@ export const useAdminStore = defineStore("admin", {
       this.projectGroupError = "";
       this.groupMemberError = "";
       this.userSearchError = "";
+      this.auditLog = [];
+      this.auditLogTotal = 0;
+      this.auditLogStatus = "idle";
+      this.auditLogError = "";
     },
     clearGroupMembers() {
       this.groupMembers = [];
@@ -237,6 +247,23 @@ export const useAdminStore = defineStore("admin", {
         this.groupMemberStatus = "error";
         this.groupMemberError = "Unable to remove group member.";
         throw err;
+      }
+    },
+    async loadAuditLog(params?: { offset?: number; limit?: number }) {
+      this.auditLogStatus = "loading";
+      this.auditLogError = "";
+      try {
+        const res = await listAuditLog({ limit: 50, ...params });
+        if (params?.offset && params.offset > 0) {
+          this.auditLog = [...this.auditLog, ...res.items];
+        } else {
+          this.auditLog = res.items;
+        }
+        this.auditLogTotal = res.total;
+        this.auditLogStatus = "idle";
+      } catch {
+        this.auditLogStatus = "error";
+        this.auditLogError = "Unable to load audit log.";
       }
     },
   },

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ticketing-system/backend/internal/auth"
+	"ticketing-system/backend/internal/automation"
 	"ticketing-system/backend/internal/blob"
 	"ticketing-system/backend/internal/store"
 	"ticketing-system/backend/internal/webhook"
@@ -66,11 +67,18 @@ type Store interface {
 	UpdateTicket(ctx context.Context, id uuid.UUID, input store.TicketUpdateInput) (store.Ticket, error)
 	DeleteTicket(ctx context.Context, id uuid.UUID) error
 	GetProjectStats(ctx context.Context, projectID uuid.UUID) (store.ProjectStats, error)
+	GetPortfolioStats(ctx context.Context, userID uuid.UUID, filter store.PortfolioFilter) (store.PortfolioStats, error)
+	CreateAuditLog(ctx context.Context, input store.AuditLogCreateInput) error
+	ListAuditLog(ctx context.Context, filter store.AuditLogFilter) ([]store.AuditLogEntry, int, error)
 	ListSprints(ctx context.Context, projectID uuid.UUID) ([]store.Sprint, error)
 	CreateSprint(ctx context.Context, projectID uuid.UUID, input store.SprintCreateInput) (store.Sprint, error)
 	GetSprint(ctx context.Context, projectID, sprintID uuid.UUID) (store.Sprint, error)
 	AddSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (store.Sprint, error)
 	RemoveSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (store.Sprint, error)
+	StartSprint(ctx context.Context, projectID, sprintID uuid.UUID) (store.Sprint, error)
+	CompleteSprint(ctx context.Context, projectID, sprintID uuid.UUID, moveTicketIDs []uuid.UUID) (store.Sprint, error)
+	GetActiveSprint(ctx context.Context, projectID uuid.UUID) (store.Sprint, error)
+	GetNextPlannedSprint(ctx context.Context, projectID uuid.UUID) (store.Sprint, error)
 	ListCapacitySettings(ctx context.Context, projectID uuid.UUID) ([]store.CapacitySetting, error)
 	ReplaceCapacitySettings(ctx context.Context, projectID uuid.UUID, inputs []store.CapacitySettingInput) ([]store.CapacitySetting, error)
 	GetSprintForecastSummary(ctx context.Context, projectID uuid.UUID, sprintID *uuid.UUID, iterations int) (store.SprintForecastSummary, error)
@@ -111,6 +119,12 @@ type Store interface {
 	ListTimeEntries(ctx context.Context, ticketID uuid.UUID) ([]store.TimeEntry, int, error)
 	CreateTimeEntry(ctx context.Context, ticketID uuid.UUID, input store.TimeEntryCreateInput) (store.TimeEntry, error)
 	DeleteTimeEntry(ctx context.Context, id uuid.UUID) error
+	ListAutomationRules(ctx context.Context, projectID uuid.UUID) ([]store.AutomationRule, error)
+	GetAutomationRule(ctx context.Context, id, projectID uuid.UUID) (store.AutomationRule, error)
+	CreateAutomationRule(ctx context.Context, projectID uuid.UUID, input store.AutomationRuleCreateInput) (store.AutomationRule, error)
+	UpdateAutomationRule(ctx context.Context, id, projectID uuid.UUID, input store.AutomationRuleUpdateInput) (store.AutomationRule, error)
+	DeleteAutomationRule(ctx context.Context, id, projectID uuid.UUID) error
+	ListAutomationExecutions(ctx context.Context, ruleID uuid.UUID) ([]store.AutomationExecution, error)
 }
 
 type Authenticator interface {
@@ -130,6 +144,7 @@ type API struct {
 	store                     Store
 	auth                      Authenticator
 	webhooks                  WebhookDispatcher
+	engine                    automation.EngineRunner
 	live                      *projectLiveHub
 	blob                      blob.ObjectStore
 	maxUploadSize             int64
@@ -184,6 +199,7 @@ func NewHandler(st Store, authClient Authenticator, webhookDispatcher WebhookDis
 		store:                     st,
 		auth:                      authClient,
 		webhooks:                  webhookDispatcher,
+		engine:                    opts.AutomationEngine,
 		live:                      newProjectLiveHub(),
 		blob:                      opts.BlobStore,
 		maxUploadSize:             maxUpload,
@@ -211,6 +227,7 @@ type HandlerOptions struct {
 	DefaultProjectDescription *string
 	BlobStore                 blob.ObjectStore
 	MaxUploadSize             int64
+	AutomationEngine          automation.EngineRunner
 }
 
 func (h *API) projectFor(projectID openapi_types.UUID) Project {
@@ -434,6 +451,11 @@ func (h *API) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "project.created", "project", project.ID.String(), project.Key+":"+project.Name, nil, nil)
+		}
+	}
 	writeJSON(w, http.StatusCreated, mapProject(project))
 }
 
@@ -477,8 +499,16 @@ func (h *API) DeleteProject(w http.ResponseWriter, r *http.Request, projectId op
 		return
 	}
 	projectID := uuid.UUID(projectId)
+	proj, projErr := h.store.GetProject(r.Context(), projectID)
 	if err := h.store.DeleteProject(r.Context(), projectID); handleDeleteError(w, r, err, "project", "project_delete") {
 		return
+	}
+	if projErr == nil {
+		if actor, ok := authUser(r.Context()); ok {
+			if id, err := uuid.Parse(actor.ID); err == nil {
+				h.recordAudit(r.Context(), id, actor.Name, "project.deleted", "project", projectID.String(), proj.Key+":"+proj.Name, nil, nil)
+			}
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -511,6 +541,11 @@ func (h *API) AddProjectGroup(w http.ResponseWriter, r *http.Request, projectId 
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "project_group.added", "project_group", groupID.String(), groupID.String(), &projectID, map[string]any{"role": string(req.Role)})
+		}
+	}
 	writeJSON(w, http.StatusCreated, mapProjectGroup(item))
 }
 
@@ -530,6 +565,11 @@ func (h *API) UpdateProjectGroup(w http.ResponseWriter, r *http.Request, project
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "project_group.updated", "project_group", groupUUID.String(), groupUUID.String(), &projectID, map[string]any{"role": string(req.Role)})
+		}
+	}
 	writeJSON(w, http.StatusOK, mapProjectGroup(item))
 }
 
@@ -574,6 +614,11 @@ func (h *API) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "group.created", "group", group.ID.String(), group.Name, nil, nil)
+		}
+	}
 	writeJSON(w, http.StatusCreated, mapGroup(group))
 }
 
@@ -612,8 +657,14 @@ func (h *API) DeleteGroup(w http.ResponseWriter, r *http.Request, groupId openap
 		return
 	}
 	groupID := uuid.UUID(groupId)
+	existing, _ := h.store.GetGroup(r.Context(), groupID)
 	if err := h.store.DeleteGroup(r.Context(), groupID); handleDeleteError(w, r, err, "group", "group_delete") {
 		return
+	}
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "group.deleted", "group", groupID.String(), existing.Name, nil, nil)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -815,6 +866,10 @@ func (h *API) CreateTicket(w http.ResponseWriter, r *http.Request, projectId ope
 	h.publishProjectLiveEvent(projectUUID, projectEventActivityChanged, map[string]any{
 		"reason": "ticket.created",
 	})
+	if h.engine != nil {
+		extra := map[string]string{"priority": ticket.Priority}
+		go h.engine.Fire(r.Context(), projectUUID, "ticket.created", ticket, extra)
+	}
 
 	writeJSON(w, http.StatusCreated, response)
 }
@@ -1176,6 +1231,19 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 		"reason": "ticket.updated",
 		"id":     ticket.ID.String(),
 	})
+	if h.engine != nil {
+		extra := map[string]string{"priority": ticket.Priority}
+		event := "ticket.updated"
+		if previous != nil && previous.StateID != ticket.StateID {
+			extra["fromState"] = previous.StateID.String()
+			extra["toState"] = ticket.StateID.String()
+			event = "ticket.state_changed"
+		}
+		if previous != nil && previous.Priority != ticket.Priority {
+			extra["toPriority"] = ticket.Priority
+		}
+		go h.engine.Fire(r.Context(), projectUUID, event, ticket, extra)
+	}
 
 	writeJSON(w, http.StatusOK, response)
 }
@@ -1210,6 +1278,11 @@ func (h *API) DeleteTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 			"reason": "ticket.deleted",
 			"id":     deletedTicket.ID.String(),
 		})
+		if actor, ok := authUser(r.Context()); ok {
+			if id, err := uuid.Parse(actor.ID); err == nil {
+				h.recordAudit(r.Context(), id, actor.Name, "ticket.deleted", "ticket", deletedTicket.ID.String(), deletedTicket.Key+":"+deletedTicket.Title, &projectUUID, nil)
+			}
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -1309,6 +1382,11 @@ func (h *API) CreateWebhook(w http.ResponseWriter, r *http.Request, projectId op
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "webhook.created", "webhook", hook.ID.String(), req.Url, &projectUUID, map[string]any{"events": req.Events})
+		}
+	}
 	writeJSON(w, http.StatusCreated, mapWebhook(hook, projectId))
 }
 
@@ -1362,10 +1440,16 @@ func (h *API) DeleteWebhook(w http.ResponseWriter, r *http.Request, projectId op
 		return
 	}
 	webhookID := uuid.UUID(id)
+	existing, _ := h.store.GetWebhook(r.Context(), projectUUID, webhookID)
 	if err := h.store.DeleteWebhook(r.Context(), projectUUID, webhookID); handleDeleteError(w, r, err, "webhook", "webhook_delete") {
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if aid, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), aid, actor.Name, "webhook.deleted", "webhook", webhookID.String(), existing.URL, &projectUUID, nil)
+		}
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1750,6 +1834,11 @@ func (h *API) SyncUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "users.synced", "users", "sync", "keycloak sync", nil, map[string]any{"synced": synced, "total": len(keycloakUsers)})
+		}
+	}
 	writeJSON(w, http.StatusOK, SyncUsersResponse{
 		Synced: synced,
 		Total:  len(keycloakUsers),
@@ -1814,6 +1903,11 @@ func (h *API) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if actor, ok := authUser(r.Context()); ok {
+		if id, err := uuid.Parse(actor.ID); err == nil {
+			h.recordAudit(r.Context(), id, actor.Name, "user.created", "user", userID.String(), name, nil, map[string]any{"email": createdEmail})
+		}
+	}
 	var emailValue openapi_types.Email
 	emailValue = openapi_types.Email(createdEmail)
 	writeJSON(w, http.StatusCreated, UserSummary{
@@ -2072,6 +2166,71 @@ func mapStringPtr[T ~string](value *T, mapper func(T) string) *string {
 	}
 	mapped := mapper(*value)
 	return &mapped
+}
+
+func (h *API) GetPortfolioStats(w http.ResponseWriter, r *http.Request, params GetPortfolioStatsParams) {
+	userID, err := h.currentUserID(r.Context())
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication required")
+		return
+	}
+
+	filter := store.PortfolioFilter{
+		OwnerID: parseOpenapiUUIDPtr(params.OwnerId),
+		GroupID: parseOpenapiUUIDPtr(params.GroupId),
+	}
+	stats, err := h.store.GetPortfolioStats(r.Context(), userID, filter)
+	if err != nil {
+		logRequestError(r, "portfolio_stats_failed", err)
+		writeError(w, http.StatusInternalServerError, "portfolio_stats_error", "Failed to load portfolio statistics")
+		return
+	}
+
+	if params.Format != nil && strings.ToLower(string(*params.Format)) == "csv" {
+		content, csvErr := renderPortfolioCSV(stats)
+		if csvErr != nil {
+			writeError(w, http.StatusInternalServerError, "portfolio_csv_error", "Failed to render portfolio export")
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="portfolio-stats.csv"`)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(content)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, mapPortfolioStats(stats))
+}
+
+func renderPortfolioCSV(stats store.PortfolioStats) ([]byte, error) {
+	buf := &bytes.Buffer{}
+	writer := csv.NewWriter(buf)
+	if err := writer.Write([]string{"projectKey", "projectName", "totalOpen", "totalClosed", "urgentOpen", "highOpen", "blockedOpen", "weeklyThroughput", "avgCycleTimeHours", "activeSprintName", "activeSprintRemaining"}); err != nil {
+		return nil, err
+	}
+	for _, p := range stats.Projects {
+		sprintName := ""
+		if p.ActiveSprintName != nil {
+			sprintName = *p.ActiveSprintName
+		}
+		if err := writer.Write([]string{
+			p.ProjectKey,
+			p.ProjectName,
+			fmt.Sprintf("%d", p.TotalOpen),
+			fmt.Sprintf("%d", p.TotalClosed),
+			fmt.Sprintf("%d", p.UrgentOpen),
+			fmt.Sprintf("%d", p.HighOpen),
+			fmt.Sprintf("%d", p.BlockedOpen),
+			fmt.Sprintf("%d", p.WeeklyThroughput),
+			fmt.Sprintf("%.2f", p.AvgCycleTimeHours),
+			sprintName,
+			fmt.Sprintf("%d", p.ActiveSprintRemaining),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	writer.Flush()
+	return buf.Bytes(), writer.Error()
 }
 
 func parseOpenapiUUIDPtr(id *openapi_types.UUID) *uuid.UUID {

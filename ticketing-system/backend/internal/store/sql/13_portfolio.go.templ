@@ -1,0 +1,239 @@
+{{define "portfolio_stats_by_user.sql"}}
+WITH accessible AS (
+  SELECT DISTINCT p.id, p.name, p.key
+  FROM projects p
+  WHERE EXISTS (
+    SELECT 1 FROM project_groups pg
+    JOIN group_memberships gm ON gm.group_id = pg.group_id
+    WHERE pg.project_id = p.id AND gm.user_id = $1
+  )
+),
+ticket_stats AS (
+  SELECT
+    t.project_id,
+    COUNT(*) FILTER (WHERE ws.is_closed = false)                        AS total_open,
+    COUNT(*) FILTER (WHERE ws.is_closed = true)                         AS total_closed,
+    COUNT(*) FILTER (WHERE ws.is_closed = false AND t.priority = 'urgent') AS urgent_open,
+    COUNT(*) FILTER (WHERE ws.is_closed = false AND t.priority = 'high')   AS high_open,
+    COUNT(*) FILTER (
+      WHERE ws.is_closed = false AND EXISTS (
+        SELECT 1 FROM ticket_dependencies td
+        JOIN tickets bt ON bt.id = td.from_ticket_id
+        JOIN workflow_states bws ON bws.id = bt.state_id
+        WHERE td.to_ticket_id = t.id AND bws.is_closed = false
+      )
+    ) AS blocked_open,
+    COUNT(*) FILTER (
+      WHERE ws.is_closed = true AND t.updated_at >= NOW() - INTERVAL '7 days'
+    )::int AS weekly_throughput,
+    COALESCE(
+      AVG(
+        EXTRACT(EPOCH FROM (t.updated_at - t.created_at)) / 3600.0
+      ) FILTER (
+        WHERE ws.is_closed = true
+          AND t.updated_at >= NOW() - INTERVAL '30 days'
+      ),
+      0
+    )::float AS avg_cycle_time_hours
+  FROM tickets t
+  JOIN workflow_states ws ON ws.id = t.state_id
+  GROUP BY t.project_id
+)
+SELECT
+  a.id,
+  a.name,
+  a.key,
+  COALESCE(ts.total_open,           0)::int   AS total_open,
+  COALESCE(ts.total_closed,         0)::int   AS total_closed,
+  COALESCE(ts.urgent_open,          0)::int   AS urgent_open,
+  COALESCE(ts.high_open,            0)::int   AS high_open,
+  COALESCE(ts.blocked_open,         0)::int   AS blocked_open,
+  COALESCE(ts.weekly_throughput,    0)::int   AS weekly_throughput,
+  COALESCE(ts.avg_cycle_time_hours, 0)::float AS avg_cycle_time_hours,
+  sp.sprint_name,
+  sp.sprint_end_date,
+  COALESCE(sp.sprint_committed, 0)::int  AS sprint_committed,
+  COALESCE(sp.sprint_remaining, 0)::int  AS sprint_remaining
+FROM accessible a
+LEFT JOIN ticket_stats ts ON ts.project_id = a.id
+LEFT JOIN LATERAL (
+  SELECT s.name AS sprint_name, s.end_date AS sprint_end_date,
+         COUNT(st.ticket_id)::int AS sprint_committed,
+         COUNT(st.ticket_id) FILTER (
+           WHERE EXISTS (
+             SELECT 1 FROM tickets t2
+             JOIN workflow_states ws2 ON ws2.id = t2.state_id
+             WHERE t2.id = st.ticket_id AND ws2.is_closed = false
+           )
+         )::int AS sprint_remaining
+  FROM sprints s
+  LEFT JOIN sprint_tickets st ON st.sprint_id = s.id
+  WHERE s.project_id = a.id AND s.status = 'active'
+  GROUP BY s.id
+  LIMIT 1
+) sp ON true
+ORDER BY a.name
+{{end}}
+
+{{define "portfolio_stats_by_group.sql"}}
+WITH accessible AS (
+  SELECT DISTINCT p.id, p.name, p.key
+  FROM projects p
+  WHERE EXISTS (
+    SELECT 1 FROM project_groups pg
+    JOIN group_memberships gm ON gm.group_id = pg.group_id
+    WHERE pg.project_id = p.id AND gm.user_id = $1
+  )
+  AND EXISTS (
+    SELECT 1 FROM project_groups pg2
+    WHERE pg2.project_id = p.id AND pg2.group_id = $2
+  )
+),
+ticket_stats AS (
+  SELECT
+    t.project_id,
+    COUNT(*) FILTER (WHERE ws.is_closed = false)                        AS total_open,
+    COUNT(*) FILTER (WHERE ws.is_closed = true)                         AS total_closed,
+    COUNT(*) FILTER (WHERE ws.is_closed = false AND t.priority = 'urgent') AS urgent_open,
+    COUNT(*) FILTER (WHERE ws.is_closed = false AND t.priority = 'high')   AS high_open,
+    COUNT(*) FILTER (
+      WHERE ws.is_closed = false AND EXISTS (
+        SELECT 1 FROM ticket_dependencies td
+        JOIN tickets bt ON bt.id = td.from_ticket_id
+        JOIN workflow_states bws ON bws.id = bt.state_id
+        WHERE td.to_ticket_id = t.id AND bws.is_closed = false
+      )
+    ) AS blocked_open,
+    COUNT(*) FILTER (
+      WHERE ws.is_closed = true AND t.updated_at >= NOW() - INTERVAL '7 days'
+    )::int AS weekly_throughput,
+    COALESCE(
+      AVG(
+        EXTRACT(EPOCH FROM (t.updated_at - t.created_at)) / 3600.0
+      ) FILTER (
+        WHERE ws.is_closed = true
+          AND t.updated_at >= NOW() - INTERVAL '30 days'
+      ),
+      0
+    )::float AS avg_cycle_time_hours
+  FROM tickets t
+  JOIN workflow_states ws ON ws.id = t.state_id
+  GROUP BY t.project_id
+)
+SELECT
+  a.id,
+  a.name,
+  a.key,
+  COALESCE(ts.total_open,           0)::int   AS total_open,
+  COALESCE(ts.total_closed,         0)::int   AS total_closed,
+  COALESCE(ts.urgent_open,          0)::int   AS urgent_open,
+  COALESCE(ts.high_open,            0)::int   AS high_open,
+  COALESCE(ts.blocked_open,         0)::int   AS blocked_open,
+  COALESCE(ts.weekly_throughput,    0)::int   AS weekly_throughput,
+  COALESCE(ts.avg_cycle_time_hours, 0)::float AS avg_cycle_time_hours,
+  sp.sprint_name,
+  sp.sprint_end_date,
+  COALESCE(sp.sprint_committed, 0)::int  AS sprint_committed,
+  COALESCE(sp.sprint_remaining, 0)::int  AS sprint_remaining
+FROM accessible a
+LEFT JOIN ticket_stats ts ON ts.project_id = a.id
+LEFT JOIN LATERAL (
+  SELECT s.name AS sprint_name, s.end_date AS sprint_end_date,
+         COUNT(st.ticket_id)::int AS sprint_committed,
+         COUNT(st.ticket_id) FILTER (
+           WHERE EXISTS (
+             SELECT 1 FROM tickets t2
+             JOIN workflow_states ws2 ON ws2.id = t2.state_id
+             WHERE t2.id = st.ticket_id AND ws2.is_closed = false
+           )
+         )::int AS sprint_remaining
+  FROM sprints s
+  LEFT JOIN sprint_tickets st ON st.sprint_id = s.id
+  WHERE s.project_id = a.id AND s.status = 'active'
+  GROUP BY s.id
+  LIMIT 1
+) sp ON true
+ORDER BY a.name
+{{end}}
+
+{{define "portfolio_stats_by_owner.sql"}}
+WITH accessible AS (
+  SELECT DISTINCT p.id, p.name, p.key
+  FROM projects p
+  WHERE EXISTS (
+    SELECT 1 FROM project_groups pg
+    JOIN group_memberships gm ON gm.group_id = pg.group_id
+    WHERE pg.project_id = p.id AND gm.user_id = $1
+  )
+  AND EXISTS (
+    SELECT 1 FROM project_groups pg2
+    JOIN group_memberships gm2 ON gm2.group_id = pg2.group_id
+    WHERE pg2.project_id = p.id AND gm2.user_id = $2
+  )
+),
+ticket_stats AS (
+  SELECT
+    t.project_id,
+    COUNT(*) FILTER (WHERE ws.is_closed = false)                        AS total_open,
+    COUNT(*) FILTER (WHERE ws.is_closed = true)                         AS total_closed,
+    COUNT(*) FILTER (WHERE ws.is_closed = false AND t.priority = 'urgent') AS urgent_open,
+    COUNT(*) FILTER (WHERE ws.is_closed = false AND t.priority = 'high')   AS high_open,
+    COUNT(*) FILTER (
+      WHERE ws.is_closed = false AND EXISTS (
+        SELECT 1 FROM ticket_dependencies td
+        JOIN tickets bt ON bt.id = td.from_ticket_id
+        JOIN workflow_states bws ON bws.id = bt.state_id
+        WHERE td.to_ticket_id = t.id AND bws.is_closed = false
+      )
+    ) AS blocked_open,
+    COUNT(*) FILTER (
+      WHERE ws.is_closed = true AND t.updated_at >= NOW() - INTERVAL '7 days'
+    )::int AS weekly_throughput,
+    COALESCE(
+      AVG(
+        EXTRACT(EPOCH FROM (t.updated_at - t.created_at)) / 3600.0
+      ) FILTER (
+        WHERE ws.is_closed = true
+          AND t.updated_at >= NOW() - INTERVAL '30 days'
+      ),
+      0
+    )::float AS avg_cycle_time_hours
+  FROM tickets t
+  JOIN workflow_states ws ON ws.id = t.state_id
+  GROUP BY t.project_id
+)
+SELECT
+  a.id,
+  a.name,
+  a.key,
+  COALESCE(ts.total_open,           0)::int   AS total_open,
+  COALESCE(ts.total_closed,         0)::int   AS total_closed,
+  COALESCE(ts.urgent_open,          0)::int   AS urgent_open,
+  COALESCE(ts.high_open,            0)::int   AS high_open,
+  COALESCE(ts.blocked_open,         0)::int   AS blocked_open,
+  COALESCE(ts.weekly_throughput,    0)::int   AS weekly_throughput,
+  COALESCE(ts.avg_cycle_time_hours, 0)::float AS avg_cycle_time_hours,
+  sp.sprint_name,
+  sp.sprint_end_date,
+  COALESCE(sp.sprint_committed, 0)::int  AS sprint_committed,
+  COALESCE(sp.sprint_remaining, 0)::int  AS sprint_remaining
+FROM accessible a
+LEFT JOIN ticket_stats ts ON ts.project_id = a.id
+LEFT JOIN LATERAL (
+  SELECT s.name AS sprint_name, s.end_date AS sprint_end_date,
+         COUNT(st.ticket_id)::int AS sprint_committed,
+         COUNT(st.ticket_id) FILTER (
+           WHERE EXISTS (
+             SELECT 1 FROM tickets t2
+             JOIN workflow_states ws2 ON ws2.id = t2.state_id
+             WHERE t2.id = st.ticket_id AND ws2.is_closed = false
+           )
+         )::int AS sprint_remaining
+  FROM sprints s
+  LEFT JOIN sprint_tickets st ON st.sprint_id = s.id
+  WHERE s.project_id = a.id AND s.status = 'active'
+  GROUP BY s.id
+  LIMIT 1
+) sp ON true
+ORDER BY a.name
+{{end}}

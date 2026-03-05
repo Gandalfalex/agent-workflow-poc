@@ -61,15 +61,3 @@ e2e:
 		echo "Raw log: $$log_file"; \
 		exit 1; \
 	fi
-
-# Run full frontend->Penpot migration extraction pipeline (tokens, inventory, E2E artifact harvest, priorities).
-design-migration:
-	cd "$(DESIGN_MIGRATION_DIR)" && npm run -s extract:all
-
-# Refresh only E2E artifact snapshots + prioritized screen outputs.
-design-migration-artifacts:
-	cd "$(DESIGN_MIGRATION_DIR)" && npm run -s extract:e2e-artifacts && npm run -s extract:priorities
-
-# Rebuild Penpot starter package (page-bucketed screenshots + seed files).
-design-migration-starter:
-	cd "$(DESIGN_MIGRATION_DIR)" && npm run -s extract:starter

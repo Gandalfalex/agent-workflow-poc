@@ -152,6 +152,9 @@ Source baseline: `.documentation/current_features.md`
   - `GET /projects/{projectId}/reporting/summary`
   - `GET /projects/{projectId}/reporting/export?format=json|csv`
 
+### ~~13. Sprint lifecycle management~~ ✓ Completed (TKT-025)
+- Implemented: `planned` → `active` → `completed` state machine, one-active-sprint enforcement, start/complete API endpoints, complete-sprint dialog with ticket rollover, SprintSidebar.vue on board, i18n (en+de), E2E lifecycle and rollover tests.
+
 ### 13. Real-time live updates (WebSocket transport)
 - Replace periodic polling with WebSocket push for notification unread count, inbox updates, board refresh cues, and activity feed updates.
 - Keep polling as fallback behind a feature flag until rollout is stable.
@@ -196,11 +199,8 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 ### ~~19. Incident bridge integration~~ ✓ Completed (TKT-020)
 - Implemented: incident-mode ticket fields, aggregated incident timeline endpoint, markdown postmortem export endpoint, severity-change audit activity, and ticket-modal incident controls/export UX.
 
-### 20. Portfolio command center
-- Multi-project dashboard with roll-up KPIs and risk scoring.
-- Cross-project milestone tracking with drill-down.
-- Objective/OKR linkage to stories and tickets.
-- Why: Leadership needs portfolio visibility, not just project-level views.
+### ~~20. Portfolio command center~~ ✓ Completed (TKT-021)
+- Implemented: cross-project portfolio dashboard with roll-up KPIs, health scores, sprint tracking, group filter, weekly throughput and avg cycle time metrics, CSV export with new fields. Performance indexes added for 50+ project scale.
 
 ### 21. Plugin marketplace and app extensions
 - Safe extension points for custom panels, commands, and automation actions.
@@ -218,9 +218,9 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 
 ## Recommended Next 5 Tickets
 1. Attachment download caching layer (Nginx/CDN fronting backend) (P2)
-2. RBAC/admin audit trail for sensitive actions (P2)
-3. TKT-021: Portfolio command center (P2)
-4. Rule-based automation engine (P2-P3)
+2. ~~RBAC/admin audit trail for sensitive actions (P2)~~ **DONE — TKT-026**
+3. ~~TKT-021: Portfolio command center (P2)~~ **DONE — TKT-021**
+4. ~~Rule-based automation engine (P2-P3)~~ **DONE — TKT-027**
 5. Live collaboration mode (P3)
 
 ## Risks and Dependencies

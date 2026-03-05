@@ -26,6 +26,15 @@ const (
 	Summary  AiTriageField = "summary"
 )
 
+// Defines values for AutomationActionType.
+const (
+	AutomationActionTypeAddComment  AutomationActionType = "add_comment"
+	AutomationActionTypeCallWebhook AutomationActionType = "call_webhook"
+	AutomationActionTypeSetAssignee AutomationActionType = "set_assignee"
+	AutomationActionTypeSetPriority AutomationActionType = "set_priority"
+	AutomationActionTypeSetState    AutomationActionType = "set_state"
+)
+
 // Defines values for BulkTicketAction.
 const (
 	BulkTicketActionAssign      BulkTicketAction = "assign"
@@ -71,9 +80,16 @@ const (
 
 // Defines values for ProjectRole.
 const (
-	Admin       ProjectRole = "admin"
-	Contributor ProjectRole = "contributor"
-	Viewer      ProjectRole = "viewer"
+	ProjectRoleAdmin       ProjectRole = "admin"
+	ProjectRoleContributor ProjectRole = "contributor"
+	ProjectRoleViewer      ProjectRole = "viewer"
+)
+
+// Defines values for SprintStatus.
+const (
+	Active    SprintStatus = "active"
+	Completed SprintStatus = "completed"
+	Planned   SprintStatus = "planned"
 )
 
 // Defines values for TicketIncidentSeverity.
@@ -106,10 +122,16 @@ const (
 	TicketUpdated      WebhookEvent = "ticket.updated"
 )
 
+// Defines values for GetPortfolioStatsParamsFormat.
+const (
+	GetPortfolioStatsParamsFormatCsv  GetPortfolioStatsParamsFormat = "csv"
+	GetPortfolioStatsParamsFormatJson GetPortfolioStatsParamsFormat = "json"
+)
+
 // Defines values for ExportProjectReportingSnapshotParamsFormat.
 const (
-	Csv  ExportProjectReportingSnapshotParamsFormat = "csv"
-	Json ExportProjectReportingSnapshotParamsFormat = "json"
+	ExportProjectReportingSnapshotParamsFormatCsv  ExportProjectReportingSnapshotParamsFormat = "csv"
+	ExportProjectReportingSnapshotParamsFormatJson ExportProjectReportingSnapshotParamsFormat = "json"
 )
 
 // AdminUserCreateRequest defines model for AdminUserCreateRequest.
@@ -197,6 +219,26 @@ type AttachmentListResponse struct {
 	Items []Attachment `json:"items"`
 }
 
+// AuditLogEntry defines model for AuditLogEntry.
+type AuditLogEntry struct {
+	Action       string                 `json:"action"`
+	ActorId      openapi_types.UUID     `json:"actorId"`
+	ActorName    string                 `json:"actorName"`
+	CreatedAt    time.Time              `json:"createdAt"`
+	Details      map[string]interface{} `json:"details"`
+	Id           openapi_types.UUID     `json:"id"`
+	ProjectId    *openapi_types.UUID    `json:"projectId"`
+	ResourceId   string                 `json:"resourceId"`
+	ResourceName string                 `json:"resourceName"`
+	ResourceType string                 `json:"resourceType"`
+}
+
+// AuditLogListResponse defines model for AuditLogListResponse.
+type AuditLogListResponse struct {
+	Items []AuditLogEntry `json:"items"`
+	Total int             `json:"total"`
+}
+
 // AuthLoginRequest defines model for AuthLoginRequest.
 type AuthLoginRequest struct {
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
@@ -212,6 +254,76 @@ type AuthLoginRequest struct {
 // AuthLoginResponse defines model for AuthLoginResponse.
 type AuthLoginResponse struct {
 	User User `json:"user"`
+}
+
+// AutomationAction defines model for AutomationAction.
+type AutomationAction struct {
+	Params map[string]string    `json:"params"`
+	Type   AutomationActionType `json:"type"`
+}
+
+// AutomationActionType defines model for AutomationAction.Type.
+type AutomationActionType string
+
+// AutomationActionResult defines model for AutomationActionResult.
+type AutomationActionResult struct {
+	Error   *string           `json:"error,omitempty"`
+	Params  map[string]string `json:"params"`
+	Success bool              `json:"success"`
+	Type    string            `json:"type"`
+}
+
+// AutomationExecution defines model for AutomationExecution.
+type AutomationExecution struct {
+	ActionsRun   []AutomationActionResult `json:"actionsRun"`
+	CreatedAt    time.Time                `json:"createdAt"`
+	Id           openapi_types.UUID       `json:"id"`
+	RuleId       openapi_types.UUID       `json:"ruleId"`
+	TicketId     openapi_types.UUID       `json:"ticketId"`
+	TriggerEvent string                   `json:"triggerEvent"`
+}
+
+// AutomationExecutionListResponse defines model for AutomationExecutionListResponse.
+type AutomationExecutionListResponse struct {
+	Items []AutomationExecution `json:"items"`
+}
+
+// AutomationRule defines model for AutomationRule.
+type AutomationRule struct {
+	Actions           []AutomationAction `json:"actions"`
+	CreatedAt         time.Time          `json:"createdAt"`
+	Enabled           bool               `json:"enabled"`
+	ExecutionCount    int                `json:"executionCount"`
+	Id                openapi_types.UUID `json:"id"`
+	LastExecutedAt    *time.Time         `json:"lastExecutedAt"`
+	Name              string             `json:"name"`
+	ProjectId         openapi_types.UUID `json:"projectId"`
+	TriggerConditions map[string]string  `json:"triggerConditions"`
+	TriggerEvent      string             `json:"triggerEvent"`
+	UpdatedAt         time.Time          `json:"updatedAt"`
+}
+
+// AutomationRuleCreateRequest defines model for AutomationRuleCreateRequest.
+type AutomationRuleCreateRequest struct {
+	Actions           []AutomationAction `json:"actions"`
+	Enabled           *bool              `json:"enabled,omitempty"`
+	Name              string             `json:"name"`
+	TriggerConditions *map[string]string `json:"triggerConditions,omitempty"`
+	TriggerEvent      string             `json:"triggerEvent"`
+}
+
+// AutomationRuleListResponse defines model for AutomationRuleListResponse.
+type AutomationRuleListResponse struct {
+	Items []AutomationRule `json:"items"`
+}
+
+// AutomationRuleUpdateRequest defines model for AutomationRuleUpdateRequest.
+type AutomationRuleUpdateRequest struct {
+	Actions           *[]AutomationAction `json:"actions,omitempty"`
+	Enabled           *bool               `json:"enabled,omitempty"`
+	Name              *string             `json:"name,omitempty"`
+	TriggerConditions *map[string]string  `json:"triggerConditions,omitempty"`
+	TriggerEvent      *string             `json:"triggerEvent,omitempty"`
 }
 
 // BoardFilter defines model for BoardFilter.
@@ -452,6 +564,21 @@ type NotificationUnreadCountResponse struct {
 	Count int `json:"count"`
 }
 
+// PortfolioStats defines model for PortfolioStats.
+type PortfolioStats struct {
+	Projects []ProjectPortfolioEntry `json:"projects"`
+	Totals   PortfolioTotals         `json:"totals"`
+}
+
+// PortfolioTotals defines model for PortfolioTotals.
+type PortfolioTotals struct {
+	TotalBlocked  int `json:"totalBlocked"`
+	TotalClosed   int `json:"totalClosed"`
+	TotalOpen     int `json:"totalOpen"`
+	TotalProjects int `json:"totalProjects"`
+	TotalUrgent   int `json:"totalUrgent"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	CreatedAt                 time.Time          `json:"createdAt"`
@@ -529,6 +656,28 @@ type ProjectListResponse struct {
 // ProjectPermission defines model for ProjectPermission.
 type ProjectPermission string
 
+// ProjectPortfolioEntry defines model for ProjectPortfolioEntry.
+type ProjectPortfolioEntry struct {
+	ActiveSprintCommitted int                 `json:"activeSprintCommitted"`
+	ActiveSprintEndDate   *openapi_types.Date `json:"activeSprintEndDate"`
+	ActiveSprintName      *string             `json:"activeSprintName"`
+	ActiveSprintRemaining int                 `json:"activeSprintRemaining"`
+
+	// AvgCycleTimeHours Average hours from open to close (last 30 days)
+	AvgCycleTimeHours float32            `json:"avgCycleTimeHours"`
+	BlockedOpen       int                `json:"blockedOpen"`
+	HighOpen          int                `json:"highOpen"`
+	Id                openapi_types.UUID `json:"id"`
+	ProjectKey        string             `json:"projectKey"`
+	ProjectName       string             `json:"projectName"`
+	TotalClosed       int                `json:"totalClosed"`
+	TotalOpen         int                `json:"totalOpen"`
+	UrgentOpen        int                `json:"urgentOpen"`
+
+	// WeeklyThroughput Tickets closed in the last 7 days
+	WeeklyThroughput int `json:"weeklyThroughput"`
+}
+
 // ProjectReportingExportJson defines model for ProjectReportingExportJson.
 type ProjectReportingExportJson struct {
 	GeneratedAt time.Time               `json:"generatedAt"`
@@ -568,6 +717,7 @@ type ProjectUpdateRequest struct {
 // Sprint defines model for Sprint.
 type Sprint struct {
 	CommittedTickets int                  `json:"committedTickets"`
+	CompletedAt      *time.Time           `json:"completedAt"`
 	CreatedAt        time.Time            `json:"createdAt"`
 	EndDate          openapi_types.Date   `json:"endDate"`
 	Goal             *string              `json:"goal,omitempty"`
@@ -575,8 +725,14 @@ type Sprint struct {
 	Name             string               `json:"name"`
 	ProjectId        openapi_types.UUID   `json:"projectId"`
 	StartDate        openapi_types.Date   `json:"startDate"`
+	Status           SprintStatus         `json:"status"`
 	TicketIds        []openapi_types.UUID `json:"ticketIds"`
 	UpdatedAt        time.Time            `json:"updatedAt"`
+}
+
+// SprintCompleteRequest defines model for SprintCompleteRequest.
+type SprintCompleteRequest struct {
+	MoveTicketIds *[]openapi_types.UUID `json:"moveTicketIds,omitempty"`
 }
 
 // SprintCreateRequest defines model for SprintCreateRequest.
@@ -603,6 +759,9 @@ type SprintForecastSummary struct {
 type SprintListResponse struct {
 	Items []Sprint `json:"items"`
 }
+
+// SprintStatus defines model for SprintStatus.
+type SprintStatus string
 
 // SprintTicketsRequest defines model for SprintTicketsRequest.
 type SprintTicketsRequest struct {
@@ -978,6 +1137,29 @@ type WorkflowUpdateRequest struct {
 	States []WorkflowStateInput `json:"states"`
 }
 
+// ListAuditLogParams defines parameters for ListAuditLog.
+type ListAuditLogParams struct {
+	ProjectId    *openapi_types.UUID `form:"projectId,omitempty" json:"projectId,omitempty"`
+	ResourceType *string             `form:"resourceType,omitempty" json:"resourceType,omitempty"`
+	ActorId      *openapi_types.UUID `form:"actorId,omitempty" json:"actorId,omitempty"`
+	Limit        *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset       *int                `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetPortfolioStatsParams defines parameters for GetPortfolioStats.
+type GetPortfolioStatsParams struct {
+	Format *GetPortfolioStatsParamsFormat `form:"format,omitempty" json:"format,omitempty"`
+
+	// OwnerId Filter to projects where this user is a member
+	OwnerId *openapi_types.UUID `form:"ownerId,omitempty" json:"ownerId,omitempty"`
+
+	// GroupId Filter to projects belonging to this group
+	GroupId *openapi_types.UUID `form:"groupId,omitempty" json:"groupId,omitempty"`
+}
+
+// GetPortfolioStatsParamsFormat defines parameters for GetPortfolioStats.
+type GetPortfolioStatsParamsFormat string
+
 // ListProjectActivitiesParams defines parameters for ListProjectActivities.
 type ListProjectActivitiesParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -1068,6 +1250,12 @@ type CreateAiTriageSuggestionJSONRequestBody = AiTriageSuggestionCreateRequest
 // RecordAiTriageSuggestionDecisionJSONRequestBody defines body for RecordAiTriageSuggestionDecision for application/json ContentType.
 type RecordAiTriageSuggestionDecisionJSONRequestBody = AiTriageSuggestionDecisionRequest
 
+// CreateAutomationRuleJSONRequestBody defines body for CreateAutomationRule for application/json ContentType.
+type CreateAutomationRuleJSONRequestBody = AutomationRuleCreateRequest
+
+// UpdateAutomationRuleJSONRequestBody defines body for UpdateAutomationRule for application/json ContentType.
+type UpdateAutomationRuleJSONRequestBody = AutomationRuleUpdateRequest
+
 // CreateBoardFilterPresetJSONRequestBody defines body for CreateBoardFilterPreset for application/json ContentType.
 type CreateBoardFilterPresetJSONRequestBody = BoardFilterPresetCreateRequest
 
@@ -1088,6 +1276,9 @@ type UpdateNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdat
 
 // CreateProjectSprintJSONRequestBody defines body for CreateProjectSprint for application/json ContentType.
 type CreateProjectSprintJSONRequestBody = SprintCreateRequest
+
+// CompleteProjectSprintJSONRequestBody defines body for CompleteProjectSprint for application/json ContentType.
+type CompleteProjectSprintJSONRequestBody = SprintCompleteRequest
 
 // RemoveSprintTicketsJSONRequestBody defines body for RemoveSprintTickets for application/json ContentType.
 type RemoveSprintTicketsJSONRequestBody = SprintTicketsRequest
@@ -1136,6 +1327,9 @@ type CreateTicketDependencyJSONRequestBody = TicketDependencyCreateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// List admin audit log entries
+	// (GET /admin/audit-log)
+	ListAuditLog(w http.ResponseWriter, r *http.Request, params ListAuditLogParams)
 	// Sync all Keycloak users to database
 	// (POST /admin/sync-users)
 	SyncUsers(w http.ResponseWriter, r *http.Request)
@@ -1178,6 +1372,9 @@ type ServerInterface interface {
 	// Health check
 	// (GET /health)
 	HealthCheck(w http.ResponseWriter, r *http.Request)
+	// Get cross-project portfolio statistics
+	// (GET /portfolio/stats)
+	GetPortfolioStats(w http.ResponseWriter, r *http.Request, params GetPortfolioStatsParams)
 	// List projects
 	// (GET /projects)
 	ListProjects(w http.ResponseWriter, r *http.Request)
@@ -1208,6 +1405,24 @@ type ServerInterface interface {
 	// Record field-by-field acceptance or rejection for an AI triage suggestion
 	// (POST /projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision)
 	RecordAiTriageSuggestionDecision(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, suggestionId openapi_types.UUID)
+	// List automation rules
+	// (GET /projects/{projectId}/automation/rules)
+	ListAutomationRules(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Create automation rule
+	// (POST /projects/{projectId}/automation/rules)
+	CreateAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Delete automation rule
+	// (DELETE /projects/{projectId}/automation/rules/{ruleId})
+	DeleteAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID)
+	// Get automation rule
+	// (GET /projects/{projectId}/automation/rules/{ruleId})
+	GetAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID)
+	// Update automation rule
+	// (PUT /projects/{projectId}/automation/rules/{ruleId})
+	UpdateAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID)
+	// List automation rule executions
+	// (GET /projects/{projectId}/automation/rules/{ruleId}/executions)
+	ListAutomationExecutions(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID)
 	// Kanban board snapshot
 	// (GET /projects/{projectId}/board)
 	GetBoard(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -1286,6 +1501,12 @@ type ServerInterface interface {
 	// Create a project sprint
 	// (POST /projects/{projectId}/sprints)
 	CreateProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Complete a sprint
+	// (POST /projects/{projectId}/sprints/{sprintId}/complete)
+	CompleteProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID)
+	// Start a sprint
+	// (POST /projects/{projectId}/sprints/{sprintId}/start)
+	StartProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID)
 	// Remove tickets from sprint
 	// (DELETE /projects/{projectId}/sprints/{sprintId}/tickets)
 	RemoveSprintTickets(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID)
@@ -1412,6 +1633,12 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
+// List admin audit log entries
+// (GET /admin/audit-log)
+func (_ Unimplemented) ListAuditLog(w http.ResponseWriter, r *http.Request, params ListAuditLogParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Sync all Keycloak users to database
 // (POST /admin/sync-users)
 func (_ Unimplemented) SyncUsers(w http.ResponseWriter, r *http.Request) {
@@ -1496,6 +1723,12 @@ func (_ Unimplemented) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Get cross-project portfolio statistics
+// (GET /portfolio/stats)
+func (_ Unimplemented) GetPortfolioStats(w http.ResponseWriter, r *http.Request, params GetPortfolioStatsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // List projects
 // (GET /projects)
 func (_ Unimplemented) ListProjects(w http.ResponseWriter, r *http.Request) {
@@ -1553,6 +1786,42 @@ func (_ Unimplemented) CreateAiTriageSuggestion(w http.ResponseWriter, r *http.R
 // Record field-by-field acceptance or rejection for an AI triage suggestion
 // (POST /projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision)
 func (_ Unimplemented) RecordAiTriageSuggestionDecision(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, suggestionId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List automation rules
+// (GET /projects/{projectId}/automation/rules)
+func (_ Unimplemented) ListAutomationRules(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create automation rule
+// (POST /projects/{projectId}/automation/rules)
+func (_ Unimplemented) CreateAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete automation rule
+// (DELETE /projects/{projectId}/automation/rules/{ruleId})
+func (_ Unimplemented) DeleteAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get automation rule
+// (GET /projects/{projectId}/automation/rules/{ruleId})
+func (_ Unimplemented) GetAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update automation rule
+// (PUT /projects/{projectId}/automation/rules/{ruleId})
+func (_ Unimplemented) UpdateAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List automation rule executions
+// (GET /projects/{projectId}/automation/rules/{ruleId}/executions)
+func (_ Unimplemented) ListAutomationExecutions(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1709,6 +1978,18 @@ func (_ Unimplemented) ListProjectSprints(w http.ResponseWriter, r *http.Request
 // Create a project sprint
 // (POST /projects/{projectId}/sprints)
 func (_ Unimplemented) CreateProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Complete a sprint
+// (POST /projects/{projectId}/sprints/{sprintId}/complete)
+func (_ Unimplemented) CompleteProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Start a sprint
+// (POST /projects/{projectId}/sprints/{sprintId}/start)
+func (_ Unimplemented) StartProjectSprint(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, sprintId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1960,6 +2241,71 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListAuditLog operation middleware
+func (siw *ServerInterfaceWrapper) ListAuditLog(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAuditLogParams
+
+	// ------------- Optional query parameter "projectId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "projectId", r.URL.Query(), &params.ProjectId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "resourceType" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "resourceType", r.URL.Query(), &params.ResourceType)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceType", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "actorId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "actorId", r.URL.Query(), &params.ActorId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actorId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuditLog(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // SyncUsers operation middleware
 func (siw *ServerInterfaceWrapper) SyncUsers(w http.ResponseWriter, r *http.Request) {
@@ -2304,6 +2650,55 @@ func (siw *ServerInterfaceWrapper) HealthCheck(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetPortfolioStats operation middleware
+func (siw *ServerInterfaceWrapper) GetPortfolioStats(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPortfolioStatsParams
+
+	// ------------- Optional query parameter "format" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "format", r.URL.Query(), &params.Format)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "format", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "ownerId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "ownerId", r.URL.Query(), &params.OwnerId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ownerId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "groupId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "groupId", r.URL.Query(), &params.GroupId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPortfolioStats(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListProjects operation middleware
 func (siw *ServerInterfaceWrapper) ListProjects(w http.ResponseWriter, r *http.Request) {
 
@@ -2603,6 +2998,228 @@ func (siw *ServerInterfaceWrapper) RecordAiTriageSuggestionDecision(w http.Respo
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RecordAiTriageSuggestionDecision(w, r, projectId, suggestionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAutomationRules operation middleware
+func (siw *ServerInterfaceWrapper) ListAutomationRules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAutomationRules(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAutomationRule operation middleware
+func (siw *ServerInterfaceWrapper) CreateAutomationRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAutomationRule(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteAutomationRule operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAutomationRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAutomationRule(w, r, projectId, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAutomationRule operation middleware
+func (siw *ServerInterfaceWrapper) GetAutomationRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAutomationRule(w, r, projectId, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAutomationRule operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAutomationRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAutomationRule(w, r, projectId, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAutomationExecutions operation middleware
+func (siw *ServerInterfaceWrapper) ListAutomationExecutions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", chi.URLParam(r, "ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAutomationExecutions(w, r, projectId, ruleId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3566,6 +4183,86 @@ func (siw *ServerInterfaceWrapper) CreateProjectSprint(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateProjectSprint(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteProjectSprint operation middleware
+func (siw *ServerInterfaceWrapper) CompleteProjectSprint(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sprintId" -------------
+	var sprintId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sprintId", chi.URLParam(r, "sprintId"), &sprintId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sprintId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteProjectSprint(w, r, projectId, sprintId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartProjectSprint operation middleware
+func (siw *ServerInterfaceWrapper) StartProjectSprint(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sprintId" -------------
+	var sprintId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sprintId", chi.URLParam(r, "sprintId"), &sprintId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sprintId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartProjectSprint(w, r, projectId, sprintId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5153,6 +5850,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/audit-log", wrapper.ListAuditLog)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/admin/sync-users", wrapper.SyncUsers)
 	})
 	r.Group(func(r chi.Router) {
@@ -5195,6 +5895,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/health", wrapper.HealthCheck)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/portfolio/stats", wrapper.GetPortfolioStats)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects", wrapper.ListProjects)
 	})
 	r.Group(func(r chi.Router) {
@@ -5223,6 +5926,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision", wrapper.RecordAiTriageSuggestionDecision)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/automation/rules", wrapper.ListAutomationRules)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/automation/rules", wrapper.CreateAutomationRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/automation/rules/{ruleId}", wrapper.DeleteAutomationRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/automation/rules/{ruleId}", wrapper.GetAutomationRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}/automation/rules/{ruleId}", wrapper.UpdateAutomationRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/automation/rules/{ruleId}/executions", wrapper.ListAutomationExecutions)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/board", wrapper.GetBoard)
@@ -5301,6 +6022,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/sprints", wrapper.CreateProjectSprint)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/sprints/{sprintId}/complete", wrapper.CompleteProjectSprint)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/sprints/{sprintId}/start", wrapper.StartProjectSprint)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/projects/{projectId}/sprints/{sprintId}/tickets", wrapper.RemoveSprintTickets)

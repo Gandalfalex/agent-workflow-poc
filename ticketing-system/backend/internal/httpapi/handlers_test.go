@@ -399,6 +399,18 @@ func (f *fakeStore) GetProjectStats(ctx context.Context, projectID uuid.UUID) (s
 	return store.ProjectStats{}, nil
 }
 
+func (f *fakeStore) GetPortfolioStats(ctx context.Context, userID uuid.UUID, filter store.PortfolioFilter) (store.PortfolioStats, error) {
+	return store.PortfolioStats{Projects: []store.ProjectPortfolioEntry{}}, nil
+}
+
+func (f *fakeStore) CreateAuditLog(ctx context.Context, input store.AuditLogCreateInput) error {
+	return nil
+}
+
+func (f *fakeStore) ListAuditLog(ctx context.Context, filter store.AuditLogFilter) ([]store.AuditLogEntry, int, error) {
+	return []store.AuditLogEntry{}, 0, nil
+}
+
 func (f *fakeStore) ListSprints(ctx context.Context, projectID uuid.UUID) ([]store.Sprint, error) {
 	if f.sprintsErr != nil {
 		return nil, f.sprintsErr
@@ -428,6 +440,34 @@ func (f *fakeStore) AddSprintTickets(ctx context.Context, projectID, sprintID uu
 }
 
 func (f *fakeStore) RemoveSprintTickets(ctx context.Context, projectID, sprintID uuid.UUID, ticketIDs []uuid.UUID) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
+func (f *fakeStore) StartSprint(ctx context.Context, projectID, sprintID uuid.UUID) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
+func (f *fakeStore) CompleteSprint(ctx context.Context, projectID, sprintID uuid.UUID, moveTicketIDs []uuid.UUID) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
+func (f *fakeStore) GetActiveSprint(ctx context.Context, projectID uuid.UUID) (store.Sprint, error) {
+	if f.sprintErr != nil {
+		return store.Sprint{}, f.sprintErr
+	}
+	return f.sprint, nil
+}
+
+func (f *fakeStore) GetNextPlannedSprint(ctx context.Context, projectID uuid.UUID) (store.Sprint, error) {
 	if f.sprintErr != nil {
 		return store.Sprint{}, f.sprintErr
 	}
@@ -728,6 +768,30 @@ func (f *fakeStore) CreateTimeEntry(ctx context.Context, ticketID uuid.UUID, inp
 
 func (f *fakeStore) DeleteTimeEntry(ctx context.Context, id uuid.UUID) error {
 	return nil
+}
+
+func (f *fakeStore) ListAutomationRules(ctx context.Context, projectID uuid.UUID) ([]store.AutomationRule, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) GetAutomationRule(ctx context.Context, id, projectID uuid.UUID) (store.AutomationRule, error) {
+	return store.AutomationRule{}, nil
+}
+
+func (f *fakeStore) CreateAutomationRule(ctx context.Context, projectID uuid.UUID, input store.AutomationRuleCreateInput) (store.AutomationRule, error) {
+	return store.AutomationRule{}, nil
+}
+
+func (f *fakeStore) UpdateAutomationRule(ctx context.Context, id, projectID uuid.UUID, input store.AutomationRuleUpdateInput) (store.AutomationRule, error) {
+	return store.AutomationRule{}, nil
+}
+
+func (f *fakeStore) DeleteAutomationRule(ctx context.Context, id, projectID uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeStore) ListAutomationExecutions(ctx context.Context, ruleID uuid.UUID) ([]store.AutomationExecution, error) {
+	return nil, nil
 }
 
 type fakeAuth struct {

@@ -312,10 +312,12 @@ func mapSprint(item store.Sprint) sprintResponse {
 		Id:               toOpenapiUUID(item.ID),
 		ProjectId:        toOpenapiUUID(item.ProjectID),
 		Name:             item.Name,
+		Status:           SprintStatus(item.Status),
 		StartDate:        openapi_types.Date{Time: item.StartDate},
 		EndDate:          openapi_types.Date{Time: item.EndDate},
 		TicketIds:        make([]openapi_types.UUID, 0, len(item.TicketIDs)),
 		CommittedTickets: item.CommittedTickets,
+		CompletedAt:      item.CompletedAt,
 		CreatedAt:        item.CreatedAt,
 		UpdatedAt:        item.UpdatedAt,
 	}
@@ -557,5 +559,110 @@ func mapTimeEntry(entry store.TimeEntry) timeEntryResponse {
 		Description: entry.Description,
 		LoggedAt:    openapi_types.Date{Time: entry.LoggedAt},
 		CreatedAt:   entry.CreatedAt,
+	}
+}
+
+func mapPortfolioEntry(p store.ProjectPortfolioEntry) projectPortfolioEntryResponse {
+	out := projectPortfolioEntryResponse{
+		Id:                    toOpenapiUUID(p.ID),
+		ProjectKey:            p.ProjectKey,
+		ProjectName:           p.ProjectName,
+		TotalOpen:             p.TotalOpen,
+		TotalClosed:           p.TotalClosed,
+		UrgentOpen:            p.UrgentOpen,
+		HighOpen:              p.HighOpen,
+		BlockedOpen:           p.BlockedOpen,
+		WeeklyThroughput:      p.WeeklyThroughput,
+		AvgCycleTimeHours:     float32(p.AvgCycleTimeHours),
+		ActiveSprintName:      p.ActiveSprintName,
+		ActiveSprintCommitted: p.ActiveSprintCommitted,
+		ActiveSprintRemaining: p.ActiveSprintRemaining,
+	}
+	if p.ActiveSprintEndDate != nil {
+		d := openapi_types.Date{Time: *p.ActiveSprintEndDate}
+		out.ActiveSprintEndDate = &d
+	}
+	return out
+}
+
+func mapPortfolioStats(s store.PortfolioStats) portfolioStatsResponse {
+	entries := make([]projectPortfolioEntryResponse, 0, len(s.Projects))
+	for _, p := range s.Projects {
+		entries = append(entries, mapPortfolioEntry(p))
+	}
+	return portfolioStatsResponse{
+		Totals: portfolioTotalsResponse{
+			TotalProjects: s.Totals.TotalProjects,
+			TotalOpen:     s.Totals.TotalOpen,
+			TotalClosed:   s.Totals.TotalClosed,
+			TotalBlocked:  s.Totals.TotalBlocked,
+			TotalUrgent:   s.Totals.TotalUrgent,
+		},
+		Projects: entries,
+	}
+}
+
+func mapAuditLogEntry(e store.AuditLogEntry) auditLogEntryResponse {
+	out := auditLogEntryResponse{
+		Id:           toOpenapiUUID(e.ID),
+		ActorId:      toOpenapiUUID(e.ActorID),
+		ActorName:    e.ActorName,
+		Action:       e.Action,
+		ResourceType: e.ResourceType,
+		ResourceId:   e.ResourceID,
+		ResourceName: e.ResourceName,
+		Details:      e.Details,
+		CreatedAt:    e.CreatedAt,
+	}
+	if e.ProjectID != nil {
+		v := toOpenapiUUID(*e.ProjectID)
+		out.ProjectId = &v
+	}
+	return out
+}
+
+func mapAutomationAction(a store.AutomationAction) AutomationAction {
+	return AutomationAction{
+		Type:   AutomationActionType(a.Type),
+		Params: a.Params,
+	}
+}
+
+func mapAutomationActionResult(r store.AutomationActionResult) AutomationActionResult {
+	out := AutomationActionResult{
+		Type:    r.Type,
+		Params:  r.Params,
+		Success: r.Success,
+	}
+	if r.Error != "" {
+		out.Error = &r.Error
+	}
+	return out
+}
+
+func mapAutomationRule(r store.AutomationRule) automationRuleResponse {
+	return automationRuleResponse{
+		Id:                toOpenapiUUID(r.ID),
+		ProjectId:         toOpenapiUUID(r.ProjectID),
+		Name:              r.Name,
+		Enabled:           r.Enabled,
+		TriggerEvent:      r.TriggerEvent,
+		TriggerConditions: r.TriggerConditions,
+		Actions:           mapSlice(r.Actions, mapAutomationAction),
+		ExecutionCount:    r.ExecutionCount,
+		LastExecutedAt:    r.LastExecutedAt,
+		CreatedAt:         r.CreatedAt,
+		UpdatedAt:         r.UpdatedAt,
+	}
+}
+
+func mapAutomationExecution(e store.AutomationExecution) automationExecutionResponse {
+	return automationExecutionResponse{
+		Id:           toOpenapiUUID(e.ID),
+		RuleId:       toOpenapiUUID(e.RuleID),
+		TicketId:     toOpenapiUUID(e.TicketID),
+		TriggerEvent: e.TriggerEvent,
+		ActionsRun:   mapSlice(e.ActionsRun, mapAutomationActionResult),
+		CreatedAt:    e.CreatedAt,
 	}
 }

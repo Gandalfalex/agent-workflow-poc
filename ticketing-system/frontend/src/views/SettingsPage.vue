@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Button } from "@/components/ui/button";
 import { useAdminStore } from "@/stores/admin";
+import { useAutomationStore } from "@/stores/automation";
 import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
 import {
@@ -32,12 +33,13 @@ const props = defineProps<{ projectId: string }>();
 
 const router = useRouter();
 const adminStore = useAdminStore();
+const automationStore = useAutomationStore();
 const boardStore = useBoardStore();
 const sessionStore = useSessionStore();
 const { t } = useI18n();
 
 const settingsTab = ref<
-    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints"
+    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation"
 >(
     "projects",
 );
@@ -73,6 +75,127 @@ const newAdminUser = ref({
     lastName: "",
     password: "",
 });
+
+// Automation tab state
+const showAutomationForm = ref(false);
+const expandedRuleId = ref<string | null>(null);
+const editingRuleId = ref<string | null>(null);
+const automationForm = ref({
+    name: "",
+    triggerEvent: "ticket.created",
+    enabled: true,
+    condFromState: "",
+    condToState: "",
+    actions: [] as Array<{ type: string; params: Record<string, string> }>,
+});
+
+const automationTriggerEvents = [
+    { value: "ticket.created", label: "Ticket Created" },
+    { value: "ticket.updated", label: "Ticket Updated" },
+    { value: "ticket.state_changed", label: "State Changed" },
+    { value: "ticket.priority_changed", label: "Priority Changed" },
+    { value: "ticket.assigned", label: "Ticket Assigned" },
+    { value: "ticket.deleted", label: "Ticket Deleted" },
+];
+
+const automationActionTypes = [
+    { value: "set_state", label: "Set State" },
+    { value: "set_assignee", label: "Set Assignee" },
+    { value: "set_priority", label: "Set Priority" },
+    { value: "add_comment", label: "Add Comment" },
+    { value: "call_webhook", label: "Call Webhook" },
+];
+
+function resetAutomationForm() {
+    automationForm.value = {
+        name: "",
+        triggerEvent: "ticket.created",
+        enabled: true,
+        condFromState: "",
+        condToState: "",
+        actions: [],
+    };
+    editingRuleId.value = null;
+    showAutomationForm.value = false;
+}
+
+function addAutomationAction() {
+    automationForm.value.actions.push({ type: "set_state", params: { state_id: "" } });
+}
+
+function removeAutomationAction(idx: number) {
+    automationForm.value.actions.splice(idx, 1);
+}
+
+function confirmDeleteRule(projectId: string, ruleId: string) {
+    if (window.confirm(t("settings.automation.deleteConfirm"))) {
+        automationStore.deleteRule(projectId, ruleId);
+    }
+}
+
+function onAutomationActionTypeChange(idx: number) {
+    const type = automationForm.value.actions[idx]!.type;
+    const defaultParams: Record<string, Record<string, string>> = {
+        set_state: { state_id: "" },
+        set_assignee: { assignee_id: "" },
+        set_priority: { priority: "medium" },
+        add_comment: { body: "" },
+        call_webhook: {},
+    };
+    automationForm.value.actions[idx]!.params = { ...(defaultParams[type] || {}) };
+}
+
+async function saveAutomationRule() {
+    const conds: Record<string, string> = {};
+    if (automationForm.value.condFromState) conds["fromState"] = automationForm.value.condFromState;
+    if (automationForm.value.condToState) conds["toState"] = automationForm.value.condToState;
+
+    const actions = automationForm.value.actions.map((a) => ({
+        type: a.type as import("@/lib/api").AutomationActionType,
+        params: a.params,
+    }));
+
+    if (editingRuleId.value) {
+        await automationStore.updateRule(selectedProjectId.value, editingRuleId.value, {
+            name: automationForm.value.name,
+            enabled: automationForm.value.enabled,
+            triggerEvent: automationForm.value.triggerEvent,
+            triggerConditions: conds,
+            actions,
+        });
+    } else {
+        await automationStore.createRule(selectedProjectId.value, {
+            name: automationForm.value.name,
+            enabled: automationForm.value.enabled,
+            triggerEvent: automationForm.value.triggerEvent,
+            triggerConditions: conds,
+            actions,
+        });
+    }
+    resetAutomationForm();
+}
+
+function startEditRule(rule: import("@/lib/api").AutomationRule) {
+    editingRuleId.value = rule.id;
+    automationForm.value = {
+        name: rule.name,
+        triggerEvent: rule.triggerEvent,
+        enabled: rule.enabled,
+        condFromState: rule.triggerConditions?.["fromState"] || "",
+        condToState: rule.triggerConditions?.["toState"] || "",
+        actions: rule.actions.map((a) => ({ type: a.type, params: { ...a.params } })),
+    };
+    showAutomationForm.value = true;
+}
+
+async function toggleRuleExpanded(projectId: string, ruleId: string) {
+    if (expandedRuleId.value === ruleId) {
+        expandedRuleId.value = null;
+    } else {
+        expandedRuleId.value = ruleId;
+        await automationStore.loadExecutions(projectId, ruleId);
+    }
+}
 
 const webhookEvents: WebhookEvent[] = [
     "ticket.created",
@@ -1014,6 +1137,24 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'sprints'; loadSprintSettings()"
             >
                 Sprints
+            </Button>
+            <Button
+                data-testid="settings.audit-tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'audit'"
+                @click="settingsTab = 'audit'; adminStore.loadAuditLog()"
+            >
+                {{ t("settings.tab.audit") }}
+            </Button>
+            <Button
+                data-testid="settings.automation_tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'automation'"
+                @click="settingsTab = 'automation'; automationStore.loadRules(selectedProjectId)"
+            >
+                {{ t("settings.tab.automation") }}
             </Button>
         </div>
     </section>
@@ -2438,5 +2579,222 @@ watch(selectedGroupId, async () => {
                 </div>
             </div>
         </template>
+    </section>
+
+    <section
+        v-if="settingsTab === 'audit'"
+        data-testid="settings.audit-view"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div>
+            <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">Admin</p>
+            <h3 class="mt-1 text-lg font-semibold">{{ t("settings.audit.title") }}</h3>
+        </div>
+
+        <div v-if="adminStore.auditLogStatus === 'loading' && !adminStore.auditLog.length" class="mt-6 text-sm text-muted-foreground">
+            Loading...
+        </div>
+        <div v-else-if="adminStore.auditLogStatus === 'error'" class="mt-6 text-sm text-destructive">
+            {{ adminStore.auditLogError }}
+        </div>
+        <div v-else-if="!adminStore.auditLog.length" class="mt-6 text-sm text-muted-foreground">
+            {{ t("settings.audit.empty") }}
+        </div>
+        <div v-else class="mt-4 overflow-x-auto">
+            <table data-testid="settings.audit-table" class="w-full text-xs">
+                <thead>
+                    <tr class="border-b border-border text-left text-muted-foreground">
+                        <th class="py-2 pr-4 font-semibold">{{ t("settings.audit.col.time") }}</th>
+                        <th class="py-2 pr-4 font-semibold">{{ t("settings.audit.col.actor") }}</th>
+                        <th class="py-2 pr-4 font-semibold">{{ t("settings.audit.col.action") }}</th>
+                        <th class="py-2 pr-4 font-semibold">{{ t("settings.audit.col.resource") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="entry in adminStore.auditLog"
+                        :key="entry.id"
+                        class="border-b border-border/50 hover:bg-muted/30"
+                    >
+                        <td class="py-1.5 pr-4 text-muted-foreground whitespace-nowrap">
+                            {{ new Date(entry.createdAt).toLocaleString() }}
+                        </td>
+                        <td class="py-1.5 pr-4 font-medium">{{ entry.actorName }}</td>
+                        <td class="py-1.5 pr-4">
+                            <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">{{ entry.action }}</span>
+                        </td>
+                        <td class="py-1.5 pr-4 text-muted-foreground">
+                            <span class="font-medium text-foreground">{{ entry.resourceType }}</span>
+                            <span v-if="entry.resourceName" class="ml-1">— {{ entry.resourceName }}</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div v-if="adminStore.auditLog.length < adminStore.auditLogTotal" class="mt-4">
+                <Button
+                    data-testid="settings.audit-load-more"
+                    variant="outline"
+                    size="sm"
+                    :disabled="adminStore.auditLogStatus === 'loading'"
+                    @click="adminStore.loadAuditLog({ offset: adminStore.auditLog.length })"
+                >
+                    {{ t("settings.audit.loadMore") }}
+                </Button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Automation Rules -->
+    <section
+        v-if="settingsTab === 'automation'"
+        data-testid="settings.automation_view"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">Settings</p>
+                <h3 class="mt-1 text-lg font-semibold">{{ t("settings.automation.title") }}</h3>
+            </div>
+            <Button
+                v-if="!showAutomationForm"
+                data-testid="automation.add_rule_button"
+                size="sm"
+                @click="resetAutomationForm(); showAutomationForm = true"
+            >
+                {{ t("settings.automation.addRule") }}
+            </Button>
+        </div>
+
+        <!-- Rule builder form -->
+        <div v-if="showAutomationForm" class="mt-6 rounded-2xl border border-border bg-muted/30 p-4 space-y-4">
+            <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.name") }}</label>
+                <input
+                    v-model="automationForm.name"
+                    data-testid="automation.rule_name_input"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Rule name"
+                />
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.event") }}</label>
+                <select
+                    v-model="automationForm.triggerEvent"
+                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                    <option v-for="ev in automationTriggerEvents" :key="ev.value" :value="ev.value">{{ ev.label }}</option>
+                </select>
+            </div>
+            <div v-if="automationForm.triggerEvent === 'ticket.state_changed'" class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.condFromState") }}</label>
+                    <input v-model="automationForm.condFromState" class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" placeholder="UUID (optional)" />
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.condToState") }}</label>
+                    <input v-model="automationForm.condToState" class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" placeholder="UUID (optional)" />
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" v-model="automationForm.enabled" class="h-4 w-4" id="automation-enabled" />
+                <label for="automation-enabled" class="text-sm">{{ t("settings.automation.enabled") }}</label>
+            </div>
+            <div>
+                <p class="text-xs font-medium text-muted-foreground mb-2">{{ t("settings.automation.actions") }}</p>
+                <div v-for="(action, idx) in automationForm.actions" :key="idx" class="mb-2 rounded-lg border border-border bg-background p-3 space-y-2">
+                    <div class="flex items-center gap-2">
+                        <select
+                            v-model="action.type"
+                            class="flex-1 rounded-lg border border-border bg-background px-2 py-1 text-sm"
+                            @change="onAutomationActionTypeChange(idx)"
+                        >
+                            <option v-for="at in automationActionTypes" :key="at.value" :value="at.value">{{ at.label }}</option>
+                        </select>
+                        <button class="text-xs text-destructive hover:underline" @click="removeAutomationAction(idx)">{{ t("settings.automation.removeAction") }}</button>
+                    </div>
+                    <div v-if="action.type === 'set_state'">
+                        <input v-model="action.params['state_id']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs" placeholder="State UUID" />
+                    </div>
+                    <div v-else-if="action.type === 'set_assignee'">
+                        <input v-model="action.params['assignee_id']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs" placeholder="Assignee UUID" />
+                    </div>
+                    <div v-else-if="action.type === 'set_priority'">
+                        <select v-model="action.params['priority']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs">
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+                    <div v-else-if="action.type === 'add_comment'">
+                        <input v-model="action.params['body']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs" placeholder="Comment body (supports {{ticket.key}}, {{ticket.title}})" />
+                    </div>
+                </div>
+                <button class="text-xs text-primary hover:underline" @click="addAutomationAction">{{ t("settings.automation.addAction") }}</button>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <Button
+                    data-testid="automation.rule_save_button"
+                    size="sm"
+                    :disabled="!automationForm.name || !automationForm.triggerEvent"
+                    @click="saveAutomationRule"
+                >
+                    {{ t("settings.automation.save") }}
+                </Button>
+                <Button variant="ghost" size="sm" @click="resetAutomationForm">{{ t("settings.automation.cancel") }}</Button>
+            </div>
+        </div>
+
+        <!-- Rule list -->
+        <div v-if="automationStore.loading && !automationStore.rules.length" class="mt-6 text-sm text-muted-foreground">Loading...</div>
+        <div v-else-if="!automationStore.rules.length && !showAutomationForm" class="mt-6 text-sm text-muted-foreground">{{ t("settings.automation.empty") }}</div>
+        <div
+            v-else
+            data-testid="automation.rule_list"
+            class="mt-4 space-y-2"
+        >
+            <div
+                v-for="rule in automationStore.rules"
+                :key="rule.id"
+                class="rounded-2xl border border-border bg-background/60 p-4"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-sm">{{ rule.name }}</span>
+                            <span v-if="!rule.enabled" class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Disabled</span>
+                        </div>
+                        <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground mt-1 inline-block">{{ rule.triggerEvent }}</span>
+                        <span class="ml-2 text-xs text-muted-foreground">{{ rule.executionCount }} runs</span>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button class="text-xs text-primary hover:underline" @click="startEditRule(rule)">Edit</button>
+                        <button class="text-xs text-muted-foreground hover:underline" @click="toggleRuleExpanded(selectedProjectId, rule.id)">
+                            {{ expandedRuleId === rule.id ? "▲ Hide" : "▼ History" }}
+                        </button>
+                        <button
+                            class="text-xs text-destructive hover:underline"
+                            @click="confirmDeleteRule(selectedProjectId, rule.id)"
+                        >Delete</button>
+                    </div>
+                </div>
+
+                <!-- Execution history -->
+                <div v-if="expandedRuleId === rule.id" class="mt-3 border-t border-border pt-3">
+                    <p class="text-xs font-medium text-muted-foreground mb-2">{{ t("settings.automation.executions") }}</p>
+                    <div v-if="!automationStore.executionsByRule[rule.id]?.length" class="text-xs text-muted-foreground">{{ t("settings.automation.executionEmpty") }}</div>
+                    <div v-else class="space-y-1">
+                        <div
+                            v-for="exec in automationStore.executionsByRule[rule.id]"
+                            :key="exec.id"
+                            class="rounded border border-border/50 bg-muted/20 p-2 text-xs"
+                        >
+                            <span class="text-muted-foreground">{{ new Date(exec.createdAt).toLocaleString() }}</span>
+                            <span class="ml-2">{{ exec.actionsRun.filter(a => a.success).length }}/{{ exec.actionsRun.length }} actions ok</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </section>
 </template>

@@ -100,9 +100,15 @@ export type ProjectReportingSummary =
   components["schemas"]["ProjectReportingSummary"];
 export type ProjectReportingExportJson =
   components["schemas"]["ProjectReportingExportJson"];
+export type PortfolioStats = components["schemas"]["PortfolioStats"];
+export type PortfolioTotals = components["schemas"]["PortfolioTotals"];
+export type ProjectPortfolioEntry =
+  components["schemas"]["ProjectPortfolioEntry"];
 export type Sprint = components["schemas"]["Sprint"];
 export type SprintListResponse = components["schemas"]["SprintListResponse"];
 export type SprintCreateRequest = components["schemas"]["SprintCreateRequest"];
+export type SprintCompleteRequest = components["schemas"]["SprintCompleteRequest"];
+export type SprintStatus = components["schemas"]["SprintStatus"];
 export type CapacitySetting = components["schemas"]["CapacitySetting"];
 export type CapacitySettingInput =
   components["schemas"]["CapacitySettingInput"];
@@ -140,6 +146,8 @@ export type NotificationMarkAllResponse =
   components["schemas"]["NotificationMarkAllResponse"];
 export type ProjectGroupUpdateRequest =
   components["schemas"]["ProjectGroupUpdateRequest"];
+export type AuditLogEntry = components["schemas"]["AuditLogEntry"];
+export type AuditLogListResponse = components["schemas"]["AuditLogListResponse"];
 export type BoardFilter = components["schemas"]["BoardFilter"];
 export type BoardFilterPreset = components["schemas"]["BoardFilterPreset"];
 export type BoardFilterPresetCreateRequest =
@@ -153,6 +161,15 @@ export type TimeEntryCreateRequest =
   components["schemas"]["TimeEntryCreateRequest"];
 export type TimeEntryListResponse =
   components["schemas"]["TimeEntryListResponse"];
+export type AutomationAction = components["schemas"]["AutomationAction"];
+export type AutomationActionType = components["schemas"]["AutomationAction"]["type"];
+export type AutomationActionResult = components["schemas"]["AutomationActionResult"];
+export type AutomationRule = components["schemas"]["AutomationRule"];
+export type AutomationRuleListResponse = components["schemas"]["AutomationRuleListResponse"];
+export type AutomationRuleCreateRequest = components["schemas"]["AutomationRuleCreateRequest"];
+export type AutomationRuleUpdateRequest = components["schemas"]["AutomationRuleUpdateRequest"];
+export type AutomationExecution = components["schemas"]["AutomationExecution"];
+export type AutomationExecutionListResponse = components["schemas"]["AutomationExecutionListResponse"];
 
 const API_BASE = (
   import.meta.env.VITE_API_BASE ||
@@ -814,6 +831,28 @@ export async function removeSprintTickets(
   });
 }
 
+export async function startSprint(
+  projectId: string,
+  sprintId: string,
+): Promise<Sprint> {
+  const id = resolveProjectId(projectId);
+  return request<Sprint>(`/projects/${id}/sprints/${sprintId}/start`, {
+    method: "POST",
+  });
+}
+
+export async function completeSprint(
+  projectId: string,
+  sprintId: string,
+  payload?: SprintCompleteRequest,
+): Promise<Sprint> {
+  const id = resolveProjectId(projectId);
+  return request<Sprint>(`/projects/${id}/sprints/${sprintId}/complete`, {
+    method: "POST",
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
+}
+
 export async function listProjectCapacitySettings(
   projectId: string,
 ): Promise<CapacitySettingsResponse> {
@@ -1090,5 +1129,93 @@ export async function deleteTicketTimeEntry(
   await request<void>(
     `/projects/${projectId}/tickets/${ticketId}/time-entries/${timeEntryId}`,
     { method: "DELETE" },
+  );
+}
+
+export async function getPortfolioStats(params?: { ownerId?: string; groupId?: string }): Promise<PortfolioStats> {
+  const qs = new URLSearchParams();
+  if (params?.ownerId) qs.set("ownerId", params.ownerId);
+  if (params?.groupId) qs.set("groupId", params.groupId);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request<PortfolioStats>(`/portfolio/stats${suffix}`);
+}
+
+export async function exportPortfolioStats(): Promise<ReportingExportFile> {
+  const res = await fetch(`${API_BASE}/portfolio/stats?format=csv`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const message = await res.text().catch(() => "");
+    const error = new Error(message || res.statusText);
+    (error as Error & { status?: number }).status = res.status;
+    throw error;
+  }
+  const contentType = res.headers.get("Content-Type") || "text/csv";
+  const blob = await res.blob();
+  return { blob, contentType, filename: "portfolio-stats.csv" };
+}
+
+export async function listAuditLog(params?: {
+  limit?: number;
+  offset?: number;
+  projectId?: string;
+  resourceType?: string;
+  actorId?: string;
+}): Promise<AuditLogListResponse> {
+  const qs = new URLSearchParams();
+  if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+  if (params?.offset !== undefined) qs.set("offset", String(params.offset));
+  if (params?.projectId) qs.set("projectId", params.projectId);
+  if (params?.resourceType) qs.set("resourceType", params.resourceType);
+  if (params?.actorId) qs.set("actorId", params.actorId);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return request<AuditLogListResponse>(`/admin/audit-log${suffix}`);
+}
+
+export async function listAutomationRules(
+  projectId: string,
+): Promise<AutomationRuleListResponse> {
+  return request<AutomationRuleListResponse>(
+    `/projects/${projectId}/automation/rules`,
+  );
+}
+
+export async function createAutomationRule(
+  projectId: string,
+  payload: AutomationRuleCreateRequest,
+): Promise<AutomationRule> {
+  return request<AutomationRule>(
+    `/projects/${projectId}/automation/rules`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function updateAutomationRule(
+  projectId: string,
+  ruleId: string,
+  payload: AutomationRuleUpdateRequest,
+): Promise<AutomationRule> {
+  return request<AutomationRule>(
+    `/projects/${projectId}/automation/rules/${ruleId}`,
+    { method: "PUT", body: JSON.stringify(payload) },
+  );
+}
+
+export async function deleteAutomationRule(
+  projectId: string,
+  ruleId: string,
+): Promise<void> {
+  await request<void>(
+    `/projects/${projectId}/automation/rules/${ruleId}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function listAutomationExecutions(
+  projectId: string,
+  ruleId: string,
+): Promise<AutomationExecutionListResponse> {
+  return request<AutomationExecutionListResponse>(
+    `/projects/${projectId}/automation/rules/${ruleId}/executions`,
   );
 }

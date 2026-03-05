@@ -21,6 +21,8 @@ type Sprint struct {
 	Goal             *string
 	StartDate        time.Time
 	EndDate          time.Time
+	Status           string
+	CompletedAt      *time.Time
 	TicketIDs        []uuid.UUID
 	CommittedTickets int
 	CreatedAt        time.Time
@@ -194,6 +196,97 @@ func (s *Store) RemoveSprintTickets(ctx context.Context, projectID, sprintID uui
 	return s.GetSprint(ctx, projectID, sprintID)
 }
 
+func (s *Store) StartSprint(ctx context.Context, projectID, sprintID uuid.UUID) (Sprint, error) {
+	_, err := withTx(ctx, s.db, func(tx pgx.Tx) (struct{}, error) {
+		// Verify sprint belongs to project and is planned
+		var status string
+		if err := tx.QueryRow(ctx, "SELECT status FROM sprints WHERE id = $1 AND project_id = $2", sprintID, projectID).Scan(&status); err != nil {
+			return struct{}{}, fmt.Errorf("sprint not found: %w", err)
+		}
+		if status != "planned" {
+			return struct{}{}, errors.New("only planned sprints can be started")
+		}
+		// Check no other active sprint exists for this project
+		var activeExists bool
+		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM sprints WHERE project_id = $1 AND status = 'active')", projectID).Scan(&activeExists); err != nil {
+			return struct{}{}, err
+		}
+		if activeExists {
+			return struct{}{}, errors.New("another sprint is already active")
+		}
+		if _, err := tx.Exec(ctx, mustSQL("sprints_update_status", nil), sprintID, "active", nil); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return Sprint{}, err
+	}
+	return s.GetSprint(ctx, projectID, sprintID)
+}
+
+func (s *Store) CompleteSprint(ctx context.Context, projectID, sprintID uuid.UUID, moveTicketIDs []uuid.UUID) (Sprint, error) {
+	_, err := withTx(ctx, s.db, func(tx pgx.Tx) (struct{}, error) {
+		// Verify sprint belongs to project and is active
+		var status string
+		if err := tx.QueryRow(ctx, "SELECT status FROM sprints WHERE id = $1 AND project_id = $2", sprintID, projectID).Scan(&status); err != nil {
+			return struct{}{}, fmt.Errorf("sprint not found: %w", err)
+		}
+		if status != "active" {
+			return struct{}{}, errors.New("only active sprints can be completed")
+		}
+		// Mark as completed
+		now := time.Now()
+		if _, err := tx.Exec(ctx, mustSQL("sprints_update_status", nil), sprintID, "completed", now); err != nil {
+			return struct{}{}, err
+		}
+		// Move requested tickets to next planned sprint
+		if len(moveTicketIDs) > 0 {
+			// Find next planned sprint
+			nextSprint, err := queryOne(ctx, tx, mustSQL("sprints_next_planned", nil), scanSprintRow, projectID)
+			if err != nil {
+				return struct{}{}, fmt.Errorf("no planned sprint available for rollover: %w", err)
+			}
+			for _, ticketID := range moveTicketIDs {
+				if _, err := tx.Exec(ctx, mustSQL("sprint_tickets_insert", nil), nextSprint.ID, ticketID); err != nil {
+					return struct{}{}, err
+				}
+			}
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return Sprint{}, err
+	}
+	return s.GetSprint(ctx, projectID, sprintID)
+}
+
+func (s *Store) GetActiveSprint(ctx context.Context, projectID uuid.UUID) (Sprint, error) {
+	sprint, err := queryOne(ctx, s.db, mustSQL("sprints_active_for_project", nil), scanSprintRow, projectID)
+	if err != nil {
+		return Sprint{}, err
+	}
+	ticketIDs, err := queryMany(ctx, s.db, mustSQL("sprint_tickets_list", nil), scanSprintTicketID, sprint.ID)
+	if err != nil {
+		return Sprint{}, err
+	}
+	sprint.TicketIDs = ticketIDs
+	return sprint, nil
+}
+
+func (s *Store) GetNextPlannedSprint(ctx context.Context, projectID uuid.UUID) (Sprint, error) {
+	sprint, err := queryOne(ctx, s.db, mustSQL("sprints_next_planned", nil), scanSprintRow, projectID)
+	if err != nil {
+		return Sprint{}, err
+	}
+	ticketIDs, err := queryMany(ctx, s.db, mustSQL("sprint_tickets_list", nil), scanSprintTicketID, sprint.ID)
+	if err != nil {
+		return Sprint{}, err
+	}
+	sprint.TicketIDs = ticketIDs
+	return sprint, nil
+}
+
 func (s *Store) ListCapacitySettings(ctx context.Context, projectID uuid.UUID) ([]CapacitySetting, error) {
 	return queryMany(ctx, s.db, mustSQL("capacity_settings_list", nil), scanCapacitySetting, projectID)
 }
@@ -340,6 +433,8 @@ func scanSprintRow(row pgx.Row) (Sprint, error) {
 		&out.Goal,
 		&out.StartDate,
 		&out.EndDate,
+		&out.Status,
+		&out.CompletedAt,
 		&out.CreatedAt,
 		&out.UpdatedAt,
 		&out.CommittedTickets,

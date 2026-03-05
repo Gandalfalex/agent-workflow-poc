@@ -25,6 +25,11 @@ const router = createRouter({
       component: SettingsPage,
       props: true,
     },
+    {
+      path: "/portfolio",
+      name: "portfolio",
+      component: () => import("@/views/PortfolioDashboard.vue"),
+    },
   ],
 });
 

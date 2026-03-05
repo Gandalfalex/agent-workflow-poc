@@ -43,6 +43,8 @@ import {
   createProjectSprint as apiCreateProjectSprint,
   addSprintTickets as apiAddSprintTickets,
   removeSprintTickets as apiRemoveSprintTickets,
+  startSprint as apiStartSprint,
+  completeSprint as apiCompleteSprint,
   createBoardFilterPreset as apiCreateBoardFilterPreset,
   deleteBoardFilterPreset as apiDeleteBoardFilterPreset,
   getSharedBoardFilterPreset,
@@ -72,6 +74,7 @@ import {
   type ProjectReportingSummary,
   type Sprint,
   type SprintCreateRequest,
+  type SprintCompleteRequest,
   type SprintForecastSummary,
   type CapacitySetting,
   type CapacitySettingInput,
@@ -672,6 +675,16 @@ export const useBoardStore = defineStore("board", {
     },
     async removeSprintTickets(projectId: string, sprintId: string, ticketIds: string[]) {
       const updated = await apiRemoveSprintTickets(projectId, sprintId, ticketIds);
+      this.sprints = this.sprints.map((s) => (s.id === updated.id ? updated : s));
+      return updated;
+    },
+    async startSprint(projectId: string, sprintId: string) {
+      const updated = await apiStartSprint(projectId, sprintId);
+      this.sprints = this.sprints.map((s) => (s.id === updated.id ? updated : s));
+      return updated;
+    },
+    async completeSprint(projectId: string, sprintId: string, payload?: SprintCompleteRequest) {
+      const updated = await apiCompleteSprint(projectId, sprintId, payload);
       this.sprints = this.sprints.map((s) => (s.id === updated.id ? updated : s));
       return updated;
     },

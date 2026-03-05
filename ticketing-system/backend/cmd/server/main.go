@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ticketing-system/backend/internal/auth"
+	"ticketing-system/backend/internal/automation"
 	"ticketing-system/backend/internal/blob"
 	"ticketing-system/backend/internal/config"
 	"ticketing-system/backend/internal/httpapi"
@@ -43,6 +44,7 @@ func main() {
 	})
 
 	dispatcher := webhook.New(st)
+	automationEngine := automation.New(st, dispatcher)
 
 	blobStore, err := blob.NewMinIO(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
 	if err != nil {
@@ -60,10 +62,11 @@ func main() {
 	}
 
 	handler := httpapi.NewHandler(st, authClient, dispatcher, httpapi.HandlerOptions{
-		CookieName:     "ticketing_session",
-		CookieSecure:   cfg.CookieSecure,
-		AllowedOrigins: cfg.CORSAllowedOrigins,
-		BlobStore:      blobOpt,
+		CookieName:       "ticketing_session",
+		CookieSecure:     cfg.CookieSecure,
+		AllowedOrigins:   cfg.CORSAllowedOrigins,
+		BlobStore:        blobOpt,
+		AutomationEngine: automationEngine,
 	})
 	router := httpapi.Router(handler)
 	apiHandler := http.Handler(router)

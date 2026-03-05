@@ -31,8 +31,8 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Space Grotesk", "system-ui", "sans-serif"],
-        serif: ["Newsreader", "Georgia", "serif"],
+        sans: ["IBM Plex Sans", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["IBM Plex Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
     },
   },
