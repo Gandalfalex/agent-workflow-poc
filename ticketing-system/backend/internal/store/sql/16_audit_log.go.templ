@@ -1,0 +1,23 @@
+{{define "audit_log_insert.sql"}}
+INSERT INTO audit_log (actor_id, actor_name, action, resource_type, resource_id, resource_name, project_id, details)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id
+{{end}}
+
+{{define "audit_log_list.sql"}}
+SELECT id, actor_id, actor_name, action, resource_type, resource_id, resource_name, project_id, details, created_at
+FROM audit_log
+WHERE ($1::uuid IS NULL OR project_id = $1)
+  AND ($2::text IS NULL OR resource_type = $2)
+  AND ($3::uuid IS NULL OR actor_id = $3)
+ORDER BY created_at DESC
+LIMIT $4 OFFSET $5
+{{end}}
+
+{{define "audit_log_count.sql"}}
+SELECT COUNT(*)
+FROM audit_log
+WHERE ($1::uuid IS NULL OR project_id = $1)
+  AND ($2::text IS NULL OR resource_type = $2)
+  AND ($3::uuid IS NULL OR actor_id = $3)
+{{end}}

@@ -1,0 +1,59 @@
+{{define "automation_rule_fields"}}
+id, project_id, name, enabled, trigger_event, trigger_conditions, actions, execution_count, last_executed_at, created_at, updated_at
+{{end}}
+
+{{define "automation_rules_list.sql"}}
+SELECT {{template "automation_rule_fields" .}}
+FROM automation_rules
+WHERE project_id = $1
+ORDER BY created_at ASC
+{{end}}
+
+{{define "automation_rules_list_enabled.sql"}}
+SELECT {{template "automation_rule_fields" .}}
+FROM automation_rules
+WHERE project_id = $1 AND enabled = true
+ORDER BY created_at ASC
+{{end}}
+
+{{define "automation_rules_get.sql"}}
+SELECT {{template "automation_rule_fields" .}}
+FROM automation_rules
+WHERE id = $1 AND project_id = $2
+{{end}}
+
+{{define "automation_rules_insert.sql"}}
+INSERT INTO automation_rules (project_id, name, enabled, trigger_event, trigger_conditions, actions)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+{{end}}
+
+{{define "automation_rules_update.sql"}}
+UPDATE automation_rules
+SET {{ .Updates }}
+WHERE id = ${{ .IDArg }} AND project_id = ${{ .ProjectArg }}
+{{end}}
+
+{{define "automation_rules_delete.sql"}}
+DELETE FROM automation_rules
+WHERE id = $1 AND project_id = $2
+{{end}}
+
+{{define "automation_rules_bump_stats.sql"}}
+UPDATE automation_rules
+SET execution_count = execution_count + 1, last_executed_at = now()
+WHERE id = $1
+{{end}}
+
+{{define "automation_executions_insert.sql"}}
+INSERT INTO automation_executions (rule_id, ticket_id, trigger_event, actions_run)
+VALUES ($1, $2, $3, $4)
+{{end}}
+
+{{define "automation_executions_list.sql"}}
+SELECT id, rule_id, ticket_id, trigger_event, actions_run, created_at
+FROM automation_executions
+WHERE rule_id = $1
+ORDER BY created_at DESC
+LIMIT 50
+{{end}}
