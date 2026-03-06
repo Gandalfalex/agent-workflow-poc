@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { useI18n } from "@/lib/i18n";
+
+defineProps<{ active?: boolean }>();
+
 const { t } = useI18n();
 </script>
 
 <template>
     <div
-        class="group flex min-h-[100px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-border/25 bg-background/5 px-4 py-6 text-center transition-colors hover:border-primary/35 hover:bg-primary/5"
+        class="group flex min-h-[100px] flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition-all duration-150"
+        :class="
+            active
+                ? 'border-primary/70 bg-primary/10 scale-[1.02]'
+                : 'border-border/25 bg-background/5 hover:border-primary/35 hover:bg-primary/5'
+        "
     >
         <svg
-            class="mb-2 h-8 w-8 text-muted-foreground/20 transition group-hover:text-muted-foreground/50"
+            class="mb-2 h-8 w-8 transition"
+            :class="active ? 'text-primary/60' : 'text-muted-foreground/20 group-hover:text-muted-foreground/50'"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -21,7 +30,8 @@ const { t } = useI18n();
             ></path>
         </svg>
         <p
-            class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 transition group-hover:text-muted-foreground"
+            class="text-[10px] font-semibold uppercase tracking-wider transition"
+            :class="active ? 'text-primary/80' : 'text-muted-foreground/40 group-hover:text-muted-foreground'"
         >
             {{ t("board.view.dropHere") }}
         </p>

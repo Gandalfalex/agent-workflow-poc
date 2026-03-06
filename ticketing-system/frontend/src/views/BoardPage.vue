@@ -13,6 +13,10 @@ import { useI18n } from "@/lib/i18n";
 import { useSessionStore } from "@/stores/session";
 import { useAdminStore } from "@/stores/admin";
 import {
+    useKeyboardShortcuts,
+    createTicketingShortcuts,
+} from "@/composables/useKeyboardShortcuts";
+import {
     createAiTriageSuggestion,
     getProjectAiTriageSettings,
     getTicketIncidentPostmortem,
@@ -1177,6 +1181,44 @@ const onGlobalKeydown = async (event: KeyboardEvent) => {
 const closeNewTicket = () => {
     showNewTicket.value = false;
 };
+
+const closeTicketModal = () => {
+    selectedTicket.value = null;
+};
+
+const closeStoryModal = () => {
+    showStoryModal.value = false;
+};
+
+// Keyboard shortcuts setup
+useKeyboardShortcuts(
+    createTicketingShortcuts({
+        onNewTicket: () => {
+            if (canEditTickets.value) {
+                openNewTicket();
+            }
+        },
+        onSearch: () => {
+            boardToolbarRef.value?.focusSearch();
+        },
+        onCloseModal: () => {
+            if (showNewTicket.value) {
+                closeNewTicket();
+            } else if (selectedTicket.value) {
+                closeTicketModal();
+            } else if (showStoryModal.value) {
+                closeStoryModal();
+            } else if (showFilterPanel.value) {
+                showFilterPanel.value = false;
+            } else if (showSprintSidebar.value) {
+                showSprintSidebar.value = false;
+            }
+        },
+        onRefresh: () => {
+            refreshBoard();
+        },
+    }),
+);
 
 const openStoryModal = async () => {
     showStoryModal.value = true;

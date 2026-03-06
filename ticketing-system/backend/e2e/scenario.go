@@ -460,6 +460,10 @@ func (s *Scenario) runStep(keyword, description string, action func(*Scenario) e
 	}
 	if err := action(s); err != nil {
 		s.harness.failStep(step, err)
+		return s
+	}
+	if s.harness.config.screenshotAll && (keyword == "Then" || keyword == "And") {
+		s.harness.captureStepScreenshot(step)
 	}
 	return s
 }

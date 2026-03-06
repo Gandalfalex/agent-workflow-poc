@@ -640,3 +640,155 @@ Methods: `ListAutomationRules`, `ListEnabledAutomationRules`, `GetAutomationRule
 - `go test ./internal/...` — passes
 - `make e2e-contract` — contract regenerates
 - Manual: create rule → trigger → verify ticket updated + execution log entry visible in UI
+
+---
+
+### TKT-028: Live Collaboration MVP — Presence, Edit Locks, Real-Time Comments
+- **Priority:** `P3`
+- **Type:** `feature`
+- **Status:** `Todo`
+
+#### Problem
+Multiple users working simultaneously on the same board or ticket have no visibility of each other and no protection against concurrent edits. The result: accidental overwrites, stale reads, and wasted triage effort when two people resolve the same ticket at the same time.
+
+#### Scope
+- **Presence indicators** — show who is currently viewing the board or a specific ticket
+- **DB-enforced edit locks** — prevent concurrent saves; second editor gets a read-only view
+- **Real-time comment updates** — new comments appear live in open ticket modals without a manual refresh
+
+Out of scope for this ticket: field-level conflict resolution, typing indicators, cross-project presence.
+
+---
+
+#### Backend Changes
+
+**1. In-memory presence store** (`internal/presence/store.go`)
+- `PresenceEntry { UserID, UserName, ProjectID, View ("board"|"ticket"), TicketID *string, LastSeen time.Time }`
+- TTL-based expiry (30s); clients heartbeat every 15s
+- Methods: `Upsert`, `Delete`, `ListByProject`
+- Ephemeral — no DB migration needed
+
+**2. DB edit lock table** (`migrations/024_ticket_locks.sql`)
+```sql
+CREATE TABLE ticket_locks (
+    ticket_id    UUID PRIMARY KEY REFERENCES tickets(id) ON DELETE CASCADE,
+    locked_by    UUID NOT NULL,
+    locked_by_name TEXT NOT NULL,
+    acquired_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at   TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX ON ticket_locks (expires_at);
+```
+- Lock TTL: 2 minutes, renewable every 30s
+- Expired locks are ignored on read and cleaned up lazily on acquire
+
+**3. Lock REST endpoints**
+- `POST /tickets/{ticketId}/lock` — acquire lock
+  - Returns `200` with lock record if acquired or already held by this user
+  - Returns `409 Conflict` if held by another user:
+    ```json
+    { "lockedBy": "Alice", "expiresAt": "2026-03-06T18:55:00Z" }
+    ```
+- `PUT /tickets/{ticketId}/lock` — renew lock (extend TTL); returns `403` if not lock holder
+- `DELETE /tickets/{ticketId}/lock` — release lock; returns `403` if not lock holder
+
+**4. Lock enforcement in UpdateTicket handler**
+- Before applying any field update, check `ticket_locks` for an active, non-expired lock held by a different user
+- If blocked: return `423 Locked` with body `{ "lockedBy": "Alice", "expiresAt": "..." }`
+- If lock holder saves successfully: release lock automatically (or keep it — client decides)
+
+**5. New WebSocket event types** (extend existing `events/ws` transport)
+- `presence.update`
+  ```json
+  { "type": "presence.update", "payload": { "users": [{ "userId": "...", "userName": "Alice", "view": "ticket", "ticketId": "..." }] } }
+  ```
+- `ticket.lock_acquired` — broadcast when a lock is taken
+  ```json
+  { "type": "ticket.lock_acquired", "payload": { "ticketId": "...", "lockedBy": "Alice", "expiresAt": "..." } }
+  ```
+- `ticket.lock_released` — broadcast on explicit release or expiry
+  ```json
+  { "type": "ticket.lock_released", "payload": { "ticketId": "..." } }
+  ```
+- `ticket.comment_added`
+  ```json
+  { "type": "ticket.comment_added", "payload": { "ticketId": "...", "comment": { ...CommentResponse } } }
+  ```
+
+**6. New REST endpoint — presence heartbeat**
+- `POST /projects/{projectId}/presence`
+  - Body: `{ "view": "board"|"ticket", "ticketId": "uuid|null" }`
+  - Response: `{ "users": [...PresenceEntry] }`
+
+**7. OpenAPI**
+- Schemas: `PresenceEntry`, `PresenceRequest`, `PresenceResponse`, `TicketLock`, `TicketLockConflict`
+- Document WS event payload shapes in spec comments
+- Next migration: `024`, next SQL template: `18`
+
+---
+
+#### Frontend Changes
+
+**1. Presence composable** (`src/composables/usePresence.ts`)
+- POST heartbeat every 15s; clear on unmount / route change
+- Reactive `presenceUsers` updated from `presence.update` WS events
+
+**2. Board presence bar** (in `BoardPage.vue` toolbar area)
+- Avatar row for users currently on this board
+- Tooltip per avatar: "Alice — viewing board", "Bob — editing TKT-014"
+- Show up to 5 avatars; remainder as "+N others"
+
+**3. Ticket modal edit lock** (`TicketModal.vue`)
+- On open: `POST /tickets/{id}/lock`
+  - Success → editable, renew every 30s via `PUT /tickets/{id}/lock`
+  - 409 → open in **read-only mode** with banner:
+    > **Alice has this ticket open for editing.**  
+    > Your changes cannot be saved until she closes it or the lock expires ({expiresAt}).
+- On save: release lock via `DELETE /tickets/{id}/lock` after successful update
+- On close without saving: release lock
+- Subscribe to `ticket.lock_released` — if the current ticket's lock is released while the modal is open in read-only mode, show toast: "Alice's lock was released — you can now edit this ticket." and re-attempt acquire
+
+**4. Real-time comments** (`TicketModal.vue`)
+- Subscribe to `ticket.comment_added` for the open ticket
+- Append new comments (deduplicate by ID); use existing `TransitionGroup` for slide-in animation
+- If user has scrolled away from the bottom, show a "1 new comment ↓" pill instead of auto-scrolling
+
+**5. Toast messages** (use existing `useToast`)
+
+| Trigger | Type | Message |
+|---------|------|---------|
+| Lock acquired successfully | — | *(silent — normal flow)* |
+| Lock acquisition fails (409) | warning | "Alice is editing this ticket — opened in read-only mode" |
+| Lock released by other user while you wait | success | "Alice's lock expired — you can now edit this ticket" |
+| Your lock renewal fails (e.g. session expired) | error | "Your edit session expired. Refresh to continue editing." |
+| New comment arrives | info | "Bob added a comment" *(only if modal is not focused)* |
+| Save blocked by server (423) | error | "Could not save — Alice re-acquired the edit lock. Reload the ticket to see the latest version." |
+
+---
+
+#### Architecture Notes
+- Lock store: Postgres (durable, survives backend restarts; presence store stays in-memory)
+- Lock TTL enforced at read time — no background job required
+- `HandlerOptions` gets a `PresenceStore` field (same pattern as `AutomationEngine`)
+- WS broadcasts reuse existing `broadcastProjectEvent` helper
+- No new dependencies
+
+---
+
+#### Definition of Done
+- [ ] `024_ticket_locks.sql` migration
+- [ ] `PresenceStore` in-memory implementation with TTL
+- [ ] `POST/PUT/DELETE /tickets/{id}/lock` endpoints with OpenAPI schemas
+- [ ] `POST /projects/{id}/presence` endpoint
+- [ ] `423` enforcement in `UpdateTicket` handler
+- [ ] WS events: `presence.update`, `ticket.lock_acquired`, `ticket.lock_released`, `ticket.comment_added`
+- [ ] Board presence avatar bar
+- [ ] Ticket modal: lock acquire on open, renew, release on close/save
+- [ ] Ticket modal: read-only mode with lock-held banner when 409
+- [ ] Real-time comment append with "new comment" pill for off-screen arrivals
+- [ ] Toast messages per table above
+- [ ] E2E contract updated; at least 3 E2E tests:
+  - Presence avatars appear on board
+  - Second user sees read-only mode when lock is held
+  - Comment added by one user appears live for the other
+- [ ] Feature flag: `VITE_LIVE_COLLAB_ENABLED` (default `false`)

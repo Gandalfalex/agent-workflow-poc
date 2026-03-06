@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { TicketResponse } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { ref } from "vue";
+
+const isDragging = ref(false);
 
 const props = defineProps<{
     ticket: TicketResponse;
@@ -33,7 +36,7 @@ const priorityColor = (priority: string) => {
             return "bg-amber-500/20 text-amber-300 border-amber-500/30";
         case "low":
         default:
-            return "bg-slate-500/15 text-slate-400 border-slate-500/20";
+            return "bg-slate-500/15 text-slate-300 border-slate-500/30";
     }
 };
 
@@ -50,7 +53,7 @@ const typeColor = (type: string) => {
 const priorityStripeClass = (priority: string) => {
     switch (priority) {
         case "urgent":
-            return "bg-red-500";
+            return "bg-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]";
         case "high":
             return "bg-orange-500";
         case "medium":
@@ -88,17 +91,21 @@ const formatTitleForDisplay = (title: string) => {
 
 <template>
     <div
-        class="group relative cursor-grab rounded-xl border-2 border-border bg-gradient-to-br from-background to-background/80 p-4 pl-7 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg hover:border-primary/40 hover:shadow-primary/5"
-        :class="
+        class="group relative cursor-grab rounded-xl border-2 border-border bg-gradient-to-br from-background to-background/80 p-4 pl-7 shadow-sm transition-all duration-200 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-primary/50 hover:shadow-primary/10 hover:ring-1 hover:ring-primary/20"
+        :class="[
             props.selectedTicketIds.includes(props.ticket.id)
                 ? 'border-primary/70 ring-2 ring-primary/30 bg-primary/10'
-                : ''
-        "
+                : '',
+            isDragging ? 'scale-[0.98] opacity-75 cursor-grabbing' : '',
+        ]"
         :draggable="props.canEditTickets && !props.bulkSelectMode"
         @dragstart="
-            props.bulkSelectMode ? undefined : props.onDragStart(props.ticket.id)
+            if (!props.bulkSelectMode) {
+                isDragging = true;
+                props.onDragStart(props.ticket.id);
+            }
         "
-        @dragend="props.onDragEnd"
+        @dragend="isDragging = false; props.onDragEnd()"
         @dragover.prevent
         @drop.prevent="
             props.onDropCard(props.ticket.id, props.stateId, props.rowId)
@@ -123,11 +130,11 @@ const formatTitleForDisplay = (title: string) => {
             {{ props.selectedTicketIds.includes(props.ticket.id) ? "✓" : "" }}
         </button>
         <div
-            class="absolute inset-y-0 left-0 w-1 rounded-l-xl"
+            class="absolute inset-y-0 left-0 w-1.5 rounded-l-xl"
             :class="priorityStripeClass(props.ticket.priority)"
         />
         <div
-            class="absolute left-2 top-8 text-muted-foreground/60"
+            class="absolute left-2 top-8 text-muted-foreground/80"
             :title="props.canEditTickets ? t('board.view.dragCard') : ''"
         >
             ⋮⋮
@@ -210,14 +217,14 @@ const formatTitleForDisplay = (title: string) => {
         </p>
         <p
             v-if="formatTitleForDisplay(props.ticket.title).longId"
-            class="mb-2 font-mono text-[10px] tracking-wide text-slate-400"
+            class="mb-2 font-mono text-[10px] tracking-wide text-slate-300"
         >
             {{ t("board.view.ticketId") }} · {{ props.ticket.title }}
         </p>
 
         <p
             v-if="props.ticket.description"
-            class="mb-3 line-clamp-2 text-xs leading-relaxed text-slate-400"
+            class="mb-3 line-clamp-2 text-xs leading-relaxed text-slate-300"
         >
             {{ props.ticket.description }}
         </p>

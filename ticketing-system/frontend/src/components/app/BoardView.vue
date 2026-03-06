@@ -62,9 +62,26 @@ const { t } = useI18n();
 <template>
     <section
         v-if="loading"
-        class="rounded-3xl border border-border bg-card/80 p-6"
+        class="rounded-3xl border border-border bg-card/80 p-6 animate-pulse"
     >
-        <p class="text-sm text-muted-foreground">{{ t("board.view.loading") }}</p>
+        <div class="flex items-center justify-between mb-6">
+            <div class="h-8 bg-muted rounded-lg w-48"></div>
+            <div class="h-8 bg-muted rounded-lg w-32"></div>
+        </div>
+        <div class="flex gap-4 mb-4">
+            <div v-for="i in 4" :key="i" class="flex-1 h-10 bg-muted/70 rounded-xl"></div>
+        </div>
+        <div class="space-y-4">
+            <div v-for="row in 3" :key="row" class="border border-border/50 rounded-xl p-4">
+                <div class="h-6 bg-muted rounded w-1/3 mb-4"></div>
+                <div class="grid grid-cols-4 gap-4">
+                    <div v-for="col in 4" :key="col" class="space-y-3">
+                        <div class="h-24 bg-muted/60 rounded-xl"></div>
+                        <div class="h-24 bg-muted/60 rounded-xl"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </section>
 
     <section
@@ -116,7 +133,7 @@ const { t } = useI18n();
             @clear-filter="props.onClearFilter"
         />
 
-        <div class="w-full pb-2">
+        <div class="w-full overflow-x-auto pb-2">
             <BoardGridHeader :states="props.states" />
 
             <BoardStoryRow

@@ -4,6 +4,7 @@ import type { TicketResponse, WorkflowState } from "@/lib/api";
 import StoryInfoCell from "@/components/app/board/StoryInfoCell.vue";
 import TicketCard from "@/components/app/board/TicketCard.vue";
 import EmptyDropZone from "@/components/app/board/EmptyDropZone.vue";
+import { ref } from "vue";
 
 type DropHandler = (stateId: string, storyId: string) => void;
 type DropCardHandler = (
@@ -31,6 +32,8 @@ const props = defineProps<{
     onQuickCyclePriority: (ticket: TicketResponse) => void;
     onQuickAssignToMe: (ticket: TicketResponse) => void;
 }>();
+
+const dragOverStateId = ref<string | null>(null);
 </script>
 
 <template>
@@ -54,14 +57,30 @@ const props = defineProps<{
         <div
             v-for="(state, idx) in props.states"
             :key="state.id"
-            class="flex min-h-[180px] flex-col rounded-2xl border border-border bg-card/35 p-3.5"
+            class="flex min-h-[180px] flex-col rounded-2xl border p-3.5 transition-all duration-150"
+            :class="
+                dragOverStateId === state.id
+                    ? 'border-primary/60 bg-primary/8 shadow-[inset_0_0_0_2px_rgba(var(--primary)/0.2)]'
+                    : 'border-border bg-card/35'
+            "
+            @dragenter.prevent="dragOverStateId = state.id"
+            @dragleave="dragOverStateId = null"
             @dragover.prevent
-            @drop.prevent="props.onDropColumn(state.id, props.row.id)"
+            @drop.prevent="dragOverStateId = null; props.onDropColumn(state.id, props.row.id)"
         >
-            <div class="flex flex-1 flex-col gap-2.5">
+            <TransitionGroup
+                tag="div"
+                class="flex flex-1 flex-col gap-2.5"
+                enter-active-class="transition-all duration-200 ease-out"
+                enter-from-class="opacity-0 translate-y-2"
+                enter-to-class="opacity-100 translate-y-0"
+                move-class="transition-all duration-200"
+                appear
+            >
                 <TicketCard
-                    v-for="ticket in props.row.ticketsByState[state.id]"
+                    v-for="(ticket, i) in props.row.ticketsByState[state.id]"
                     :key="ticket.id"
+                    :style="{ transitionDelay: `${i * 40}ms` }"
                     :ticket="ticket"
                     :state-id="state.id"
                     :row-id="props.row.id"
@@ -82,8 +101,10 @@ const props = defineProps<{
 
                 <EmptyDropZone
                     v-if="(props.row.ticketsByState[state.id] || []).length === 0"
+                    key="empty-drop"
+                    :active="dragOverStateId === state.id"
                 />
-            </div>
+            </TransitionGroup>
         </div>
     </div>
 </template>

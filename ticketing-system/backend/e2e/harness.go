@@ -79,6 +79,7 @@ type harnessConfig struct {
 	artifactsDir      string
 	contractFile      string
 	loginAsViewer     bool
+	screenshotAll     bool
 }
 
 type FrontendContract struct {
@@ -799,6 +800,24 @@ func (h *Harness) resolveURL(path string) string {
 	return h.BaseURL() + trimmed
 }
 
+func (h *Harness) captureStepScreenshot(step string) {
+	if h.page == nil {
+		return
+	}
+	baseDir := filepath.Join(h.config.artifactsDir, sanitizePath(h.t.Name()))
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		return
+	}
+	prefix := fmt.Sprintf("%s-%s", time.Now().UTC().Format("20060102-150405"), sanitizePath(step))
+	screenshotPath := filepath.Join(baseDir, prefix+".png")
+	if _, err := h.page.Screenshot(playwright.PageScreenshotOptions{
+		Path:     playwright.String(screenshotPath),
+		FullPage: playwright.Bool(true),
+	}); err != nil {
+		h.t.Logf("capture step screenshot: %v", err)
+	}
+}
+
 func (h *Harness) captureFailureArtifacts(step string) failureArtifacts {
 	result := failureArtifacts{}
 	if h.page == nil {
@@ -851,6 +870,7 @@ func loadHarnessConfig() harnessConfig {
 		headless:          envBool("E2E_HEADLESS", true),
 		artifactsDir:      artifacts,
 		contractFile:      frontendContractFile(),
+		screenshotAll:     envBool("E2E_SCREENSHOT_ALL", false),
 	}
 }
 

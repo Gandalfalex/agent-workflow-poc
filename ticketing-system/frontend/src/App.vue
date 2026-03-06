@@ -8,6 +8,7 @@ import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
 import { buildProjectEventsWebSocketUrls } from "@/lib/api";
 import type { NotificationPreferences, ProjectLiveEvent } from "@/lib/api";
+import ToastContainer from "@/components/ui/toast/ToastContainer.vue";
 
 const adminStore = useAdminStore();
 const boardStore = useBoardStore();
@@ -458,6 +459,7 @@ watch(
 
 <template>
     <div class="min-h-screen bg-background text-foreground">
+        <ToastContainer />
         <div class="relative">
             <div
                 class="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top,_rgba(120,160,255,0.18),_transparent_55%)]"
@@ -509,7 +511,19 @@ watch(
                 <main
                     class="relative flex w-full flex-col gap-8 px-6 pb-20"
                 >
-                    <RouterView />
+                    <RouterView v-slot="{ Component }">
+                        <Transition
+                            mode="out-in"
+                            enter-active-class="transition-opacity duration-200 ease-out"
+                            enter-from-class="opacity-0"
+                            enter-to-class="opacity-100"
+                            leave-active-class="transition-opacity duration-150 ease-in"
+                            leave-from-class="opacity-100"
+                            leave-to-class="opacity-0"
+                        >
+                            <component :is="Component" :key="route.name" />
+                        </Transition>
+                    </RouterView>
                 </main>
             </div>
         </div>

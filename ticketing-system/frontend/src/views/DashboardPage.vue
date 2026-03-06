@@ -70,6 +70,20 @@ const typeTrack: Record<string, string> = {
 
 import type { ProjectActivity } from "@/lib/api";
 
+const relativeTime = (dateStr: string): string => {
+    const diffMs = Date.now() - new Date(dateStr).getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffSec < 60) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHour < 24) return `${diffHour}h ago`;
+    if (diffDay === 1) return "yesterday";
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+};
+
 const activityLabel = (a: ProjectActivity): string => {
     switch (a.action) {
         case "state_changed":
@@ -136,22 +150,58 @@ watch(selectedSprintId, reloadForecast);
 <template>
     <!-- Loading skeleton -->
     <div v-if="loading" class="flex flex-col gap-5 animate-pulse">
-        <div class="grid grid-cols-4 gap-4">
+        <!-- Summary cards skeleton -->
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div
-                v-for="i in 3"
+                v-for="i in 4"
                 :key="i"
-                class="h-28 rounded-2xl border border-border bg-card/40"
-            ></div>
+                class="h-28 rounded-2xl border border-border bg-card/40 p-5"
+            >
+                <div class="h-3 bg-muted rounded w-16 mb-4"></div>
+                <div class="h-8 bg-muted rounded w-20"></div>
+            </div>
         </div>
-        <div
-            class="h-56 rounded-2xl border border-border bg-card/40"
-        ></div>
+
+        <!-- State bars skeleton -->
+        <div class="rounded-2xl border border-border bg-card/40 p-5">
+            <div class="h-3 bg-muted rounded w-32 mb-6"></div>
+            <div class="space-y-3">
+                <div v-for="i in 5" :key="i" class="flex items-center gap-3">
+                    <div class="h-4 bg-muted rounded w-24"></div>
+                    <div class="flex-1 h-5 bg-muted rounded"></div>
+                    <div class="h-4 bg-muted rounded w-8"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Priority + Type skeleton -->
         <div class="grid grid-cols-2 gap-4">
             <div
                 v-for="i in 2"
                 :key="i"
-                class="h-44 rounded-2xl border border-border bg-card/40"
-            ></div>
+                class="rounded-2xl border border-border bg-card/40 p-5"
+            >
+                <div class="h-3 bg-muted rounded w-24 mb-6"></div>
+                <div class="space-y-3">
+                    <div v-for="j in 4" :key="j" class="flex items-center gap-3">
+                        <div class="h-4 bg-muted rounded w-16"></div>
+                        <div class="flex-1 h-5 bg-muted rounded"></div>
+                        <div class="h-4 bg-muted rounded w-6"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity feed skeleton -->
+        <div class="rounded-2xl border border-border bg-card/40 p-5">
+            <div class="h-3 bg-muted rounded w-28 mb-6"></div>
+            <div class="space-y-3">
+                <div v-for="i in 5" :key="i" class="flex items-start gap-3">
+                    <div class="h-5 w-5 bg-muted rounded-full"></div>
+                    <div class="flex-1 h-4 bg-muted rounded"></div>
+                    <div class="h-4 bg-muted rounded w-20"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -176,51 +226,33 @@ watch(selectedSprintId, reloadForecast);
     <!-- Dashboard content -->
     <div v-else-if="stats" class="flex flex-col gap-5">
         <!-- Summary cards -->
-        <div class="grid grid-cols-3 gap-4">
-            <div
-                class="rounded-2xl border border-border bg-card/70 px-5 py-5"
-            >
-                <p
-                    class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
-                >
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div class="rounded-2xl border border-border border-l-4 border-l-primary bg-card/70 px-5 py-5">
+                <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                     {{ t("dashboard.summary.total") }}
                 </p>
                 <p class="mt-2 text-3xl font-bold tabular-nums">
                     {{ totalTickets }}
                 </p>
             </div>
-            <div
-                class="rounded-2xl border border-border bg-card/70 px-5 py-5"
-            >
-                <p
-                    class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
-                >
+            <div class="rounded-2xl border border-border border-l-4 border-l-blue-400 bg-card/70 px-5 py-5">
+                <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                     {{ t("dashboard.summary.open") }}
                 </p>
                 <p class="mt-2 text-3xl font-bold tabular-nums text-blue-400">
                     {{ stats.totalOpen }}
                 </p>
             </div>
-            <div
-                class="rounded-2xl border border-border bg-card/70 px-5 py-5"
-            >
-                <p
-                    class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
-                >
+            <div class="rounded-2xl border border-border border-l-4 border-l-emerald-400 bg-card/70 px-5 py-5">
+                <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                     {{ t("dashboard.summary.closed") }}
                 </p>
-                <p
-                    class="mt-2 text-3xl font-bold tabular-nums text-emerald-400"
-                >
+                <p class="mt-2 text-3xl font-bold tabular-nums text-emerald-400">
                     {{ stats.totalClosed }}
                 </p>
             </div>
-            <div
-                class="rounded-2xl border border-border bg-card/70 px-5 py-5"
-            >
-                <p
-                    class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground"
-                >
+            <div class="rounded-2xl border border-border border-l-4 border-l-rose-400 bg-rose-400/5 px-5 py-5">
+                <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
                     {{ t("dashboard.summary.blockedOpen") }}
                 </p>
                 <p class="mt-2 text-3xl font-bold tabular-nums text-rose-300">
@@ -269,53 +301,53 @@ watch(selectedSprintId, reloadForecast);
         </section>
 
         <section data-testid="dashboard.dependency-graph" class="rounded-2xl border border-border bg-card/70 px-5 py-5">
-            <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-                {{ t("dashboard.dependencyGraph") }}
-            </p>
-            <div v-if="dependencyGraphLoading" class="mt-4 text-xs text-muted-foreground">
-                {{ t("dashboard.loadingDependencyGraph") }}
-            </div>
-            <div v-else class="mt-4 space-y-2">
-                <p class="text-xs text-muted-foreground">
-                    {{
-                        t("dashboard.graphNodesEdges", {
-                            nodes: dependencyGraph.nodes.length,
-                            edges: dependencyGraph.edges.length,
-                        })
-                    }}
+            <div class="flex items-center justify-between">
+                <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                    {{ t("dashboard.dependencyGraph") }}
                 </p>
+                <span v-if="!dependencyGraphLoading" class="text-[10px] text-muted-foreground/60">
+                    {{ dependencyGraph.nodes.length }} nodes · {{ dependencyGraph.edges.length }} edges
+                </span>
+            </div>
+            <div v-if="dependencyGraphLoading" class="mt-4 flex gap-2 animate-pulse">
+                <div class="h-8 w-20 rounded-lg bg-muted"></div>
+                <div class="h-8 w-16 rounded-lg bg-muted"></div>
+                <div class="h-8 w-20 rounded-lg bg-muted"></div>
+            </div>
+            <div v-else-if="dependencyGraph.edges.length === 0" class="mt-4 text-xs text-muted-foreground">
+                {{ t("dashboard.noDependencies") }}
+            </div>
+            <div v-else class="mt-4 max-h-64 space-y-2 overflow-y-auto">
                 <div
-                    v-if="dependencyGraph.edges.length === 0"
-                    class="text-xs text-muted-foreground"
+                    v-for="edge in dependencyGraph.edges"
+                    :key="edge.id"
+                    class="flex items-center gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2"
                 >
-                    {{ t("dashboard.noDependencies") }}
-                </div>
-                <div v-else class="max-h-56 space-y-1 overflow-y-auto">
-                    <div
-                        v-for="edge in dependencyGraph.edges"
-                        :key="edge.id"
-                        class="rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-xs"
+                    <span class="rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[11px] font-bold text-primary">
+                        {{ dependencyGraph.nodes.find((n) => n.ticket.id === edge.sourceTicketId)?.ticket.key || edge.sourceTicketId }}
+                    </span>
+                    <span class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <span class="h-px w-6 bg-border"></span>
+                        {{ edge.relationType }}
+                        <span class="h-px w-6 bg-border"></span>
+                        <svg class="h-3 w-3 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                    </span>
+                    <span
+                        class="rounded-md border px-2 py-0.5 font-mono text-[11px] font-bold"
+                        :class="edge.relationType === 'blocks' ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'"
                     >
-                        <span class="font-medium text-foreground">
-                            {{
-                                dependencyGraph.nodes.find((n) => n.ticket.id === edge.sourceTicketId)?.ticket.key ||
-                                edge.sourceTicketId
-                            }}
-                        </span>
-                        <span class="mx-2 text-muted-foreground">{{ edge.relationType }}</span>
-                        <span class="font-medium text-foreground">
-                            {{
-                                dependencyGraph.nodes.find((n) => n.ticket.id === edge.targetTicketId)?.ticket.key ||
-                                edge.targetTicketId
-                            }}
-                        </span>
-                    </div>
+                        {{ dependencyGraph.nodes.find((n) => n.ticket.id === edge.targetTicketId)?.ticket.key || edge.targetTicketId }}
+                    </span>
+                    <span
+                        v-if="edge.relationType === 'blocks'"
+                        class="ml-auto rounded-full border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-400"
+                    >blocked</span>
                 </div>
             </div>
         </section>
 
         <!-- Priority + Type row -->
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <!-- By Priority -->
             <section
                 class="rounded-2xl border border-border bg-card/70 px-5 py-5"
@@ -491,7 +523,7 @@ watch(selectedSprintId, reloadForecast);
                         <span class="text-muted-foreground truncate"> · {{ activity.ticketTitle }}</span>
                     </div>
                     <span class="shrink-0 text-muted-foreground/60">
-                        {{ new Date(activity.createdAt).toLocaleString() }}
+                        {{ relativeTime(activity.createdAt) }}
                     </span>
                 </div>
             </div>
