@@ -759,6 +759,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/flow-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get flow health statistics for a project */
+        get: operations["getFlowHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List custom field definitions for a project */
+        get: operations["listCustomFields"];
+        put?: never;
+        /** Create a custom field definition */
+        post: operations["createCustomField"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/custom-fields/{fieldId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a custom field definition */
+        delete: operations["deleteCustomField"];
+        options?: never;
+        head?: never;
+        /** Update a custom field definition */
+        patch: operations["updateCustomField"];
+        trace?: never;
+    };
+    "/tickets/{id}/custom-field-values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get custom field values for a ticket */
+        get: operations["getTicketCustomFieldValues"];
+        /** Set custom field values for a ticket */
+        put: operations["setTicketCustomFieldValues"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/automation/rules": {
         parameters: {
             query?: never;
@@ -1389,6 +1460,10 @@ export interface components {
             order: number;
             isDefault: boolean;
             isClosed: boolean;
+            /** @description Maximum number of tickets allowed in this state. Null means no limit. */
+            wipLimit?: number | null;
+            /** @description If true, prevent moving tickets into this state when at or above wipLimit. */
+            wipEnforcement: boolean;
         };
         WorkflowStateInput: {
             /** Format: uuid */
@@ -1397,6 +1472,8 @@ export interface components {
             order: number;
             isDefault: boolean;
             isClosed: boolean;
+            wipLimit?: number | null;
+            wipEnforcement?: boolean;
         };
         WorkflowResponse: {
             states: components["schemas"]["WorkflowState"][];
@@ -2255,6 +2332,107 @@ export interface components {
         };
         SlaPolicyUpdateRequest: {
             items: components["schemas"]["SlaPolicyEntry"][];
+        };
+        FlowHealthWipStat: {
+            /** Format: uuid */
+            stateId: string;
+            stateName: string;
+            wipLimit?: number | null;
+            wipEnforcement: boolean;
+            ticketCount: number;
+            maxAgeHours: number;
+            avgAgeHours: number;
+        };
+        CycleTimePercentiles: {
+            p50Hours: number;
+            p75Hours: number;
+            p95Hours: number;
+            sampleCount: number;
+        };
+        ThroughputDay: {
+            /** Format: date */
+            day: string;
+            count: number;
+        };
+        FlowHealthStats: {
+            wipStats: components["schemas"]["FlowHealthWipStat"][];
+            cycleTime: components["schemas"]["CycleTimePercentiles"];
+            throughput: components["schemas"]["ThroughputDay"][];
+        };
+        /** @enum {string} */
+        CustomFieldType: "text" | "number" | "date" | "enum" | "user" | "boolean";
+        CustomFieldOption: {
+            value: string;
+            label: string;
+        };
+        CustomFieldTypeSchema: {
+            ticketType: components["schemas"]["TicketType"];
+            requiredStateIds: string[];
+        };
+        CustomFieldDefinition: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            label: string;
+            fieldType: components["schemas"]["CustomFieldType"];
+            options: components["schemas"]["CustomFieldOption"][];
+            order: number;
+            required: boolean;
+            schemas: components["schemas"]["CustomFieldTypeSchema"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CustomFieldDefinitionListResponse: {
+            items: components["schemas"]["CustomFieldDefinition"][];
+        };
+        CustomFieldDefinitionCreateRequest: {
+            name: string;
+            label: string;
+            fieldType: components["schemas"]["CustomFieldType"];
+            options?: components["schemas"]["CustomFieldOption"][];
+            required?: boolean;
+            schemas?: components["schemas"]["CustomFieldTypeSchema"][];
+        };
+        CustomFieldDefinitionUpdateRequest: {
+            label?: string;
+            options?: components["schemas"]["CustomFieldOption"][];
+            required?: boolean;
+            schemas?: components["schemas"]["CustomFieldTypeSchema"][];
+        };
+        CustomFieldValue: {
+            /** Format: uuid */
+            fieldId: string;
+            fieldName: string;
+            fieldLabel: string;
+            fieldType: components["schemas"]["CustomFieldType"];
+            valueText?: string | null;
+            valueNumber?: number | null;
+            /** Format: date */
+            valueDate?: string | null;
+            valueBoolean?: boolean | null;
+            /** Format: uuid */
+            valueUserId?: string | null;
+        };
+        CustomFieldValueListResponse: {
+            items: components["schemas"]["CustomFieldValue"][];
+        };
+        CustomFieldValueInput: {
+            /** Format: uuid */
+            fieldId: string;
+            valueText?: string | null;
+            valueNumber?: number | null;
+            /** Format: date */
+            valueDate?: string | null;
+            valueBoolean?: boolean | null;
+            /** Format: uuid */
+            valueUserId?: string | null;
+        };
+        CustomFieldValueUpsertRequest: {
+            values: components["schemas"]["CustomFieldValueInput"][];
         };
         ErrorResponse: {
             error: string;
@@ -3922,6 +4100,181 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SlaPolicyListResponse"];
+                };
+            };
+        };
+    };
+    getFlowHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Flow health stats */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FlowHealthStats"];
+                };
+            };
+        };
+    };
+    listCustomFields: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Custom field list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldDefinitionListResponse"];
+                };
+            };
+        };
+    };
+    createCustomField: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldDefinitionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldDefinition"];
+                };
+            };
+        };
+    };
+    deleteCustomField: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                fieldId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateCustomField: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                fieldId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldDefinitionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldDefinition"];
+                };
+            };
+        };
+    };
+    getTicketCustomFieldValues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Custom field values */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldValueListResponse"];
+                };
+            };
+        };
+    };
+    setTicketCustomFieldValues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldValueUpsertRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated values */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldValueListResponse"];
+                };
+            };
+            /** @description Required fields missing for state transition */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

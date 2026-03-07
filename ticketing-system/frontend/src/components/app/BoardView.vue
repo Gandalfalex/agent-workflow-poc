@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { StoryRow } from "@/lib/types";
 import type { TicketResponse, WorkflowState } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,16 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+
+const ticketCountByState = computed(() => {
+    const counts: Record<string, number> = {};
+    for (const row of props.storyRows) {
+        for (const [stateId, tickets] of Object.entries(row.ticketsByState)) {
+            counts[stateId] = (counts[stateId] ?? 0) + tickets.length;
+        }
+    }
+    return counts;
+});
 </script>
 
 <template>
@@ -134,7 +145,7 @@ const { t } = useI18n();
         />
 
         <div class="w-full overflow-x-auto pb-2">
-            <BoardGridHeader :states="props.states" />
+            <BoardGridHeader :states="props.states" :ticket-count-by-state="ticketCountByState" />
 
             <BoardStoryRow
                 v-for="row in props.storyRows"

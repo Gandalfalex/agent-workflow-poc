@@ -1,0 +1,45 @@
+{{define "flow_health_wip_stats.sql"}}
+SELECT
+    ws.id,
+    ws.name,
+    ws.wip_limit,
+    ws.wip_enforcement,
+    COUNT(t.id)::int AS ticket_count,
+    COALESCE(MAX(EXTRACT(EPOCH FROM (NOW() - t.created_at)) / 3600.0), 0)::float AS max_age_hours,
+    COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - t.created_at)) / 3600.0), 0)::float AS avg_age_hours
+FROM workflow_states ws
+LEFT JOIN tickets t ON t.state_id = ws.id
+WHERE ws.project_id = $1 AND ws.is_closed = false
+GROUP BY ws.id, ws.name, ws.wip_limit, ws.wip_enforcement, ws.sort_order
+ORDER BY ws.sort_order
+{{end}}
+
+{{define "flow_health_cycle_time.sql"}}
+SELECT
+    COALESCE(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (t.updated_at - t.created_at)) / 3600.0), 0)::float AS p50_hours,
+    COALESCE(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (t.updated_at - t.created_at)) / 3600.0), 0)::float AS p75_hours,
+    COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (t.updated_at - t.created_at)) / 3600.0), 0)::float AS p95_hours,
+    COUNT(*)::int AS sample_count
+FROM tickets t
+JOIN workflow_states ws ON ws.id = t.state_id
+WHERE t.project_id = $1
+  AND ws.is_closed = true
+  AND t.updated_at >= NOW() - INTERVAL '30 days'
+{{end}}
+
+{{define "flow_health_throughput.sql"}}
+SELECT
+    DATE_TRUNC('day', t.updated_at)::date AS day,
+    COUNT(*)::int AS count
+FROM tickets t
+JOIN workflow_states ws ON ws.id = t.state_id
+WHERE t.project_id = $1
+  AND ws.is_closed = true
+  AND t.updated_at >= NOW() - INTERVAL '14 days'
+GROUP BY 1
+ORDER BY 1
+{{end}}
+
+{{define "workflow_state_ticket_count.sql"}}
+SELECT COUNT(*)::int FROM tickets WHERE state_id = $1
+{{end}}

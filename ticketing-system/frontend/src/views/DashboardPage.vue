@@ -68,7 +68,8 @@ const typeTrack: Record<string, string> = {
     bug: "bg-rose-400/15",
 };
 
-import type { ProjectActivity } from "@/lib/api";
+import type { ProjectActivity, FlowHealthStats } from "@/lib/api";
+import { getFlowHealth } from "@/lib/api";
 
 const relativeTime = (dateStr: string): string => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -112,6 +113,25 @@ const handleAuthError = (err: unknown) => {
     return false;
 };
 
+const flowHealth = ref<FlowHealthStats | null>(null);
+const flowHealthLoading = ref(false);
+
+const maxThroughput = computed(() =>
+    Math.max(1, ...(flowHealth.value?.throughput?.map((d) => d.count) ?? [1])),
+);
+
+const loadFlowHealth = async () => {
+    if (!props.projectId) return;
+    flowHealthLoading.value = true;
+    try {
+        flowHealth.value = await getFlowHealth(props.projectId);
+    } catch {
+        // non-critical; silent fail
+    } finally {
+        flowHealthLoading.value = false;
+    }
+};
+
 const loadStats = async () => {
     if (!props.projectId) return;
     try {
@@ -121,6 +141,7 @@ const loadStats = async () => {
             boardStore.loadDependencyGraph(props.projectId, { depth: 2 }),
             boardStore.loadSprints(props.projectId),
             boardStore.loadCapacitySettings(props.projectId),
+            loadFlowHealth(),
         ]);
         if (!selectedSprintId.value && boardStore.sprints.length > 0) {
             selectedSprintId.value = boardStore.sprints[0]!.id;
@@ -624,6 +645,95 @@ watch(selectedSprintId, reloadForecast);
             </div>
             <div v-else class="mt-4 text-xs text-muted-foreground">
                 {{ t("dashboard.noForecast") }}
+            </div>
+        </section>
+
+        <!-- Flow Health Panel -->
+        <section
+            v-if="flowHealth || flowHealthLoading"
+            data-testid="dashboard.flow-health"
+            class="rounded-2xl border border-border bg-card/80 p-5 shadow-sm"
+        >
+            <p class="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                Flow Health
+            </p>
+
+            <div v-if="flowHealthLoading" class="mt-4 text-xs text-muted-foreground animate-pulse">
+                Loading...
+            </div>
+
+            <div v-else-if="flowHealth" class="mt-4 space-y-6">
+                <!-- WIP Stats -->
+                <div v-if="flowHealth.wipStats.length > 0">
+                    <p class="mb-2 text-xs font-semibold text-foreground">WIP per State</p>
+                    <div class="space-y-2">
+                        <div
+                            v-for="stat in flowHealth.wipStats"
+                            :key="stat.stateId"
+                            data-testid="dashboard.wip-stat-row"
+                            class="flex items-center gap-3"
+                        >
+                            <span class="w-28 truncate text-xs text-muted-foreground">{{ stat.stateName }}</span>
+                            <div class="flex-1 h-5 rounded-full overflow-hidden bg-muted/50">
+                                <div
+                                    class="h-5 rounded-full transition-all"
+                                    :class="
+                                        stat.wipLimit && stat.ticketCount >= stat.wipLimit
+                                            ? 'bg-destructive/70'
+                                            : 'bg-primary/60'
+                                    "
+                                    :style="{
+                                        width: stat.wipLimit
+                                            ? Math.min(100, (stat.ticketCount / stat.wipLimit) * 100) + '%'
+                                            : '0%',
+                                    }"
+                                ></div>
+                            </div>
+                            <span class="w-20 text-right text-xs font-medium">
+                                {{ stat.ticketCount }}
+                                <span v-if="stat.wipLimit" class="text-muted-foreground">/{{ stat.wipLimit }}</span>
+                            </span>
+                            <span
+                                v-if="stat.avgAgeHours > 0"
+                                class="w-20 text-right text-xs text-muted-foreground"
+                            >avg {{ stat.avgAgeHours.toFixed(1) }}h</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cycle Time -->
+                <div v-if="flowHealth.cycleTime.sampleCount > 0">
+                    <p class="mb-2 text-xs font-semibold text-foreground">Cycle Time (last 30 days)</p>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="rounded-lg border border-border/70 bg-background/60 px-3 py-2 text-center">
+                            <p class="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">P50</p>
+                            <p class="mt-1 text-lg font-bold">{{ flowHealth.cycleTime.p50Hours.toFixed(1) }}h</p>
+                        </div>
+                        <div class="rounded-lg border border-border/70 bg-background/60 px-3 py-2 text-center">
+                            <p class="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">P75</p>
+                            <p class="mt-1 text-lg font-bold">{{ flowHealth.cycleTime.p75Hours.toFixed(1) }}h</p>
+                        </div>
+                        <div class="rounded-lg border border-border/70 bg-background/60 px-3 py-2 text-center">
+                            <p class="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">P95</p>
+                            <p class="mt-1 text-lg font-bold">{{ flowHealth.cycleTime.p95Hours.toFixed(1) }}h</p>
+                        </div>
+                    </div>
+                    <p class="mt-1 text-[10px] text-muted-foreground">{{ flowHealth.cycleTime.sampleCount }} closed tickets</p>
+                </div>
+
+                <!-- Throughput -->
+                <div v-if="flowHealth.throughput.length > 0">
+                    <p class="mb-2 text-xs font-semibold text-foreground">Daily Throughput (last 14 days)</p>
+                    <div class="flex items-end gap-1 h-16">
+                        <div
+                            v-for="day in flowHealth.throughput"
+                            :key="day.day"
+                            class="flex-1 rounded-t bg-primary/50 hover:bg-primary/70 transition-colors"
+                            :style="{ height: Math.round((day.count / maxThroughput) * 100) + '%' }"
+                            :title="`${day.day}: ${day.count} tickets`"
+                        ></div>
+                    </div>
+                </div>
             </div>
         </section>
     </div>

@@ -40,6 +40,16 @@ const (
 	CapacitySettingScopeUser CapacitySettingScope = "user"
 )
 
+// Defines values for CustomFieldType.
+const (
+	CustomFieldTypeBoolean CustomFieldType = "boolean"
+	CustomFieldTypeDate    CustomFieldType = "date"
+	CustomFieldTypeEnum    CustomFieldType = "enum"
+	CustomFieldTypeNumber  CustomFieldType = "number"
+	CustomFieldTypeText    CustomFieldType = "text"
+	CustomFieldTypeUser    CustomFieldType = "user"
+)
+
 // Defines values for DependencyRelationType.
 const (
 	BlockedBy DependencyRelationType = "blocked_by"
@@ -436,6 +446,100 @@ type CapacitySettingsResponse struct {
 	Items []CapacitySetting `json:"items"`
 }
 
+// CustomFieldDefinition defines model for CustomFieldDefinition.
+type CustomFieldDefinition struct {
+	CreatedAt time.Time               `json:"createdAt"`
+	FieldType CustomFieldType         `json:"fieldType"`
+	Id        openapi_types.UUID      `json:"id"`
+	Label     string                  `json:"label"`
+	Name      string                  `json:"name"`
+	Options   []CustomFieldOption     `json:"options"`
+	Order     int                     `json:"order"`
+	ProjectId openapi_types.UUID      `json:"projectId"`
+	Required  bool                    `json:"required"`
+	Schemas   []CustomFieldTypeSchema `json:"schemas"`
+	UpdatedAt time.Time               `json:"updatedAt"`
+}
+
+// CustomFieldDefinitionCreateRequest defines model for CustomFieldDefinitionCreateRequest.
+type CustomFieldDefinitionCreateRequest struct {
+	FieldType CustomFieldType          `json:"fieldType"`
+	Label     string                   `json:"label"`
+	Name      string                   `json:"name"`
+	Options   *[]CustomFieldOption     `json:"options,omitempty"`
+	Required  *bool                    `json:"required,omitempty"`
+	Schemas   *[]CustomFieldTypeSchema `json:"schemas,omitempty"`
+}
+
+// CustomFieldDefinitionListResponse defines model for CustomFieldDefinitionListResponse.
+type CustomFieldDefinitionListResponse struct {
+	Items []CustomFieldDefinition `json:"items"`
+}
+
+// CustomFieldDefinitionUpdateRequest defines model for CustomFieldDefinitionUpdateRequest.
+type CustomFieldDefinitionUpdateRequest struct {
+	Label    *string                  `json:"label,omitempty"`
+	Options  *[]CustomFieldOption     `json:"options,omitempty"`
+	Required *bool                    `json:"required,omitempty"`
+	Schemas  *[]CustomFieldTypeSchema `json:"schemas,omitempty"`
+}
+
+// CustomFieldOption defines model for CustomFieldOption.
+type CustomFieldOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// CustomFieldType defines model for CustomFieldType.
+type CustomFieldType string
+
+// CustomFieldTypeSchema defines model for CustomFieldTypeSchema.
+type CustomFieldTypeSchema struct {
+	RequiredStateIds []openapi_types.UUID `json:"requiredStateIds"`
+	TicketType       TicketType           `json:"ticketType"`
+}
+
+// CustomFieldValue defines model for CustomFieldValue.
+type CustomFieldValue struct {
+	FieldId      openapi_types.UUID  `json:"fieldId"`
+	FieldLabel   string              `json:"fieldLabel"`
+	FieldName    string              `json:"fieldName"`
+	FieldType    CustomFieldType     `json:"fieldType"`
+	ValueBoolean *bool               `json:"valueBoolean"`
+	ValueDate    *openapi_types.Date `json:"valueDate"`
+	ValueNumber  *float32            `json:"valueNumber"`
+	ValueText    *string             `json:"valueText"`
+	ValueUserId  *openapi_types.UUID `json:"valueUserId"`
+}
+
+// CustomFieldValueInput defines model for CustomFieldValueInput.
+type CustomFieldValueInput struct {
+	FieldId      openapi_types.UUID  `json:"fieldId"`
+	ValueBoolean *bool               `json:"valueBoolean"`
+	ValueDate    *openapi_types.Date `json:"valueDate"`
+	ValueNumber  *float32            `json:"valueNumber"`
+	ValueText    *string             `json:"valueText"`
+	ValueUserId  *openapi_types.UUID `json:"valueUserId"`
+}
+
+// CustomFieldValueListResponse defines model for CustomFieldValueListResponse.
+type CustomFieldValueListResponse struct {
+	Items []CustomFieldValue `json:"items"`
+}
+
+// CustomFieldValueUpsertRequest defines model for CustomFieldValueUpsertRequest.
+type CustomFieldValueUpsertRequest struct {
+	Values []CustomFieldValueInput `json:"values"`
+}
+
+// CycleTimePercentiles defines model for CycleTimePercentiles.
+type CycleTimePercentiles struct {
+	P50Hours    float32 `json:"p50Hours"`
+	P75Hours    float32 `json:"p75Hours"`
+	P95Hours    float32 `json:"p95Hours"`
+	SampleCount int     `json:"sampleCount"`
+}
+
 // DateValuePoint defines model for DateValuePoint.
 type DateValuePoint struct {
 	Date  openapi_types.Date `json:"date"`
@@ -449,6 +553,24 @@ type DependencyRelationType string
 type ErrorResponse struct {
 	Error   string  `json:"error"`
 	Message *string `json:"message,omitempty"`
+}
+
+// FlowHealthStats defines model for FlowHealthStats.
+type FlowHealthStats struct {
+	CycleTime  CycleTimePercentiles `json:"cycleTime"`
+	Throughput []ThroughputDay      `json:"throughput"`
+	WipStats   []FlowHealthWipStat  `json:"wipStats"`
+}
+
+// FlowHealthWipStat defines model for FlowHealthWipStat.
+type FlowHealthWipStat struct {
+	AvgAgeHours    float32            `json:"avgAgeHours"`
+	MaxAgeHours    float32            `json:"maxAgeHours"`
+	StateId        openapi_types.UUID `json:"stateId"`
+	StateName      string             `json:"stateName"`
+	TicketCount    int                `json:"ticketCount"`
+	WipEnforcement bool               `json:"wipEnforcement"`
+	WipLimit       *int               `json:"wipLimit"`
 }
 
 // Group defines model for Group.
@@ -862,6 +984,12 @@ type SyncUsersResponse struct {
 	Total int `json:"total"`
 }
 
+// ThroughputDay defines model for ThroughputDay.
+type ThroughputDay struct {
+	Count int                `json:"count"`
+	Day   openapi_types.Date `json:"day"`
+}
+
 // Ticket defines model for Ticket.
 type Ticket struct {
 	Assignee            *UserSummary            `json:"assignee,omitempty"`
@@ -1186,15 +1314,23 @@ type WorkflowState struct {
 	Name      string             `json:"name"`
 	Order     int                `json:"order"`
 	ProjectId openapi_types.UUID `json:"projectId"`
+
+	// WipEnforcement If true, prevent moving tickets into this state when at or above wipLimit.
+	WipEnforcement bool `json:"wipEnforcement"`
+
+	// WipLimit Maximum number of tickets allowed in this state. Null means no limit.
+	WipLimit *int `json:"wipLimit"`
 }
 
 // WorkflowStateInput defines model for WorkflowStateInput.
 type WorkflowStateInput struct {
-	Id        *openapi_types.UUID `json:"id,omitempty"`
-	IsClosed  bool                `json:"isClosed"`
-	IsDefault bool                `json:"isDefault"`
-	Name      string              `json:"name"`
-	Order     int                 `json:"order"`
+	Id             *openapi_types.UUID `json:"id,omitempty"`
+	IsClosed       bool                `json:"isClosed"`
+	IsDefault      bool                `json:"isDefault"`
+	Name           string              `json:"name"`
+	Order          int                 `json:"order"`
+	WipEnforcement *bool               `json:"wipEnforcement,omitempty"`
+	WipLimit       *int                `json:"wipLimit"`
 }
 
 // WorkflowUpdateRequest defines model for WorkflowUpdateRequest.
@@ -1330,6 +1466,12 @@ type UpdateBoardFilterPresetJSONRequestBody = BoardFilterPresetUpdateRequest
 // ReplaceProjectCapacitySettingsJSONRequestBody defines body for ReplaceProjectCapacitySettings for application/json ContentType.
 type ReplaceProjectCapacitySettingsJSONRequestBody = CapacitySettingsReplaceRequest
 
+// CreateCustomFieldJSONRequestBody defines body for CreateCustomField for application/json ContentType.
+type CreateCustomFieldJSONRequestBody = CustomFieldDefinitionCreateRequest
+
+// UpdateCustomFieldJSONRequestBody defines body for UpdateCustomField for application/json ContentType.
+type UpdateCustomFieldJSONRequestBody = CustomFieldDefinitionUpdateRequest
+
 // AddProjectGroupJSONRequestBody defines body for AddProjectGroup for application/json ContentType.
 type AddProjectGroupJSONRequestBody = ProjectGroupCreateRequest
 
@@ -1392,6 +1534,9 @@ type UpdateTicketJSONRequestBody = TicketUpdateRequest
 
 // AddTicketCommentJSONRequestBody defines body for AddTicketComment for application/json ContentType.
 type AddTicketCommentJSONRequestBody = TicketCommentCreateRequest
+
+// SetTicketCustomFieldValuesJSONRequestBody defines body for SetTicketCustomFieldValues for application/json ContentType.
+type SetTicketCustomFieldValuesJSONRequestBody = CustomFieldValueUpsertRequest
 
 // CreateTicketDependencyJSONRequestBody defines body for CreateTicketDependency for application/json ContentType.
 type CreateTicketDependencyJSONRequestBody = TicketDependencyCreateRequest
@@ -1518,12 +1663,27 @@ type ServerInterface interface {
 	// Replace project capacity settings
 	// (PUT /projects/{projectId}/capacity-settings)
 	ReplaceProjectCapacitySettings(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// List custom field definitions for a project
+	// (GET /projects/{projectId}/custom-fields)
+	ListCustomFields(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Create a custom field definition
+	// (POST /projects/{projectId}/custom-fields)
+	CreateCustomField(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Delete a custom field definition
+	// (DELETE /projects/{projectId}/custom-fields/{fieldId})
+	DeleteCustomField(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, fieldId openapi_types.UUID)
+	// Update a custom field definition
+	// (PATCH /projects/{projectId}/custom-fields/{fieldId})
+	UpdateCustomField(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, fieldId openapi_types.UUID)
 	// Get project dependency graph
 	// (GET /projects/{projectId}/dependency-graph)
 	GetProjectDependencyGraph(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectDependencyGraphParams)
 	// Open project live updates stream (WebSocket)
 	// (GET /projects/{projectId}/events/ws)
 	StreamProjectEvents(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Get flow health statistics for a project
+	// (GET /projects/{projectId}/flow-health)
+	GetFlowHealth(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
 	// List project groups
 	// (GET /projects/{projectId}/groups)
 	ListProjectGroups(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -1689,6 +1849,12 @@ type ServerInterface interface {
 	// Delete ticket comment
 	// (DELETE /tickets/{id}/comments/{commentId})
 	DeleteTicketComment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, commentId openapi_types.UUID)
+	// Get custom field values for a ticket
+	// (GET /tickets/{id}/custom-field-values)
+	GetTicketCustomFieldValues(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Set custom field values for a ticket
+	// (PUT /tickets/{id}/custom-field-values)
+	SetTicketCustomFieldValues(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// List dependencies for ticket
 	// (GET /tickets/{id}/dependencies)
 	ListTicketDependencies(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1962,6 +2128,30 @@ func (_ Unimplemented) ReplaceProjectCapacitySettings(w http.ResponseWriter, r *
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// List custom field definitions for a project
+// (GET /projects/{projectId}/custom-fields)
+func (_ Unimplemented) ListCustomFields(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a custom field definition
+// (POST /projects/{projectId}/custom-fields)
+func (_ Unimplemented) CreateCustomField(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete a custom field definition
+// (DELETE /projects/{projectId}/custom-fields/{fieldId})
+func (_ Unimplemented) DeleteCustomField(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, fieldId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a custom field definition
+// (PATCH /projects/{projectId}/custom-fields/{fieldId})
+func (_ Unimplemented) UpdateCustomField(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, fieldId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Get project dependency graph
 // (GET /projects/{projectId}/dependency-graph)
 func (_ Unimplemented) GetProjectDependencyGraph(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectDependencyGraphParams) {
@@ -1971,6 +2161,12 @@ func (_ Unimplemented) GetProjectDependencyGraph(w http.ResponseWriter, r *http.
 // Open project live updates stream (WebSocket)
 // (GET /projects/{projectId}/events/ws)
 func (_ Unimplemented) StreamProjectEvents(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get flow health statistics for a project
+// (GET /projects/{projectId}/flow-health)
+func (_ Unimplemented) GetFlowHealth(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2301,6 +2497,18 @@ func (_ Unimplemented) AddTicketComment(w http.ResponseWriter, r *http.Request, 
 // Delete ticket comment
 // (DELETE /tickets/{id}/comments/{commentId})
 func (_ Unimplemented) DeleteTicketComment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, commentId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get custom field values for a ticket
+// (GET /tickets/{id}/custom-field-values)
+func (_ Unimplemented) GetTicketCustomFieldValues(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Set custom field values for a ticket
+// (PUT /tickets/{id}/custom-field-values)
+func (_ Unimplemented) SetTicketCustomFieldValues(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3629,6 +3837,148 @@ func (siw *ServerInterfaceWrapper) ReplaceProjectCapacitySettings(w http.Respons
 	handler.ServeHTTP(w, r)
 }
 
+// ListCustomFields operation middleware
+func (siw *ServerInterfaceWrapper) ListCustomFields(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCustomFields(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCustomField operation middleware
+func (siw *ServerInterfaceWrapper) CreateCustomField(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCustomField(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCustomField operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCustomField(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "fieldId" -------------
+	var fieldId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "fieldId", chi.URLParam(r, "fieldId"), &fieldId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "fieldId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCustomField(w, r, projectId, fieldId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCustomField operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCustomField(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "fieldId" -------------
+	var fieldId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "fieldId", chi.URLParam(r, "fieldId"), &fieldId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "fieldId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCustomField(w, r, projectId, fieldId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProjectDependencyGraph operation middleware
 func (siw *ServerInterfaceWrapper) GetProjectDependencyGraph(w http.ResponseWriter, r *http.Request) {
 
@@ -3701,6 +4051,37 @@ func (siw *ServerInterfaceWrapper) StreamProjectEvents(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StreamProjectEvents(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFlowHealth operation middleware
+func (siw *ServerInterfaceWrapper) GetFlowHealth(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFlowHealth(w, r, projectId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5757,6 +6138,68 @@ func (siw *ServerInterfaceWrapper) DeleteTicketComment(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetTicketCustomFieldValues operation middleware
+func (siw *ServerInterfaceWrapper) GetTicketCustomFieldValues(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTicketCustomFieldValues(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetTicketCustomFieldValues operation middleware
+func (siw *ServerInterfaceWrapper) SetTicketCustomFieldValues(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetTicketCustomFieldValues(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListTicketDependencies operation middleware
 func (siw *ServerInterfaceWrapper) ListTicketDependencies(w http.ResponseWriter, r *http.Request) {
 
@@ -6281,10 +6724,25 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/projects/{projectId}/capacity-settings", wrapper.ReplaceProjectCapacitySettings)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/custom-fields", wrapper.ListCustomFields)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/custom-fields", wrapper.CreateCustomField)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/custom-fields/{fieldId}", wrapper.DeleteCustomField)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/projects/{projectId}/custom-fields/{fieldId}", wrapper.UpdateCustomField)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/dependency-graph", wrapper.GetProjectDependencyGraph)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/events/ws", wrapper.StreamProjectEvents)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/flow-health", wrapper.GetFlowHealth)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/groups", wrapper.ListProjectGroups)
@@ -6450,6 +6908,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/tickets/{id}/comments/{commentId}", wrapper.DeleteTicketComment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tickets/{id}/custom-field-values", wrapper.GetTicketCustomFieldValues)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/tickets/{id}/custom-field-values", wrapper.SetTicketCustomFieldValues)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tickets/{id}/dependencies", wrapper.ListTicketDependencies)

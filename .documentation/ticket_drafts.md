@@ -813,7 +813,7 @@ CREATE INDEX ON ticket_locks (expires_at);
 ### TKT-030: Custom Fields and Ticket-Type Form Schemas
 - **Priority:** `P1`
 - **Type:** `feature`
-- **Status:** `Todo`
+- **Status:** `Done` (March 7, 2026)
 - **Problem:** Fixed ticket fields are limiting for teams with domain-specific workflows.
 - **Scope:**
   - Add project-level custom field definitions (`text`, `number`, `date`, `enum`, `user`, `boolean`).

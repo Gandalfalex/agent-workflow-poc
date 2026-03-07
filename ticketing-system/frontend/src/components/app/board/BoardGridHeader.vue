@@ -4,6 +4,7 @@ import type { WorkflowState } from "@/lib/api";
 
 const props = defineProps<{
     states: WorkflowState[];
+    ticketCountByState?: Record<string, number>;
 }>();
 
 const { t } = useI18n();
@@ -23,9 +24,27 @@ const { t } = useI18n();
         <div
             v-for="state in props.states"
             :key="state.id"
-            class="text-center"
+            class="flex flex-col items-center gap-1"
         >
-            {{ state.name }}
+            <span>{{ state.name }}</span>
+            <span
+                v-if="state.wipLimit"
+                data-testid="board.wip-badge"
+                class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                :class="
+                    (ticketCountByState?.[state.id] ?? 0) >= state.wipLimit
+                        ? 'bg-destructive/20 text-destructive'
+                        : 'bg-muted text-muted-foreground'
+                "
+                :title="
+                    state.wipEnforcement
+                        ? 'WIP limit enforced — moves blocked at limit'
+                        : 'WIP limit (soft)'
+                "
+            >
+                {{ ticketCountByState?.[state.id] ?? 0 }}/{{ state.wipLimit }}
+                <span v-if="state.wipEnforcement" class="ml-0.5">🔒</span>
+            </span>
         </div>
     </div>
 </template>

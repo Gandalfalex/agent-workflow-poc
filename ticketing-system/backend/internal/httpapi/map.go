@@ -15,12 +15,14 @@ func mapWorkflowStates(states []store.WorkflowState, projectID openapi_types.UUI
 	out := make([]workflowState, 0, len(states))
 	for _, state := range states {
 		out = append(out, workflowState{
-			Id:        toOpenapiUUID(state.ID),
-			ProjectId: projectID,
-			Name:      state.Name,
-			Order:     state.Order,
-			IsDefault: state.IsDefault,
-			IsClosed:  state.IsClosed,
+			Id:             toOpenapiUUID(state.ID),
+			ProjectId:      projectID,
+			Name:           state.Name,
+			Order:          state.Order,
+			IsDefault:      state.IsDefault,
+			IsClosed:       state.IsClosed,
+			WipLimit:       state.WipLimit,
+			WipEnforcement: state.WipEnforcement,
 		})
 	}
 	return out

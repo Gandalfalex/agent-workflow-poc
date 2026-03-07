@@ -132,6 +132,15 @@ type Store interface {
 	GetTicketLock(ctx context.Context, ticketID uuid.UUID) (store.TicketLock, bool, error)
 	RenewTicketLock(ctx context.Context, ticketID, userID uuid.UUID, ttl time.Duration) (store.TicketLock, error)
 	ReleaseTicketLock(ctx context.Context, ticketID, userID uuid.UUID) error
+	GetFlowHealthStats(ctx context.Context, projectID uuid.UUID) (store.FlowHealthStats, error)
+	GetStateTicketCount(ctx context.Context, stateID uuid.UUID) (int, error)
+	ListCustomFields(ctx context.Context, projectID uuid.UUID) ([]store.CustomFieldDefinition, error)
+	GetCustomField(ctx context.Context, id, projectID uuid.UUID) (store.CustomFieldDefinition, error)
+	CreateCustomField(ctx context.Context, projectID uuid.UUID, input store.CustomFieldCreateInput) (store.CustomFieldDefinition, error)
+	UpdateCustomField(ctx context.Context, id, projectID uuid.UUID, input store.CustomFieldUpdateInput) (store.CustomFieldDefinition, error)
+	DeleteCustomField(ctx context.Context, id, projectID uuid.UUID) error
+	GetCustomFieldValues(ctx context.Context, ticketID uuid.UUID) ([]store.CustomFieldValue, error)
+	SetCustomFieldValues(ctx context.Context, ticketID uuid.UUID, values []store.CustomFieldValueInput) ([]store.CustomFieldValue, error)
 }
 
 type Authenticator interface {
@@ -1180,6 +1189,21 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 			writeError(w, http.StatusBadRequest, "invalid_state_id", "stateId must be a UUID")
 			return
 		}
+		// WIP enforcement: reject move if target state is at or over its limit.
+		if stateID != current.StateID {
+			states, stateErr := h.store.ListWorkflowStates(r.Context(), current.ProjectID)
+			if stateErr == nil {
+				for _, s := range states {
+					if s.ID == stateID && s.WipEnforcement && s.WipLimit != nil {
+						count, countErr := h.store.GetStateTicketCount(r.Context(), stateID)
+						if countErr == nil && count >= *s.WipLimit {
+							writeError(w, http.StatusConflict, "wip_limit_exceeded", "WIP limit reached for this state")
+							return
+						}
+					}
+				}
+			}
+		}
 		input.StateID = &stateID
 	}
 	if req.AssigneeId != nil {
@@ -1369,12 +1393,18 @@ func (h *API) UpdateWorkflow(w http.ResponseWriter, r *http.Request, projectId o
 			writeError(w, http.StatusBadRequest, "invalid_state_id", "state id must be a UUID")
 			return
 		}
+		wipEnforcement := false
+		if state.WipEnforcement != nil {
+			wipEnforcement = *state.WipEnforcement
+		}
 		inputs = append(inputs, store.WorkflowStateInput{
-			ID:        id,
-			Name:      state.Name,
-			Order:     state.Order,
-			IsDefault: state.IsDefault,
-			IsClosed:  state.IsClosed,
+			ID:             id,
+			Name:           state.Name,
+			Order:          state.Order,
+			IsDefault:      state.IsDefault,
+			IsClosed:       state.IsClosed,
+			WipLimit:       state.WipLimit,
+			WipEnforcement: wipEnforcement,
 		})
 	}
 

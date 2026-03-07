@@ -175,6 +175,23 @@ export type SlaPolicyEntry = components["schemas"]["SlaPolicyEntry"];
 export type SlaPolicyListResponse = components["schemas"]["SlaPolicyListResponse"];
 export type SlaPolicyUpdateRequest = components["schemas"]["SlaPolicyUpdateRequest"];
 
+// Custom Fields types
+export type CustomFieldType = components["schemas"]["CustomFieldType"];
+export type CustomFieldOption = components["schemas"]["CustomFieldOption"];
+export type CustomFieldTypeSchema = components["schemas"]["CustomFieldTypeSchema"];
+export type CustomFieldDefinition = components["schemas"]["CustomFieldDefinition"];
+export type CustomFieldDefinitionListResponse = components["schemas"]["CustomFieldDefinitionListResponse"];
+export type CustomFieldDefinitionCreateRequest = components["schemas"]["CustomFieldDefinitionCreateRequest"];
+export type CustomFieldDefinitionUpdateRequest = components["schemas"]["CustomFieldDefinitionUpdateRequest"];
+export type CustomFieldValue = components["schemas"]["CustomFieldValue"];
+export type CustomFieldValueListResponse = components["schemas"]["CustomFieldValueListResponse"];
+export type CustomFieldValueInput = components["schemas"]["CustomFieldValueInput"];
+export type CustomFieldValueUpsertRequest = components["schemas"]["CustomFieldValueUpsertRequest"];
+export type FlowHealthStats = components["schemas"]["FlowHealthStats"];
+export type FlowHealthWipStat = components["schemas"]["FlowHealthWipStat"];
+export type CycleTimePercentiles = components["schemas"]["CycleTimePercentiles"];
+export type ThroughputDay = components["schemas"]["ThroughputDay"];
+
 // Live Collaboration types (not in generated schema)
 export type TicketLock = {
     ticketId: string;
@@ -1292,4 +1309,69 @@ export async function updateSlaPolicies(
     method: "PUT",
     body: JSON.stringify({ items }),
   });
+}
+
+// Custom Field API functions
+
+export async function listCustomFields(
+  projectId: string,
+): Promise<CustomFieldDefinitionListResponse> {
+  return request<CustomFieldDefinitionListResponse>(
+    `/projects/${projectId}/custom-fields`,
+  );
+}
+
+export async function createCustomField(
+  projectId: string,
+  data: CustomFieldDefinitionCreateRequest,
+): Promise<CustomFieldDefinition> {
+  return request<CustomFieldDefinition>(`/projects/${projectId}/custom-fields`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCustomField(
+  projectId: string,
+  fieldId: string,
+  data: CustomFieldDefinitionUpdateRequest,
+): Promise<CustomFieldDefinition> {
+  return request<CustomFieldDefinition>(
+    `/projects/${projectId}/custom-fields/${fieldId}`,
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
+}
+
+export async function deleteCustomField(
+  projectId: string,
+  fieldId: string,
+): Promise<void> {
+  await request<void>(`/projects/${projectId}/custom-fields/${fieldId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getTicketCustomFieldValues(
+  ticketId: string,
+): Promise<CustomFieldValueListResponse> {
+  return request<CustomFieldValueListResponse>(
+    `/tickets/${ticketId}/custom-field-values`,
+  );
+}
+
+export async function setTicketCustomFieldValues(
+  ticketId: string,
+  values: CustomFieldValueInput[],
+): Promise<CustomFieldValueListResponse> {
+  return request<CustomFieldValueListResponse>(
+    `/tickets/${ticketId}/custom-field-values`,
+    { method: "PUT", body: JSON.stringify({ values }) },
+  );
+}
+
+export async function getFlowHealth(
+  projectId: string | undefined,
+): Promise<FlowHealthStats> {
+  const id = resolveProjectId(projectId);
+  return request<FlowHealthStats>(`/projects/${id}/flow-health`);
 }

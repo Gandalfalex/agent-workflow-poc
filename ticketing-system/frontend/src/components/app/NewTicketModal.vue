@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "@/lib/i18n";
 import type {
+    CustomFieldDefinition,
+    CustomFieldValueInput,
     Story,
     TicketPriority,
     TicketType,
@@ -11,6 +13,7 @@ import type {
     GroupMember,
     AiTriageSuggestion,
 } from "@/lib/api";
+import { listCustomFields } from "@/lib/api";
 
 type NewTicketForm = {
     title: string;
@@ -43,12 +46,13 @@ const props = defineProps<{
         state: boolean;
         assignee: boolean;
     };
+    projectId?: string;
 }>();
 
 const emit = defineEmits<{
     (e: "update:ticket", value: NewTicketForm): void;
     (e: "close"): void;
-    (e: "create"): void;
+    (e: "create", customFieldValues: CustomFieldValueInput[]): void;
     (e: "request-ai-triage"): void;
     (e: "toggle-ai-field", field: "summary" | "priority" | "state" | "assignee", value: boolean): void;
 }>();
@@ -56,6 +60,46 @@ const emit = defineEmits<{
 const assigneeSearch = ref("");
 const showAssigneeDropdown = ref(false);
 const { t } = useI18n();
+
+// Custom fields
+const newTicketCustomFieldDefs = ref<CustomFieldDefinition[]>([]);
+const newTicketCustomFieldDraft = ref<Record<string, string | null>>({});
+
+const visibleNewCustomFields = computed(() =>
+    newTicketCustomFieldDefs.value.filter(f =>
+        f.schemas.length === 0 || f.schemas.some(s => s.ticketType === props.ticket.type),
+    ),
+);
+
+watch(
+    () => props.projectId,
+    async (projectId) => {
+        if (!projectId) return;
+        try {
+            const res = await listCustomFields(projectId);
+            newTicketCustomFieldDefs.value = res.items;
+            const draft: Record<string, string | null> = {};
+            for (const def of res.items) draft[def.id] = null;
+            newTicketCustomFieldDraft.value = draft;
+        } catch {
+            // silent
+        }
+    },
+    { immediate: true },
+);
+
+function buildCustomFieldValues(): CustomFieldValueInput[] {
+    return visibleNewCustomFields.value.map(def => {
+        const raw = newTicketCustomFieldDraft.value[def.id] ?? null;
+        const inp: CustomFieldValueInput = { fieldId: def.id };
+        if (def.fieldType === "text" || def.fieldType === "enum") inp.valueText = raw;
+        else if (def.fieldType === "number") inp.valueNumber = raw !== null && raw !== "" ? Number(raw) : null;
+        else if (def.fieldType === "boolean") inp.valueBoolean = raw === "true";
+        else if (def.fieldType === "user") inp.valueUserId = raw || null;
+        else inp.valueText = raw;
+        return inp;
+    });
+}
 
 const updateField = (patch: Partial<NewTicketForm>) => {
     emit("update:ticket", { ...props.ticket, ...patch });
@@ -464,6 +508,49 @@ const closeModal = (event?: Event) => {
                     </div>
                 </div>
             </div>
+            <!-- Custom Fields -->
+            <div
+                v-if="visibleNewCustomFields.length > 0"
+                data-testid="new-ticket.custom_fields_section"
+                class="mt-4 space-y-3"
+            >
+                <p class="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Custom Fields</p>
+                <div v-for="def in visibleNewCustomFields" :key="def.id">
+                    <label class="text-xs text-muted-foreground block mb-1">{{ def.label }}<span v-if="def.required" class="text-destructive ml-0.5">*</span></label>
+                    <input
+                        v-if="def.fieldType === 'text' || def.fieldType === 'date'"
+                        :type="def.fieldType"
+                        :value="newTicketCustomFieldDraft[def.id] ?? ''"
+                        @input="newTicketCustomFieldDraft[def.id] = ($event.target as HTMLInputElement).value || null"
+                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <input
+                        v-else-if="def.fieldType === 'number'"
+                        type="number"
+                        :value="newTicketCustomFieldDraft[def.id] ?? ''"
+                        @input="newTicketCustomFieldDraft[def.id] = ($event.target as HTMLInputElement).value || null"
+                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <select
+                        v-else-if="def.fieldType === 'enum'"
+                        :value="newTicketCustomFieldDraft[def.id] ?? ''"
+                        @change="newTicketCustomFieldDraft[def.id] = ($event.target as HTMLSelectElement).value || null"
+                        class="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="">— none —</option>
+                        <option v-for="opt in def.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                    <div v-else-if="def.fieldType === 'boolean'" class="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            :checked="newTicketCustomFieldDraft[def.id] === 'true'"
+                            @change="newTicketCustomFieldDraft[def.id] = ($event.target as HTMLInputElement).checked ? 'true' : 'false'"
+                        />
+                        <span class="text-sm">{{ newTicketCustomFieldDraft[def.id] === 'true' ? 'Yes' : 'No' }}</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="mt-6 flex items-center justify-end gap-3">
                 <Button
                     data-testid="new-ticket.cancel-button"
@@ -475,7 +562,7 @@ const closeModal = (event?: Event) => {
                 <Button
                     data-testid="new-ticket.create-button"
                     :disabled="!props.canSubmit"
-                    @click="emit('create')"
+                    @click="emit('create', buildCustomFieldValues())"
                 >
                     {{ t("newTicket.create") }}
                 </Button>

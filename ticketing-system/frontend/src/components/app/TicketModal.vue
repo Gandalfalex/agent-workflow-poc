@@ -5,6 +5,8 @@ import { marked } from "marked";
 import { computed, ref, watch } from "vue";
 import type {
     Attachment,
+    CustomFieldDefinition,
+    CustomFieldValue,
     DependencyRelationType,
     IncidentTimelineItem,
     Sprint,
@@ -19,7 +21,12 @@ import type {
     TimeEntry,
     WorkflowState,
 } from "@/lib/api";
-import { downloadTicketAttachmentUrl } from "@/lib/api";
+import {
+    downloadTicketAttachmentUrl,
+    getTicketCustomFieldValues,
+    listCustomFields,
+    setTicketCustomFieldValues,
+} from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 type TicketEditor = {
@@ -174,6 +181,83 @@ watch(
         // Always close the graph overlay when switching to a different ticket.
         showDependencyGraphOverlay.value = false;
     },
+);
+
+// Custom fields
+const customFieldDefs = ref<CustomFieldDefinition[]>([]);
+const customFieldValues = ref<CustomFieldValue[]>([]);
+const customFieldSaving = ref(false);
+const customFieldError = ref("");
+
+// Mutable draft of custom field values (fieldId → string value for display)
+const customFieldDraft = ref<Record<string, string | null>>({});
+
+const visibleCustomFields = computed(() =>
+    customFieldDefs.value.filter(f =>
+        f.schemas.length === 0 || f.schemas.some(s => s.ticketType === props.editor.type),
+    ),
+);
+
+async function loadCustomFields() {
+    if (!props.projectId || !props.ticketId) return;
+    try {
+        const [defsRes, valsRes] = await Promise.all([
+            listCustomFields(props.projectId),
+            getTicketCustomFieldValues(props.ticketId),
+        ]);
+        customFieldDefs.value = defsRes.items;
+        customFieldValues.value = valsRes.items;
+        // Populate draft from loaded values
+        const draft: Record<string, string | null> = {};
+        for (const def of defsRes.items) {
+            const val = valsRes.items.find(v => v.fieldId === def.id);
+            if (val) {
+                if (val.valueText !== undefined && val.valueText !== null) draft[def.id] = val.valueText;
+                else if (val.valueNumber !== undefined && val.valueNumber !== null) draft[def.id] = String(val.valueNumber);
+                else if (val.valueDate !== undefined && val.valueDate !== null) draft[def.id] = String(val.valueDate);
+                else if (val.valueBoolean !== undefined && val.valueBoolean !== null) draft[def.id] = val.valueBoolean ? "true" : "false";
+                else if (val.valueUserId !== undefined && val.valueUserId !== null) draft[def.id] = val.valueUserId;
+                else draft[def.id] = null;
+            } else {
+                draft[def.id] = null;
+            }
+        }
+        customFieldDraft.value = draft;
+    } catch {
+        // silent
+    }
+}
+
+async function saveCustomFields() {
+    if (!props.ticketId) return;
+    customFieldSaving.value = true;
+    customFieldError.value = "";
+    try {
+        const values = visibleCustomFields.value.map(def => {
+            const raw = customFieldDraft.value[def.id] ?? null;
+            const inp: { fieldId: string; valueText?: string | null; valueNumber?: number | null; valueBoolean?: boolean | null; valueUserId?: string | null } = { fieldId: def.id };
+            if (def.fieldType === "text" || def.fieldType === "enum") inp.valueText = raw;
+            else if (def.fieldType === "number") inp.valueNumber = raw !== null && raw !== "" ? Number(raw) : null;
+            else if (def.fieldType === "boolean") inp.valueBoolean = raw === "true";
+            else if (def.fieldType === "user") inp.valueUserId = raw || null;
+            else inp.valueText = raw;
+            return inp;
+        });
+        const res = await setTicketCustomFieldValues(props.ticketId, values);
+        customFieldValues.value = res.items;
+    } catch (e: unknown) {
+        customFieldError.value = (e as Error).message ?? "Save failed";
+    } finally {
+        customFieldSaving.value = false;
+    }
+}
+
+watch(
+    () => props.ticketId,
+    (id) => {
+        if (id) loadCustomFields();
+    },
+    { immediate: true },
 );
 
 const updateEditor = (patch: Partial<TicketEditor>) => {
@@ -993,6 +1077,82 @@ const relationLabel = (relationType: string): string => {
                             </div>
                         </div>
                     </div>
+
+                        <!-- Custom Fields section -->
+                        <div
+                            v-if="visibleCustomFields.length > 0"
+                            data-testid="ticket.custom_fields_section"
+                            class="mt-3 rounded-xl border border-border bg-background/40 p-3"
+                        >
+                            <div class="flex items-center justify-between mb-3">
+                                <label class="text-xs font-semibold text-muted-foreground">Custom Fields</label>
+                                <Button
+                                    v-if="!props.readOnly"
+                                    data-testid="ticket.custom_fields_save_button"
+                                    variant="ghost"
+                                    size="sm"
+                                    :disabled="customFieldSaving"
+                                    @click="saveCustomFields"
+                                >
+                                    {{ customFieldSaving ? "Saving…" : "Save" }}
+                                </Button>
+                            </div>
+                            <div v-if="customFieldError" class="text-xs text-destructive mb-2">{{ customFieldError }}</div>
+                            <div class="space-y-2">
+                                <div v-for="def in visibleCustomFields" :key="def.id">
+                                    <label class="text-xs text-muted-foreground block mb-1">{{ def.label }}<span v-if="def.required" class="text-destructive ml-0.5">*</span></label>
+                                    <!-- text / date -->
+                                    <input
+                                        v-if="def.fieldType === 'text' || def.fieldType === 'date'"
+                                        :type="def.fieldType"
+                                        :disabled="props.readOnly"
+                                        :value="customFieldDraft[def.id] ?? ''"
+                                        @input="customFieldDraft[def.id] = ($event.target as HTMLInputElement).value || null"
+                                        class="w-full rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                    />
+                                    <!-- number -->
+                                    <input
+                                        v-else-if="def.fieldType === 'number'"
+                                        type="number"
+                                        :disabled="props.readOnly"
+                                        :value="customFieldDraft[def.id] ?? ''"
+                                        @input="customFieldDraft[def.id] = ($event.target as HTMLInputElement).value || null"
+                                        class="w-full rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                    />
+                                    <!-- enum -->
+                                    <select
+                                        v-else-if="def.fieldType === 'enum'"
+                                        :disabled="props.readOnly"
+                                        :value="customFieldDraft[def.id] ?? ''"
+                                        @change="customFieldDraft[def.id] = ($event.target as HTMLSelectElement).value || null"
+                                        class="w-full rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                    >
+                                        <option value="">— none —</option>
+                                        <option v-for="opt in def.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                                    </select>
+                                    <!-- boolean -->
+                                    <div v-else-if="def.fieldType === 'boolean'" class="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            :disabled="props.readOnly"
+                                            :checked="customFieldDraft[def.id] === 'true'"
+                                            @change="customFieldDraft[def.id] = ($event.target as HTMLInputElement).checked ? 'true' : 'false'"
+                                        />
+                                        <span class="text-xs">{{ customFieldDraft[def.id] === 'true' ? 'Yes' : 'No' }}</span>
+                                    </div>
+                                    <!-- user (text fallback) -->
+                                    <input
+                                        v-else-if="def.fieldType === 'user'"
+                                        type="text"
+                                        :disabled="props.readOnly"
+                                        :value="customFieldDraft[def.id] ?? ''"
+                                        @input="customFieldDraft[def.id] = ($event.target as HTMLInputElement).value || null"
+                                        placeholder="User ID"
+                                        class="w-full rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                                    />
+                                </div>
+                            </div>
+                        </div>
                 </div>
 
                 <!-- Right: Activity + Comments (independently scrollable) -->

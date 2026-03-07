@@ -8,12 +8,16 @@ import { useBoardStore } from "@/stores/board";
 import { useSessionStore } from "@/stores/session";
 import {
     createAdminUser,
+    createCustomField,
+    deleteCustomField,
     exportProjectReportingSnapshot,
     getProjectAiTriageSettings,
     getSlaPolicies,
+    listCustomFields,
     listProjectCapacitySettings,
     replaceProjectCapacitySettings,
     syncUsersFromIdentityProvider,
+    updateCustomField,
     updateProject,
     updateProjectAiTriageSettings,
     updateSlaPolicies,
@@ -22,6 +26,10 @@ import { useI18n } from "@/lib/i18n";
 import type {
     AiTriageSettings,
     CapacitySetting,
+    CustomFieldDefinition,
+    CustomFieldOption,
+    CustomFieldType,
+    CustomFieldTypeSchema,
     Group,
     ProjectRole,
     ReportingExportFormat,
@@ -42,7 +50,7 @@ const sessionStore = useSessionStore();
 const { t } = useI18n();
 
 const settingsTab = ref<
-    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation" | "sla"
+    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation" | "sla" | "custom-fields"
 >(
     "projects",
 );
@@ -256,6 +264,108 @@ async function saveSlaPolicies() {
         // ignore
     } finally {
         slaSaving.value = false;
+    }
+}
+
+// Custom Fields tab state
+const customFields = ref<CustomFieldDefinition[]>([]);
+const customFieldsLoading = ref(false);
+const customFieldError = ref("");
+const showCustomFieldForm = ref(false);
+const customFieldForm = ref<{
+    name: string;
+    label: string;
+    fieldType: CustomFieldType;
+    required: boolean;
+    options: CustomFieldOption[];
+    schemas: CustomFieldTypeSchema[];
+}>({
+    name: "",
+    label: "",
+    fieldType: "text",
+    required: false,
+    options: [],
+    schemas: [],
+});
+const editingFieldId = ref<string | null>(null);
+
+async function loadCustomFields() {
+    if (!selectedProjectId.value) return;
+    customFieldsLoading.value = true;
+    try {
+        const res = await listCustomFields(selectedProjectId.value);
+        customFields.value = res.items;
+    } catch {
+        // ignore
+    } finally {
+        customFieldsLoading.value = false;
+    }
+}
+
+function resetCustomFieldForm() {
+    customFieldForm.value = { name: "", label: "", fieldType: "text", required: false, options: [], schemas: [] };
+    editingFieldId.value = null;
+    showCustomFieldForm.value = false;
+    customFieldError.value = "";
+}
+
+function startEditField(field: CustomFieldDefinition) {
+    customFieldForm.value = {
+        name: field.name,
+        label: field.label,
+        fieldType: field.fieldType,
+        required: field.required,
+        options: [...field.options],
+        schemas: field.schemas.map(s => ({ ticketType: s.ticketType, requiredStateIds: [...s.requiredStateIds] })),
+    };
+    editingFieldId.value = field.id;
+    showCustomFieldForm.value = true;
+}
+
+function addEnumOption() {
+    customFieldForm.value.options.push({ value: "", label: "" });
+}
+
+function removeEnumOption(idx: number) {
+    customFieldForm.value.options.splice(idx, 1);
+}
+
+async function saveCustomField() {
+    customFieldError.value = "";
+    try {
+        if (editingFieldId.value) {
+            const updated = await updateCustomField(selectedProjectId.value, editingFieldId.value, {
+                label: customFieldForm.value.label,
+                options: customFieldForm.value.options,
+                required: customFieldForm.value.required,
+                schemas: customFieldForm.value.schemas,
+            });
+            const idx = customFields.value.findIndex(f => f.id === editingFieldId.value);
+            if (idx >= 0) customFields.value[idx] = updated;
+        } else {
+            const created = await createCustomField(selectedProjectId.value, {
+                name: customFieldForm.value.name,
+                label: customFieldForm.value.label,
+                fieldType: customFieldForm.value.fieldType,
+                required: customFieldForm.value.required,
+                options: customFieldForm.value.options.length > 0 ? customFieldForm.value.options : undefined,
+                schemas: customFieldForm.value.schemas.length > 0 ? customFieldForm.value.schemas : undefined,
+            });
+            customFields.value.push(created);
+        }
+        resetCustomFieldForm();
+    } catch (e: unknown) {
+        customFieldError.value = (e as Error).message ?? "Save failed";
+    }
+}
+
+async function deleteCustomFieldById(id: string) {
+    if (!window.confirm("Delete this custom field and all its values?")) return;
+    try {
+        await deleteCustomField(selectedProjectId.value, id);
+        customFields.value = customFields.value.filter(f => f.id !== id);
+    } catch {
+        // ignore
     }
 }
 
@@ -1042,6 +1152,28 @@ const toggleStateClosed = (index: number) => {
     boardStore.workflowEditorStates = updated;
 };
 
+const updateStateWipLimit = (index: number, value: string) => {
+    const updated = [...workflowStates.value];
+    if (updated[index]) {
+        const limit = value === "" ? null : parseInt(value, 10);
+        updated[index] = {
+            ...updated[index]!,
+            wipLimit: limit ?? undefined,
+            wipEnforcement: limit ? (updated[index]!.wipEnforcement ?? false) : false,
+        };
+    }
+    boardStore.workflowEditorStates = updated;
+    workflowValidationError.value = "";
+};
+
+const toggleStateWipEnforcement = (index: number) => {
+    const updated = [...workflowStates.value];
+    if (updated[index]) {
+        updated[index] = { ...updated[index]!, wipEnforcement: !updated[index]!.wipEnforcement };
+    }
+    boardStore.workflowEditorStates = updated;
+};
+
 const onDragStart = (index: number) => {
     dragIndex.value = index;
 };
@@ -1226,6 +1358,15 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'sla'; loadSlaPolicies()"
             >
                 SLA
+            </Button>
+            <Button
+                data-testid="settings.custom_fields_tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'custom-fields'"
+                @click="settingsTab = 'custom-fields'; loadCustomFields()"
+            >
+                Custom Fields
             </Button>
         </div>
     </section>
@@ -2302,12 +2443,14 @@ watch(selectedGroupId, async () => {
 
         <div v-else class="mt-6 space-y-2">
             <div
-                class="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 px-3 text-[11px] uppercase tracking-[0.15em] text-muted-foreground font-semibold"
+                class="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] items-center gap-3 px-3 text-[11px] uppercase tracking-[0.15em] text-muted-foreground font-semibold"
             >
                 <span class="w-6"></span>
                 <span>Name</span>
                 <span class="text-center w-16">Default</span>
                 <span class="text-center w-16">Closed</span>
+                <span class="text-center w-20" title="Maximum tickets allowed in this state">WIP Limit</span>
+                <span class="text-center w-16" title="Prevent moves when at WIP limit">Enforce</span>
                 <span class="w-16"></span>
             </div>
 
@@ -2315,7 +2458,7 @@ watch(selectedGroupId, async () => {
                 v-for="(state, index) in workflowStates"
                 :key="state.id || index"
                 data-testid="workflow.state-row"
-                class="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 transition"
+                class="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 transition"
                 :class="dragIndex === index ? 'opacity-50 border-primary' : ''"
                 draggable="true"
                 @dragstart="onDragStart(index)"
@@ -2367,6 +2510,32 @@ watch(selectedGroupId, async () => {
                         :checked="state.isClosed"
                         class="h-4 w-4 rounded border-border text-primary focus:ring-ring"
                         @change="toggleStateClosed(index)"
+                    />
+                </label>
+
+                <div class="flex items-center justify-center w-20">
+                    <input
+                        data-testid="workflow.state-wip-limit-input"
+                        type="number"
+                        min="1"
+                        :value="state.wipLimit ?? ''"
+                        placeholder="—"
+                        class="w-16 rounded-lg border border-input bg-background px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                        @input="updateStateWipLimit(index, ($event.target as HTMLInputElement).value)"
+                    />
+                </div>
+
+                <label
+                    class="flex items-center justify-center w-16"
+                    title="Block moves when at WIP limit"
+                >
+                    <input
+                        data-testid="workflow.state-wip-enforce-checkbox"
+                        type="checkbox"
+                        :checked="state.wipEnforcement"
+                        :disabled="!state.wipLimit"
+                        class="h-4 w-4 rounded border-border text-primary focus:ring-ring disabled:opacity-40"
+                        @change="toggleStateWipEnforcement(index)"
                     />
                 </label>
 
@@ -2960,6 +3129,163 @@ watch(selectedGroupId, async () => {
                     </template>
                 </tbody>
             </table>
+        </div>
+    </section>
+
+    <!-- Custom Fields tab -->
+    <section
+        v-if="settingsTab === 'custom-fields'"
+        data-testid="settings.custom_fields_view"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">Settings</p>
+                <h3 class="mt-1 text-lg font-semibold">Custom Fields</h3>
+                <p class="mt-1 text-xs text-muted-foreground">Define project-specific fields that appear in ticket forms by type.</p>
+            </div>
+            <Button
+                data-testid="settings.custom_fields_add_button"
+                size="sm"
+                @click="resetCustomFieldForm(); showCustomFieldForm = true"
+            >
+                Add Field
+            </Button>
+        </div>
+
+        <div v-if="customFieldsLoading" class="text-sm text-muted-foreground">Loading…</div>
+
+        <!-- Field form -->
+        <div
+            v-if="showCustomFieldForm"
+            data-testid="settings.custom_fields_form"
+            class="mb-6 rounded-2xl border border-border bg-background/60 p-4 space-y-4"
+        >
+            <h4 class="text-sm font-semibold">{{ editingFieldId ? "Edit Field" : "New Custom Field" }}</h4>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <label class="text-xs text-muted-foreground block mb-1">Internal Name (immutable key)</label>
+                    <input
+                        data-testid="settings.custom_fields_name_input"
+                        :disabled="!!editingFieldId"
+                        v-model="customFieldForm.name"
+                        class="w-full rounded border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                        placeholder="e.g. customer_impact"
+                    />
+                </div>
+                <div>
+                    <label class="text-xs text-muted-foreground block mb-1">Display Label</label>
+                    <input
+                        data-testid="settings.custom_fields_label_input"
+                        v-model="customFieldForm.label"
+                        class="w-full rounded border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="e.g. Customer Impact"
+                    />
+                </div>
+                <div>
+                    <label class="text-xs text-muted-foreground block mb-1">Field Type</label>
+                    <select
+                        data-testid="settings.custom_fields_type_select"
+                        :disabled="!!editingFieldId"
+                        v-model="customFieldForm.fieldType"
+                        class="w-full rounded border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                    >
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="date">Date</option>
+                        <option value="enum">Enum (dropdown)</option>
+                        <option value="user">User</option>
+                        <option value="boolean">Boolean (checkbox)</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2 pt-5">
+                    <input
+                        id="cf-required"
+                        type="checkbox"
+                        v-model="customFieldForm.required"
+                        class="rounded"
+                    />
+                    <label for="cf-required" class="text-sm">Required by default</label>
+                </div>
+            </div>
+
+            <!-- Enum options -->
+            <div v-if="customFieldForm.fieldType === 'enum'">
+                <label class="text-xs text-muted-foreground block mb-2">Options</label>
+                <div
+                    v-for="(opt, idx) in customFieldForm.options"
+                    :key="idx"
+                    class="flex gap-2 mb-2"
+                >
+                    <input
+                        v-model="opt.value"
+                        class="flex-1 rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="value"
+                    />
+                    <input
+                        v-model="opt.label"
+                        class="flex-1 rounded border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="label"
+                    />
+                    <button @click="removeEnumOption(idx)" class="text-destructive text-sm hover:underline">✕</button>
+                </div>
+                <button
+                    @click="addEnumOption"
+                    class="text-xs text-primary hover:underline"
+                >+ Add option</button>
+            </div>
+
+            <div v-if="customFieldError" class="text-xs text-destructive">{{ customFieldError }}</div>
+
+            <div class="flex gap-2">
+                <Button
+                    data-testid="settings.custom_fields_save_button"
+                    size="sm"
+                    @click="saveCustomField"
+                >
+                    {{ editingFieldId ? "Update" : "Create" }}
+                </Button>
+                <Button variant="ghost" size="sm" @click="resetCustomFieldForm">Cancel</Button>
+            </div>
+        </div>
+
+        <!-- Field list -->
+        <div v-if="!customFieldsLoading && customFields.length === 0 && !showCustomFieldForm" class="text-sm text-muted-foreground">
+            No custom fields yet. Add your first field above.
+        </div>
+        <div
+            v-else
+            data-testid="settings.custom_fields_list"
+            class="space-y-2"
+        >
+            <div
+                v-for="field in customFields"
+                :key="field.id"
+                data-testid="settings.custom_fields_item"
+                class="flex items-center justify-between rounded-xl border border-border bg-background/40 px-4 py-3"
+            >
+                <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-medium">{{ field.label }}</span>
+                        <span class="rounded px-1.5 py-0.5 text-xs font-mono bg-muted/60 text-muted-foreground">{{ field.name }}</span>
+                        <span class="rounded px-1.5 py-0.5 text-xs bg-primary/10 text-primary capitalize">{{ field.fieldType }}</span>
+                        <span v-if="field.required" class="rounded px-1.5 py-0.5 text-xs bg-amber-500/15 text-amber-300">required</span>
+                    </div>
+                    <div v-if="field.schemas.length > 0" class="text-xs text-muted-foreground">
+                        Types: {{ field.schemas.map(s => s.ticketType).join(", ") }}
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <Button variant="ghost" size="sm" @click="startEditField(field)">Edit</Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        class="text-destructive hover:text-destructive"
+                        @click="deleteCustomFieldById(field.id)"
+                    >Delete</Button>
+                </div>
+            </div>
         </div>
     </section>
 </template>

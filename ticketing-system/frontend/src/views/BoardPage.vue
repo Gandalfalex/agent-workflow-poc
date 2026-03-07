@@ -26,6 +26,7 @@ import {
     getTicketIncidentPostmortem,
     listTicketIncidentTimeline,
     recordAiTriageSuggestionDecision,
+    setTicketCustomFieldValues,
 } from "@/lib/api";
 import type { StoryRow } from "@/lib/types";
 import type {
@@ -34,6 +35,7 @@ import type {
     BulkTicketOperationRequest,
     BoardFilter,
     BoardFilterPreset,
+    CustomFieldValueInput,
     DependencyRelationType,
     IncidentTimelineItem,
     SprintCompleteRequest,
@@ -1268,7 +1270,7 @@ const deleteStorySubmit = async (storyId: string) => {
     }
 };
 
-const createTicketSubmit = async () => {
+const createTicketSubmit = async (customFieldValues: CustomFieldValueInput[] = []) => {
     if (!canSubmit.value || !props.projectId) return;
     try {
         if (aiTriageSuggestion.value) {
@@ -1290,7 +1292,7 @@ const createTicketSubmit = async () => {
                 },
             );
         }
-        await boardStore.createTicket(props.projectId, {
+        const created = await boardStore.createTicket(props.projectId, {
             title: newTicket.value.title.trim(),
             description: newTicket.value.description.trim(),
             type: newTicket.value.type,
@@ -1300,6 +1302,14 @@ const createTicketSubmit = async () => {
             assigneeId: newTicket.value.assignee || undefined,
             storyPoints: newTicket.value.storyPoints,
         });
+        // Save any custom field values provided by the form
+        if (customFieldValues.length > 0 && created?.id) {
+            try {
+                await setTicketCustomFieldValues(created.id, customFieldValues);
+            } catch {
+                // non-fatal: ticket created, custom fields may be empty
+            }
+        }
         closeNewTicket();
     } catch (err) {
         handleAuthError(err);
@@ -1338,6 +1348,17 @@ const moveToState = async (
     storyId: string,
     position: number,
 ) => {
+    // WIP enforcement: block move if target state is enforced and at limit.
+    const targetState = states.value.find((s) => s.id === stateId);
+    if (targetState?.wipEnforcement && targetState.wipLimit != null) {
+        const count = (ticketsByState.value[stateId] ?? []).length;
+        if (count >= targetState.wipLimit) {
+            toast.warning(
+                `WIP limit reached for "${targetState.name}" (${count}/${targetState.wipLimit}). Move blocked.`,
+            );
+            return;
+        }
+    }
     try {
         await boardStore.updateTicket(ticketId, {
             stateId,
@@ -1690,6 +1711,7 @@ watch(
         :ai-triage-error="aiTriageError"
         :ai-triage-suggestion="aiTriageSuggestion"
         :ai-field-selection="aiFieldSelection"
+        :project-id="props.projectId"
         @update:ticket="updateNewTicket"
         @close="closeNewTicket"
         @create="createTicketSubmit"

@@ -241,3 +241,38 @@ Snapshot date: March 7, 2026
 - Pinia store: `useAutomationStore` with CRUD actions and execution loading.
 - i18n: ~18 keys in en + de.
 - E2E tests: API CRUD + UI tab navigation (`automation_rules_test.go`).
+
+## Custom Fields and Ticket-Type Form Schemas (TKT-030)
+- Per-project custom field definitions with types: `text`, `number`, `date`, `enum`, `user`, `boolean`.
+- Ticket-type schema mapping: which custom fields appear for which ticket types (`bug`, `feature`, etc.).
+- Required-by-state rules: fields can be required when a ticket transitions to specified states.
+- Per-ticket custom field values with full CRUD.
+- Tables: `custom_fields`, `custom_field_schemas`, `ticket_custom_field_values` (migration `026_custom_fields.sql`).
+- Store: `ListCustomFields`, `GetCustomField`, `CreateCustomField`, `UpdateCustomField`, `DeleteCustomField`, `GetCustomFieldValues`, `SetCustomFieldValues`, `CheckRequiredCustomFields`.
+- REST API endpoints:
+  - `GET/POST /projects/{projectId}/custom-fields`
+  - `PATCH/DELETE /projects/{projectId}/custom-fields/{fieldId}`
+  - `GET/PUT /tickets/{id}/custom-field-values`
+- Frontend: "Custom Fields" tab in SettingsPage with admin field management (create, edit, delete, enum option builder).
+- TicketModal: self-contained custom fields section, fetches definitions + values on open, type-filtered by current ticket type, Save button.
+- NewTicketModal: custom field section shown for visible fields (type-filtered), values emitted with create event.
+- BoardPage: after ticket creation, saves custom field values via `setTicketCustomFieldValues`.
+- Access control: read for all project members, write (create/update/delete definitions) for admins only; values settable by contributors+.
+- i18n: labels hardcoded in English (no new i18n keys needed for basic labels).
+- E2E contract: 14 new selectors (200 total).
+- E2E tests: API CRUD (create, list, values set/get), viewer permission tests, settings UI tab navigation (`custom_fields_test.go`).
+
+## WIP Limits and Flow Health Insights (TKT-031)
+- Per-state WIP limits: `wipLimit` (nullable int) and `wipEnforcement` (bool) fields on workflow states.
+- Migration `027_wip_limits.sql`: adds `wip_limit` and `wip_enforcement` columns to `workflow_states`.
+- Backend enforcement: when `wipEnforcement=true` and `wipLimit` is set, `PATCH /tickets/{id}` returns `409 wip_limit_exceeded` if target state is at or over its limit.
+- Flow health API: `GET /projects/{projectId}/flow-health` returns WIP stats per state (ticket count, avg/max age), cycle time percentiles (P50/P75/P95, last 30 days), and daily throughput (last 14 days).
+- Store methods: `GetFlowHealthStats`, `GetStateTicketCount`.
+- SQL templates: `flow_health_wip_stats`, `flow_health_cycle_time`, `flow_health_throughput`, `workflow_state_ticket_count` (template file `21_flow_health.go.templ`).
+- Frontend workflow editor: added WIP Limit (number input) and Enforce (checkbox) columns to settings workflow table.
+- BoardPage: drag-and-drop enforced on the frontend — move blocked with toast if `wipEnforcement=true` and limit reached.
+- BoardGridHeader: shows `count/wipLimit` badge per column header; red when at/over limit, lock icon when enforced.
+- DashboardPage: new Flow Health section shows WIP utilisation bars, cycle time P50/P75/P95 cards, and 14-day throughput bar chart.
+- Access control: `GET /flow-health` accessible to viewers+.
+- E2E contract: 3 new selectors (`board.wip_badge`, `dashboard.flow_health`, `dashboard.wip_stat_row`; 205 total).
+- E2E tests: WIP limit persisted on workflow update, flow health API returns valid structure, enforcement blocks second move, viewer access (`wip_flow_health_test.go`).

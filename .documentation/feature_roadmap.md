@@ -223,6 +223,7 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 4. ~~Rule-based automation engine (P2-P3)~~ **DONE — TKT-027**
 5. ~~Live collaboration mode (P3)~~ **DONE — TKT-028**
 6. ~~SLA targets, due dates, breach escalation (P1)~~ **DONE — TKT-029**
+7. ~~Custom fields and ticket-type form schemas (P1)~~ **DONE — TKT-030**
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.

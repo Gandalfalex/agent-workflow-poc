@@ -20,6 +20,7 @@ tags:
   - name: sprint-planner
   - name: ai-triage
   - name: admin
+  - name: custom-fields
 
 security:
   - sessionAuth: []
@@ -1586,6 +1587,172 @@ paths:
               schema:
                 $ref: "#/components/schemas/SlaPolicyListResponse"
 
+  /projects/{projectId}/flow-health:
+    get:
+      summary: Get flow health statistics for a project
+      operationId: getFlowHealth
+      tags: [dashboard]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Flow health stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowHealthStats"
+
+  /projects/{projectId}/custom-fields:
+    get:
+      summary: List custom field definitions for a project
+      operationId: listCustomFields
+      tags: [custom-fields]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Custom field list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomFieldDefinitionListResponse"
+    post:
+      summary: Create a custom field definition
+      operationId: createCustomField
+      tags: [custom-fields]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomFieldDefinitionCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomFieldDefinition"
+
+  /projects/{projectId}/custom-fields/{fieldId}:
+    patch:
+      summary: Update a custom field definition
+      operationId: updateCustomField
+      tags: [custom-fields]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomFieldDefinitionUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomFieldDefinition"
+    delete:
+      summary: Delete a custom field definition
+      operationId: deleteCustomField
+      tags: [custom-fields]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /tickets/{id}/custom-field-values:
+    get:
+      summary: Get custom field values for a ticket
+      operationId: getTicketCustomFieldValues
+      tags: [custom-fields]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Custom field values
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomFieldValueListResponse"
+    put:
+      summary: Set custom field values for a ticket
+      operationId: setTicketCustomFieldValues
+      tags: [custom-fields]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomFieldValueUpsertRequest"
+      responses:
+        "200":
+          description: Updated values
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomFieldValueListResponse"
+        "422":
+          description: Required fields missing for state transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/automation/rules:
     get:
       summary: List automation rules
@@ -2894,7 +3061,14 @@ components:
           type: boolean
         isClosed:
           type: boolean
-      required: [id, projectId, name, order, isDefault, isClosed]
+        wipLimit:
+          type: integer
+          nullable: true
+          description: Maximum number of tickets allowed in this state. Null means no limit.
+        wipEnforcement:
+          type: boolean
+          description: If true, prevent moving tickets into this state when at or above wipLimit.
+      required: [id, projectId, name, order, isDefault, isClosed, wipEnforcement]
 
     WorkflowStateInput:
       type: object
@@ -2909,6 +3083,11 @@ components:
         isDefault:
           type: boolean
         isClosed:
+          type: boolean
+        wipLimit:
+          type: integer
+          nullable: true
+        wipEnforcement:
           type: boolean
       required: [name, order, isDefault, isClosed]
 
@@ -4723,6 +4902,245 @@ components:
           items:
             $ref: "#/components/schemas/SlaPolicyEntry"
       required: [items]
+
+    FlowHealthWipStat:
+      type: object
+      properties:
+        stateId:
+          type: string
+          format: uuid
+        stateName:
+          type: string
+        wipLimit:
+          type: integer
+          nullable: true
+        wipEnforcement:
+          type: boolean
+        ticketCount:
+          type: integer
+        maxAgeHours:
+          type: number
+        avgAgeHours:
+          type: number
+      required: [stateId, stateName, wipEnforcement, ticketCount, maxAgeHours, avgAgeHours]
+
+    CycleTimePercentiles:
+      type: object
+      properties:
+        p50Hours:
+          type: number
+        p75Hours:
+          type: number
+        p95Hours:
+          type: number
+        sampleCount:
+          type: integer
+      required: [p50Hours, p75Hours, p95Hours, sampleCount]
+
+    ThroughputDay:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date
+        count:
+          type: integer
+      required: [day, count]
+
+    FlowHealthStats:
+      type: object
+      properties:
+        wipStats:
+          type: array
+          items:
+            $ref: "#/components/schemas/FlowHealthWipStat"
+        cycleTime:
+          $ref: "#/components/schemas/CycleTimePercentiles"
+        throughput:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThroughputDay"
+      required: [wipStats, cycleTime, throughput]
+
+    CustomFieldType:
+      type: string
+      enum: [text, number, date, enum, user, boolean]
+
+    CustomFieldOption:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+      required: [value, label]
+
+    CustomFieldTypeSchema:
+      type: object
+      properties:
+        ticketType:
+          $ref: "#/components/schemas/TicketType"
+        requiredStateIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required: [ticketType, requiredStateIds]
+
+    CustomFieldDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        label:
+          type: string
+        fieldType:
+          $ref: "#/components/schemas/CustomFieldType"
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldOption"
+        order:
+          type: integer
+        required:
+          type: boolean
+        schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldTypeSchema"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, name, label, fieldType, options, order, required, schemas, createdAt, updatedAt]
+
+    CustomFieldDefinitionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldDefinition"
+      required: [items]
+
+    CustomFieldDefinitionCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        fieldType:
+          $ref: "#/components/schemas/CustomFieldType"
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldOption"
+        required:
+          type: boolean
+        schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldTypeSchema"
+      required: [name, label, fieldType]
+
+    CustomFieldDefinitionUpdateRequest:
+      type: object
+      properties:
+        label:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldOption"
+        required:
+          type: boolean
+        schemas:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldTypeSchema"
+
+    CustomFieldValue:
+      type: object
+      properties:
+        fieldId:
+          type: string
+          format: uuid
+        fieldName:
+          type: string
+        fieldLabel:
+          type: string
+        fieldType:
+          $ref: "#/components/schemas/CustomFieldType"
+        valueText:
+          type: string
+          nullable: true
+        valueNumber:
+          type: number
+          nullable: true
+        valueDate:
+          type: string
+          format: date
+          nullable: true
+        valueBoolean:
+          type: boolean
+          nullable: true
+        valueUserId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [fieldId, fieldName, fieldLabel, fieldType]
+
+    CustomFieldValueListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldValue"
+      required: [items]
+
+    CustomFieldValueInput:
+      type: object
+      properties:
+        fieldId:
+          type: string
+          format: uuid
+        valueText:
+          type: string
+          nullable: true
+        valueNumber:
+          type: number
+          nullable: true
+        valueDate:
+          type: string
+          format: date
+          nullable: true
+        valueBoolean:
+          type: boolean
+          nullable: true
+        valueUserId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [fieldId]
+
+    CustomFieldValueUpsertRequest:
+      type: object
+      properties:
+        values:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomFieldValueInput"
+      required: [values]
 
     ErrorResponse:
       type: object

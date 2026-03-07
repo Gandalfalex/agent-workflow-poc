@@ -9,21 +9,25 @@ import (
 )
 
 type WorkflowState struct {
-	ID        uuid.UUID
-	Name      string
-	Order     int
-	IsDefault bool
-	IsClosed  bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID             uuid.UUID
+	Name           string
+	Order          int
+	IsDefault      bool
+	IsClosed       bool
+	WipLimit       *int
+	WipEnforcement bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type WorkflowStateInput struct {
-	ID        *uuid.UUID
-	Name      string
-	Order     int
-	IsDefault bool
-	IsClosed  bool
+	ID             *uuid.UUID
+	Name           string
+	Order          int
+	IsDefault      bool
+	IsClosed       bool
+	WipLimit       *int
+	WipEnforcement bool
 }
 
 func (s *Store) ListWorkflowStates(ctx context.Context, projectID uuid.UUID) ([]WorkflowState, error) {
@@ -49,16 +53,23 @@ func (s *Store) ReplaceWorkflowStates(ctx context.Context, projectID uuid.UUID, 
 			}
 
 			state := WorkflowState{
-				ID:        id,
-				Name:      input.Name,
-				Order:     input.Order,
-				IsDefault: input.IsDefault,
-				IsClosed:  input.IsClosed,
-				CreatedAt: now,
-				UpdatedAt: now,
+				ID:             id,
+				Name:           input.Name,
+				Order:          input.Order,
+				IsDefault:      input.IsDefault,
+				IsClosed:       input.IsClosed,
+				WipLimit:       input.WipLimit,
+				WipEnforcement: input.WipEnforcement,
+				CreatedAt:      now,
+				UpdatedAt:      now,
 			}
 
-			_, err := tx.Exec(ctx, insertQuery, state.ID, projectID, state.Name, state.Order, state.IsDefault, state.IsClosed, state.CreatedAt, state.UpdatedAt)
+			_, err := tx.Exec(ctx, insertQuery,
+				state.ID, projectID, state.Name, state.Order,
+				state.IsDefault, state.IsClosed,
+				state.WipLimit, state.WipEnforcement,
+				state.CreatedAt, state.UpdatedAt,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -78,6 +89,8 @@ func scanWorkflowState(row pgx.Row) (WorkflowState, error) {
 		&state.Order,
 		&state.IsDefault,
 		&state.IsClosed,
+		&state.WipLimit,
+		&state.WipEnforcement,
 		&state.CreatedAt,
 		&state.UpdatedAt,
 	)

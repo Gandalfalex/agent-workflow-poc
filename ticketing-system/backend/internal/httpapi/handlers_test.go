@@ -818,6 +818,45 @@ func (f *fakeStore) ReleaseTicketLock(ctx context.Context, ticketID, userID uuid
 	return nil
 }
 
+func (f *fakeStore) ListCustomFields(ctx context.Context, projectID uuid.UUID) ([]store.CustomFieldDefinition, error) {
+	return []store.CustomFieldDefinition{}, nil
+}
+
+func (f *fakeStore) GetCustomField(ctx context.Context, id, projectID uuid.UUID) (store.CustomFieldDefinition, error) {
+	return store.CustomFieldDefinition{}, store.ErrCustomFieldNotFound
+}
+
+func (f *fakeStore) CreateCustomField(ctx context.Context, projectID uuid.UUID, input store.CustomFieldCreateInput) (store.CustomFieldDefinition, error) {
+	return store.CustomFieldDefinition{}, nil
+}
+
+func (f *fakeStore) UpdateCustomField(ctx context.Context, id, projectID uuid.UUID, input store.CustomFieldUpdateInput) (store.CustomFieldDefinition, error) {
+	return store.CustomFieldDefinition{}, store.ErrCustomFieldNotFound
+}
+
+func (f *fakeStore) DeleteCustomField(ctx context.Context, id, projectID uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeStore) GetCustomFieldValues(ctx context.Context, ticketID uuid.UUID) ([]store.CustomFieldValue, error) {
+	return []store.CustomFieldValue{}, nil
+}
+
+func (f *fakeStore) SetCustomFieldValues(ctx context.Context, ticketID uuid.UUID, values []store.CustomFieldValueInput) ([]store.CustomFieldValue, error) {
+	return []store.CustomFieldValue{}, nil
+}
+
+func (f *fakeStore) GetFlowHealthStats(ctx context.Context, projectID uuid.UUID) (store.FlowHealthStats, error) {
+	return store.FlowHealthStats{
+		WipStats:   []store.FlowHealthWipStat{},
+		Throughput: []store.ThroughputDay{},
+	}, nil
+}
+
+func (f *fakeStore) GetStateTicketCount(ctx context.Context, stateID uuid.UUID) (int, error) {
+	return 0, nil
+}
+
 type fakeAuth struct {
 	loginUser  auth.User
 	loginToken auth.TokenSet

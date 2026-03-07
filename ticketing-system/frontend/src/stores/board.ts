@@ -102,6 +102,7 @@ const demoStates: WorkflowState[] = [
     order: 1,
     isDefault: true,
     isClosed: false,
+    wipEnforcement: false,
   },
   {
     id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000002",
@@ -110,6 +111,7 @@ const demoStates: WorkflowState[] = [
     order: 2,
     isDefault: false,
     isClosed: false,
+    wipEnforcement: false,
   },
   {
     id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000003",
@@ -118,6 +120,7 @@ const demoStates: WorkflowState[] = [
     order: 3,
     isDefault: false,
     isClosed: false,
+    wipEnforcement: false,
   },
   {
     id: "bfc9e1a1-3cd9-4e1d-9f1e-000000000004",
@@ -126,6 +129,7 @@ const demoStates: WorkflowState[] = [
     order: 4,
     isDefault: false,
     isClosed: true,
+    wipEnforcement: false,
   },
 ];
 
