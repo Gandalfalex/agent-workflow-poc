@@ -279,6 +279,8 @@ export const useBoardStore = defineStore("board", {
     ticketTimeEntries: [] as TimeEntry[],
     ticketTimeEntriesTotalMinutes: 0,
     ticketTimeEntriesLoading: false,
+    presenceUsers: [] as import("@/lib/api").PresenceEntry[],
+    lastLiveEvent: null as { type: string; payload: Record<string, unknown> } | null,
   }),
   getters: {
     canEditTickets(): boolean {

@@ -1,6 +1,6 @@
 # Current Features
 
-Snapshot date: February 20, 2026
+Snapshot date: March 7, 2026
 
 ## Core Platform
 - OpenAPI-defined backend API (`ticketing-system/openapi.yaml`) with generated backend/frontend types.
@@ -209,6 +209,14 @@ Snapshot date: February 20, 2026
 - Project dashboard page: summary cards (total/open/closed), bar charts by state, priority, type, and assignee.
 - Project drawer for switching between projects.
 - Header live-update status indicator (`WS` or `POLL`) showing active transport mode.
+
+## Live Collaboration (TKT-028, March 7, 2026)
+- Ticket soft-locking: `ticket_locks` table (migration `024_ticket_locks.sql`) with 2-minute TTL. REST endpoints: `POST /tickets/{id}/lock` (acquire, returns 409 on conflict), `PUT /tickets/{id}/lock` (renew), `DELETE /tickets/{id}/lock` (release, 204).
+- In-memory presence store (`internal/presence/store.go`) with 30-second TTL and concurrent-safe access. REST endpoint: `POST /projects/{projectId}/presence` (upsert, broadcasts `presence.update` WS event).
+- New WS live-event types: `presence.update`, `ticket.lock_acquired`, `ticket.lock_released`, `ticket.comment_added` — added to `ProjectLiveEventType` enum in `openapi.yaml`.
+- Frontend composables: `usePresence` (15s heartbeat), `useLock` (acquire/renew every 90s/release). Both gated by `VITE_LIVE_COLLAB_ENABLED` env var.
+- `BoardPresenceBar.vue`: avatar bubbles showing active users (max 5 + overflow count).
+- OpenAPI-first restoration: `openapi.yaml` (deleted in commit 0cbec5a) restored and extended with all new schemas/paths; `make generate` regenerates `generated.gen.go` and `api.schema.ts` — router.go is clean with only `HandlerWithOptions`.
 
 ## Automation Engine (TKT-027, March 5, 2026)
 - Per-project automation rules with trigger events + conditions + ordered actions.

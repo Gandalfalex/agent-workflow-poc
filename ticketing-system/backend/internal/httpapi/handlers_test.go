@@ -794,6 +794,22 @@ func (f *fakeStore) ListAutomationExecutions(ctx context.Context, ruleID uuid.UU
 	return nil, nil
 }
 
+func (f *fakeStore) AcquireTicketLock(ctx context.Context, ticketID, userID uuid.UUID, userName string, ttl time.Duration) (store.TicketLock, bool, error) {
+	return store.TicketLock{}, true, nil
+}
+
+func (f *fakeStore) GetTicketLock(ctx context.Context, ticketID uuid.UUID) (store.TicketLock, bool, error) {
+	return store.TicketLock{}, false, nil
+}
+
+func (f *fakeStore) RenewTicketLock(ctx context.Context, ticketID, userID uuid.UUID, ttl time.Duration) (store.TicketLock, error) {
+	return store.TicketLock{}, nil
+}
+
+func (f *fakeStore) ReleaseTicketLock(ctx context.Context, ticketID, userID uuid.UUID) error {
+	return nil
+}
+
 type fakeAuth struct {
 	loginUser  auth.User
 	loginToken auth.TokenSet

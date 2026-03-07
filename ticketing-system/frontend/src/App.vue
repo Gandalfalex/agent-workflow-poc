@@ -187,6 +187,20 @@ const handleProjectLiveEvent = async (event: ProjectLiveEvent) => {
                 await boardStore.loadProjectActivities(projectId);
             }
             return;
+        case "presence.update": {
+            const users = payload.users;
+            if (Array.isArray(users)) {
+                boardStore.presenceUsers = users as import("@/lib/api").PresenceEntry[];
+            }
+            return;
+        }
+        case "ticket.lock_acquired":
+        case "ticket.lock_released":
+        case "ticket.comment_added":
+            // These are handled by BoardPage/TicketModal directly via the store
+            // We store them in a shared reactive so subscribers can react.
+            boardStore.lastLiveEvent = { type: event.type, payload };
+            return;
         default:
             return;
     }
@@ -511,19 +525,7 @@ watch(
                 <main
                     class="relative flex w-full flex-col gap-8 px-6 pb-20"
                 >
-                    <RouterView v-slot="{ Component }">
-                        <Transition
-                            mode="out-in"
-                            enter-active-class="transition-opacity duration-200 ease-out"
-                            enter-from-class="opacity-0"
-                            enter-to-class="opacity-100"
-                            leave-active-class="transition-opacity duration-150 ease-in"
-                            leave-from-class="opacity-100"
-                            leave-to-class="opacity-0"
-                        >
-                            <component :is="Component" :key="route.name" />
-                        </Transition>
-                    </RouterView>
+                    <RouterView />
                 </main>
             </div>
         </div>

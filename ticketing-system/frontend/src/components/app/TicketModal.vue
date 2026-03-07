@@ -13,6 +13,7 @@ import type {
     TicketDependency,
     TicketIncidentSeverity,
     TicketDependencyGraphResponse,
+    TicketLockConflict,
     TicketPriority,
     TicketType,
     TimeEntry,
@@ -73,6 +74,7 @@ const props = defineProps<{
     projectId: string;
     ticketId: string;
     readOnly?: boolean;
+    lockConflict?: TicketLockConflict | null;
 }>();
 
 const sprintToAdd = ref("");
@@ -433,6 +435,18 @@ const relationLabel = (relationType: string): string => {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Lock conflict banner -->
+            <div
+                v-if="props.lockConflict"
+                class="mx-6 mt-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+            >
+                <span class="text-amber-400 flex-shrink-0">&#x26A0;</span>
+                <span>
+                    <strong>{{ props.lockConflict.lockedByName || "Another user" }}</strong>
+                    has this ticket open for editing. Your changes cannot be saved until they close it.
+                </span>
             </div>
 
             <!-- Body: scrollable two-column layout -->

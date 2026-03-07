@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import BoardView from "@/components/app/BoardView.vue";
 import BoardToolbar from "@/components/app/board/BoardToolbar.vue";
 import BoardBulkActionBar from "@/components/app/board/BoardBulkActionBar.vue";
+import BoardPresenceBar from "@/components/app/board/BoardPresenceBar.vue";
 import SprintSidebar from "@/components/app/board/SprintSidebar.vue";
 import NewTicketModal from "@/components/app/NewTicketModal.vue";
 import StoryModal from "@/components/app/StoryModal.vue";
@@ -16,6 +17,9 @@ import {
     useKeyboardShortcuts,
     createTicketingShortcuts,
 } from "@/composables/useKeyboardShortcuts";
+import { usePresence } from "@/composables/usePresence";
+import { useLock } from "@/composables/useLock";
+import { useToast } from "@/composables/useToast";
 import {
     createAiTriageSuggestion,
     getProjectAiTriageSettings,
@@ -47,6 +51,17 @@ const adminStore = useAdminStore();
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
+
+const { presenceUsers, startHeartbeat } = usePresence(() => props.projectId);
+// Keep presence users in sync from WS events (App.vue updates boardStore.presenceUsers)
+const presenceUsersDisplay = computed(() =>
+    boardStore.presenceUsers.length > 0 ? boardStore.presenceUsers : presenceUsers.value
+);
+const { lockConflict, tryAcquire, release: releaseLock } = useLock();
+const toast = useToast();
+// Computed: is the ticket locked by another user?
+const ticketLockedByOther = computed(() => lockConflict.value !== null);
+const ticketReadOnly = computed(() => !canEditTickets.value || ticketLockedByOther.value);
 
 const showNewTicket = ref(false);
 const showStoryModal = ref(false);
@@ -476,6 +491,14 @@ const completeSprintHandler = async (sprintId: string, payload?: SprintCompleteR
 
 const openTicket = async (ticket: TicketResponse) => {
     selectedTicket.value = ticket;
+    // Attempt to acquire edit lock (non-blocking: sets lockConflict if held by other)
+    if (apiMode.value !== "demo" && canEditTickets.value) {
+        const acquired = await tryAcquire(ticket.id);
+        if (!acquired && lockConflict.value) {
+            const name = lockConflict.value.lockedByName || "another user";
+            toast.warning(`${name} is editing this ticket — opened in read-only mode`);
+        }
+    }
     ticketEditor.value = {
         title: ticket.title,
         description: ticket.description || "",
@@ -530,6 +553,7 @@ const openTicket = async (ticket: TicketResponse) => {
 };
 
 const closeTicket = () => {
+    releaseLock().catch(() => {});
     selectedTicket.value = null;
     ticketError.value = "";
     dependencyError.value = "";
@@ -1441,6 +1465,7 @@ const updateNewStory = (value: typeof newStory.value) => {
 
 onMounted(() => {
     window.addEventListener("keydown", onGlobalKeydown);
+    startHeartbeat("board");
     refreshBoard().then(async () => {
         if (!props.projectId) return;
         const shareToken =
@@ -1480,6 +1505,44 @@ watch(
     async (value) => {
         if (!value) return;
         await refreshBoard();
+    },
+);
+
+// Handle live collaboration WS events forwarded via boardStore.lastLiveEvent
+watch(
+    () => boardStore.lastLiveEvent,
+    (event) => {
+        if (!event) return;
+        const payload = event.payload || {};
+        if (event.type === "ticket.comment_added") {
+            const ticketId = payload.ticketId as string | undefined;
+            const comment = payload.comment as Record<string, unknown> | undefined;
+            if (ticketId && comment && selectedTicket.value?.id === ticketId) {
+                // Add to comments if not already present
+                const existing = boardStore.ticketComments.find(
+                    (c: import("@/lib/api").TicketComment) => c.id === (comment.id as string),
+                );
+                if (!existing) {
+                    boardStore.ticketComments.push(comment as unknown as import("@/lib/api").TicketComment);
+                }
+                const authorName = (comment.authorName as string) || "Someone";
+                if (document.visibilityState !== "visible") {
+                    toast.info(`${authorName} added a comment`);
+                }
+            }
+        } else if (event.type === "ticket.lock_released") {
+            const ticketId = payload.ticketId as string | undefined;
+            if (ticketId && selectedTicket.value?.id === ticketId && lockConflict.value) {
+                const name = lockConflict.value.lockedByName || "The other user";
+                releaseLock().catch(() => {});
+                // Re-acquire lock now
+                tryAcquire(ticketId).then((acquired) => {
+                    if (acquired) {
+                        toast.success(`${name}'s lock was released — you can now edit this ticket`);
+                    }
+                });
+            }
+        }
     },
 );
 </script>
@@ -1528,7 +1591,8 @@ watch(
         @share-preset="sharePreset"
     />
 
-    <div class="flex items-center justify-end px-1 py-1">
+    <div class="flex items-center justify-between px-1 py-1">
+        <BoardPresenceBar :users="presenceUsersDisplay" />
         <button
             data-testid="board.sprint-sidebar-toggle"
             class="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
@@ -1682,7 +1746,8 @@ watch(
         :assignee-options="assigneeOptions"
         :project-id="props.projectId"
         :ticket-id="selectedTicket?.id || ''"
-        :read-only="!canEditTickets"
+        :read-only="ticketReadOnly"
+        :lock-conflict="lockConflict"
         @update:editor="updateTicketEditor"
         @update:commentDraft="updateCommentDraft"
         @update:dependencyRelationDraft="(value) => (dependencyRelationDraft = value)"

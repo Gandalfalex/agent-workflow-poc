@@ -18,6 +18,10 @@ const (
 	projectEventNotificationsChange = "notifications.changed"
 	projectEventBoardRefresh        = "board.refresh"
 	projectEventActivityChanged     = "activity.changed"
+	projectEventPresenceUpdate      = "presence.update"
+	projectEventLockAcquired        = "ticket.lock_acquired"
+	projectEventLockReleased        = "ticket.lock_released"
+	projectEventCommentAdded        = "ticket.comment_added"
 )
 
 type projectLiveEvent struct {

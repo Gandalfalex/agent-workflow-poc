@@ -1,0 +1,4626 @@
+openapi: 3.0.3
+info:
+  title: Ticketing System API
+  version: 0.2.0
+  description: |
+    Jira-like ticketing system API with auth, Kanban workflow, projects, groups, and webhooks.
+servers:
+  - url: http://localhost:8080/rest/v1
+
+tags:
+  - name: auth
+  - name: users
+  - name: projects
+  - name: groups
+  - name: tickets
+  - name: workflow
+  - name: webhooks
+  - name: attachments
+  - name: dashboard
+  - name: sprint-planner
+  - name: ai-triage
+  - name: admin
+
+security:
+  - sessionAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags: [auth]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /auth/login:
+    post:
+      summary: Login
+      operationId: login
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthLoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthLoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      summary: Logout
+      operationId: logout
+      tags: [auth]
+      responses:
+        "204":
+          description: Logged out
+
+  /auth/me:
+    get:
+      summary: Current user
+      operationId: getCurrentUser
+      tags: [auth]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /admin/sync-users:
+    post:
+      summary: Sync all Keycloak users to database
+      operationId: syncUsers
+      tags: [admin]
+      responses:
+        "200":
+          description: Users synced successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncUsersResponse"
+        "500":
+          description: Sync failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/audit-log:
+    get:
+      summary: List audit log entries
+      operationId: listAuditLog
+      tags: [admin]
+      parameters:
+        - in: query
+          name: projectId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: resourceType
+          schema:
+            type: string
+        - in: query
+          name: actorId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+
+  /admin/users:
+    post:
+      summary: Create user in identity provider and app directory
+      operationId: createAdminUser
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUserCreateRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSummary"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Admin required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Create failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users:
+    get:
+      summary: List users
+      operationId: listUsers
+      tags: [users]
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search by name or email
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+
+  /portfolio/stats:
+    get:
+      summary: Get portfolio statistics across all projects
+      operationId: getPortfolioStats
+      tags: [dashboard]
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [json, csv]
+        - in: query
+          name: ownerId
+          description: Filter to projects where this user is a member
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: groupId
+          description: Filter to projects belonging to this group
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Portfolio statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioStats"
+
+  /projects:
+    get:
+      summary: List projects
+      operationId: listProjects
+      tags: [projects]
+      responses:
+        "200":
+          description: Project list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+    post:
+      summary: Create project
+      operationId: createProject
+      tags: [projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreateRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{projectId}:
+    get:
+      summary: Get project
+      operationId: getProject
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update project
+      operationId: updateProject
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdateRequest"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      summary: Delete project
+      operationId: deleteProject
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/groups:
+    get:
+      summary: List project groups
+      operationId: listProjectGroups
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project group list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGroupListResponse"
+    post:
+      summary: Add group to project
+      operationId: addProjectGroup
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectGroupCreateRequest"
+      responses:
+        "201":
+          description: Project group added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGroup"
+
+  /projects/{projectId}/groups/{groupId}:
+    patch:
+      summary: Update project group role
+      operationId: updateProjectGroup
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectGroupUpdateRequest"
+      responses:
+        "200":
+          description: Project group updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGroup"
+    delete:
+      summary: Remove group from project
+      operationId: deleteProjectGroup
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /groups:
+    get:
+      summary: List groups
+      operationId: listGroups
+      tags: [groups]
+      responses:
+        "200":
+          description: Group list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupListResponse"
+    post:
+      summary: Create group
+      operationId: createGroup
+      tags: [groups]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupCreateRequest"
+      responses:
+        "201":
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+
+  /groups/{groupId}:
+    get:
+      summary: Get group
+      operationId: getGroup
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+    patch:
+      summary: Update group
+      operationId: updateGroup
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupUpdateRequest"
+      responses:
+        "200":
+          description: Group updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+    delete:
+      summary: Delete group
+      operationId: deleteGroup
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /groups/{groupId}/members:
+    get:
+      summary: List group members
+      operationId: listGroupMembers
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Group member list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMemberListResponse"
+    post:
+      summary: Add user to group
+      operationId: addGroupMember
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupMemberCreateRequest"
+      responses:
+        "201":
+          description: Group member created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupMember"
+
+  /groups/{groupId}/members/{userId}:
+    delete:
+      summary: Remove user from group
+      operationId: deleteGroupMember
+      tags: [groups]
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/board:
+    get:
+      summary: Kanban board snapshot
+      operationId: getBoard
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Board
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardResponse"
+
+  /projects/{projectId}/tickets:
+    get:
+      summary: List tickets for project
+      operationId: listTickets
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: stateId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: assigneeId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: blocked
+          schema:
+            type: boolean
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Ticket list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketListResponse"
+    post:
+      summary: Create ticket
+      operationId: createTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketCreateRequest"
+      responses:
+        "201":
+          description: Ticket created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+
+  /projects/{projectId}/tickets/bulk:
+    post:
+      summary: Execute bulk ticket operation
+      operationId: bulkTicketOperation
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkTicketOperationRequest"
+      responses:
+        "200":
+          description: Bulk operation completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkTicketOperationResponse"
+
+  /projects/{projectId}/dependency-graph:
+    get:
+      summary: Get project dependency graph
+      operationId: getProjectDependencyGraph
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: rootTicketId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: depth
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2
+            default: 2
+      responses:
+        "200":
+          description: Dependency graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDependencyGraphResponse"
+
+  /tickets/{id}:
+    get:
+      summary: Get ticket
+      operationId: getTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ticket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update ticket
+      operationId: updateTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketUpdateRequest"
+      responses:
+        "200":
+          description: Ticket updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ticket"
+    delete:
+      summary: Delete ticket
+      operationId: deleteTicket
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /tickets/{id}/dependencies:
+    get:
+      summary: List dependencies for ticket
+      operationId: listTicketDependencies
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Dependency list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDependencyListResponse"
+    post:
+      summary: Create dependency for ticket
+      operationId: createTicketDependency
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketDependencyCreateRequest"
+      responses:
+        "201":
+          description: Dependency created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketDependency"
+
+  /tickets/{id}/dependencies/{dependencyId}:
+    delete:
+      summary: Delete dependency for ticket
+      operationId: deleteTicketDependency
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: dependencyId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/stories:
+    get:
+      summary: List stories
+      operationId: listStories
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Story list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryListResponse"
+    post:
+      summary: Create story
+      operationId: createStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryCreateRequest"
+      responses:
+        "201":
+          description: Story created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+
+  /stories/{id}:
+    get:
+      summary: Get story
+      operationId: getStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Story
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+    patch:
+      summary: Update story
+      operationId: updateStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryUpdateRequest"
+      responses:
+        "200":
+          description: Story updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Story"
+    delete:
+      summary: Delete story
+      operationId: deleteStory
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /tickets/{id}/comments:
+    get:
+      summary: List ticket comments
+      operationId: listTicketComments
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Comment list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketCommentListResponse"
+    post:
+      summary: Add ticket comment
+      operationId: addTicketComment
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TicketCommentCreateRequest"
+      responses:
+        "201":
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketComment"
+
+  /tickets/{id}/activities:
+    get:
+      summary: List ticket activities
+      operationId: listTicketActivities
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Activity list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketActivityListResponse"
+
+  /tickets/{id}/incident-timeline:
+    get:
+      summary: List incident timeline events for ticket
+      operationId: listTicketIncidentTimeline
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Incident timeline events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentTimelineResponse"
+
+  /tickets/{id}/incident-postmortem:
+    get:
+      summary: Export incident postmortem draft as Markdown
+      operationId: getTicketIncidentPostmortem
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Markdown postmortem draft
+          content:
+            text/markdown:
+              schema:
+                type: string
+
+  /tickets/{id}/comments/{commentId}:
+    delete:
+      summary: Delete ticket comment
+      operationId: deleteTicketComment
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: commentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /tickets/{id}/lock:
+    post:
+      summary: Acquire or refresh an edit lock on a ticket
+      operationId: acquireTicketLock
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lock acquired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketLockResponse"
+        "409":
+          description: Lock held by another user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketLockConflictResponse"
+    put:
+      summary: Renew an existing edit lock
+      operationId: renewTicketLock
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lock renewed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketLockResponse"
+        "403":
+          description: Lock not held by caller
+    delete:
+      summary: Release an edit lock
+      operationId: releaseTicketLock
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Lock released
+
+  /projects/{projectId}/tickets/{ticketId}/attachments:
+    get:
+      summary: List ticket attachments
+      operationId: listTicketAttachments
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Attachment list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttachmentListResponse"
+    post:
+      summary: Upload file attachment to ticket
+      operationId: uploadTicketAttachment
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        "201":
+          description: Attachment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attachment"
+        "413":
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}/download:
+    get:
+      summary: Download attachment file
+      operationId: downloadTicketAttachment
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: attachmentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /projects/{projectId}/tickets/{ticketId}/attachments/{attachmentId}:
+    delete:
+      summary: Delete ticket attachment
+      operationId: deleteTicketAttachment
+      tags: [attachments]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: attachmentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/tickets/{ticketId}/time-entries:
+    get:
+      summary: List time entries for a ticket
+      operationId: listTicketTimeEntries
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Time entry list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeEntryListResponse"
+    post:
+      summary: Log time on a ticket
+      operationId: createTicketTimeEntry
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimeEntryCreateRequest"
+      responses:
+        "201":
+          description: Time entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeEntry"
+
+  /projects/{projectId}/tickets/{ticketId}/time-entries/{timeEntryId}:
+    delete:
+      summary: Delete a time entry
+      operationId: deleteTicketTimeEntry
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: timeEntryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/stats:
+    get:
+      summary: Get project statistics
+      operationId: getProjectStats
+      tags: [dashboard]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats"
+
+  /projects/{projectId}/sprints:
+    get:
+      summary: List project sprints
+      operationId: listProjectSprints
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project sprint list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintListResponse"
+    post:
+      summary: Create a project sprint
+      operationId: createProjectSprint
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintCreateRequest"
+      responses:
+        "201":
+          description: Created sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+
+  /projects/{projectId}/sprints/{sprintId}/start:
+    post:
+      summary: Start a sprint
+      operationId: startProjectSprint
+      tags: [sprints]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: sprintId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Sprint started
+
+  /projects/{projectId}/sprints/{sprintId}/complete:
+    post:
+      summary: Complete a sprint
+      operationId: completeProjectSprint
+      tags: [sprints]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: sprintId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintCompleteRequest"
+      responses:
+        "204":
+          description: Sprint completed
+
+  /projects/{projectId}/sprints/{sprintId}/tickets:
+    post:
+      summary: Add tickets to sprint
+      operationId: addSprintTickets
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: sprintId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintTicketsRequest"
+      responses:
+        "200":
+          description: Updated sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+    delete:
+      summary: Remove tickets from sprint
+      operationId: removeSprintTickets
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: sprintId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SprintTicketsRequest"
+      responses:
+        "200":
+          description: Updated sprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sprint"
+
+  /projects/{projectId}/automation/rules:
+    get:
+      summary: List automation rules
+      operationId: listAutomationRules
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRuleListResponse"
+    post:
+      summary: Create automation rule
+      operationId: createAutomationRule
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleCreateRequest"
+      responses:
+        "201":
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRule"
+
+  /projects/{projectId}/automation/rules/{ruleId}:
+    get:
+      summary: Get automation rule
+      operationId: getAutomationRule
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ruleId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Automation rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRule"
+    put:
+      summary: Update automation rule
+      operationId: updateAutomationRule
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ruleId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRuleUpdateRequest"
+      responses:
+        "200":
+          description: Rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRule"
+    delete:
+      summary: Delete automation rule
+      operationId: deleteAutomationRule
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ruleId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Rule deleted
+
+  /projects/{projectId}/automation/rules/{ruleId}/executions:
+    get:
+      summary: List automation executions for a rule
+      operationId: listAutomationExecutions
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: ruleId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Automation executions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationExecutionListResponse"
+
+  /projects/{projectId}/capacity-settings:
+    get:
+      summary: List project capacity settings
+      operationId: listProjectCapacitySettings
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Capacity settings list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacitySettingsResponse"
+    put:
+      summary: Replace project capacity settings
+      operationId: replaceProjectCapacitySettings
+      tags: [sprint-planner]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CapacitySettingsReplaceRequest"
+      responses:
+        "200":
+          description: Capacity settings list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacitySettingsResponse"
+
+  /projects/{projectId}/sprint-forecast:
+    get:
+      summary: Get sprint forecast summary
+      operationId: getProjectSprintForecast
+      tags: [sprint-planner, dashboard]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: sprintId
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: iterations
+          required: false
+          schema:
+            type: integer
+            minimum: 10
+            maximum: 5000
+            default: 250
+      responses:
+        "200":
+          description: Sprint forecast summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SprintForecastSummary"
+
+  /projects/{projectId}/ai-triage/settings:
+    get:
+      summary: Get AI triage settings for project
+      operationId: getProjectAiTriageSettings
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Project AI triage settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSettings"
+    patch:
+      summary: Update AI triage settings for project
+      operationId: updateProjectAiTriageSettings
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTriageSettingsUpdateRequest"
+      responses:
+        "200":
+          description: Updated project AI triage settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSettings"
+
+  /projects/{projectId}/ai-triage/suggestions:
+    post:
+      summary: Generate AI triage suggestion for ticket draft
+      operationId: createAiTriageSuggestion
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTriageSuggestionCreateRequest"
+      responses:
+        "201":
+          description: AI triage suggestion generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSuggestion"
+
+  /projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision:
+    post:
+      summary: Record field-by-field acceptance or rejection for an AI triage suggestion
+      operationId: recordAiTriageSuggestionDecision
+      tags: [ai-triage]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: suggestionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTriageSuggestionDecisionRequest"
+      responses:
+        "201":
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTriageSuggestionDecision"
+
+  /projects/{projectId}/reporting/summary:
+    get:
+      summary: Get lightweight project reporting summary
+      operationId: getProjectReportingSummary
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Project reporting summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectReportingSummary"
+
+  /projects/{projectId}/reporting/export:
+    get:
+      summary: Export project reporting snapshot
+      operationId: exportProjectReportingSnapshot
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        "200":
+          description: Reporting export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectReportingExportJson"
+            text/csv:
+              schema:
+                type: string
+
+  /projects/{projectId}/presence:
+    post:
+      summary: Upsert current user presence in a project
+      operationId: upsertPresence
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresenceUpsertRequest"
+      responses:
+        "200":
+          description: Current presence list for the project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresenceResponse"
+
+  /projects/{projectId}/events/ws:
+    get:
+      summary: Open project live updates stream (WebSocket)
+      operationId: streamProjectEvents
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "101":
+          description: Switching Protocols (WebSocket upgrade)
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/activities:
+    get:
+      summary: List recent project activity
+      operationId: listProjectActivities
+      tags: [dashboard]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Project activity list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectActivityListResponse"
+
+  /projects/{projectId}/notifications:
+    get:
+      summary: List current user notifications for project
+      operationId: listNotifications
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: unreadOnly
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationListResponse"
+
+  /projects/{projectId}/notifications/unread-count:
+    get:
+      summary: Get current user unread notification count for project
+      operationId: getNotificationUnreadCount
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCountResponse"
+
+  /projects/{projectId}/notifications/{notificationId}/read:
+    post:
+      summary: Mark a notification as read
+      operationId: markNotificationRead
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: notificationId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Updated notification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /projects/{projectId}/notifications/read-all:
+    post:
+      summary: Mark all project notifications as read for current user
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Number of notifications updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationMarkAllResponse"
+
+  /projects/{projectId}/notification-preferences:
+    get:
+      summary: Get current user notification preferences
+      operationId: getNotificationPreferences
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+    patch:
+      summary: Update current user notification preferences
+      operationId: updateNotificationPreferences
+      tags: [notifications]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationPreferencesUpdateRequest"
+      responses:
+        "200":
+          description: Updated notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPreferences"
+
+  /projects/{projectId}/my-role:
+    get:
+      summary: Get the current user's role on this project
+      operationId: getMyProjectRole
+      tags: [projects]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current user's project role
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role]
+                properties:
+                  role:
+                    $ref: "#/components/schemas/ProjectRole"
+
+  /projects/{projectId}/board-filters:
+    get:
+      summary: List personal board filter presets
+      operationId: listBoardFilterPresets
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Preset list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPresetListResponse"
+    post:
+      summary: Create personal board filter preset
+      operationId: createBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BoardFilterPresetCreateRequest"
+      responses:
+        "201":
+          description: Preset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPreset"
+
+  /projects/{projectId}/board-filters/{presetId}:
+    patch:
+      summary: Update personal board filter preset
+      operationId: updateBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: presetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BoardFilterPresetUpdateRequest"
+      responses:
+        "200":
+          description: Preset updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPreset"
+    delete:
+      summary: Delete personal board filter preset
+      operationId: deleteBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: presetId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/board-filters/shared/{token}:
+    get:
+      summary: Resolve shared board filter preset token
+      operationId: getSharedBoardFilterPreset
+      tags: [tickets]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Shared preset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardFilterPreset"
+        "404":
+          description: Shared preset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/workflow:
+    get:
+      summary: Get workflow states
+      operationId: getWorkflow
+      tags: [workflow]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowResponse"
+    put:
+      summary: Update workflow states
+      operationId: updateWorkflow
+      tags: [workflow]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowUpdateRequest"
+      responses:
+        "200":
+          description: Workflow updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowResponse"
+
+  /projects/{projectId}/webhooks:
+    get:
+      summary: List webhooks
+      operationId: listWebhooks
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Webhook list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+    post:
+      summary: Create webhook
+      operationId: createWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookCreateRequest"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+
+  /projects/{projectId}/webhooks/{id}:
+    get:
+      summary: Get webhook
+      operationId: getWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Webhook
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+    patch:
+      summary: Update webhook
+      operationId: updateWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookUpdateRequest"
+      responses:
+        "200":
+          description: Webhook updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+    delete:
+      summary: Delete webhook
+      operationId: deleteWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/webhooks/{id}/deliveries:
+    get:
+      summary: List webhook delivery history
+      operationId: listWebhookDeliveries
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Delivery list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookDeliveryListResponse"
+
+  /projects/{projectId}/webhooks/{id}/test:
+    post:
+      summary: Send test webhook
+      operationId: testWebhook
+      tags: [webhooks]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookTestRequest"
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookTestResponse"
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: ticketing_session
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+      required: [status]
+
+    AuthLoginRequest:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: Email or username
+        email:
+          type: string
+          format: email
+          deprecated: true
+        username:
+          type: string
+          deprecated: true
+        password:
+          type: string
+          format: password
+      required: [password]
+
+    AuthLoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+      required: [user]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email, name, createdAt]
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+      required: [id, name]
+
+    UserListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserSummary"
+      required: [items]
+
+    SyncUsersResponse:
+      type: object
+      properties:
+        synced:
+          type: integer
+          description: Number of users synced
+        total:
+          type: integer
+          description: Total users in Keycloak
+      required: [synced, total]
+
+    AdminUserCreateRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        password:
+          type: string
+          minLength: 8
+      required: [username, email, password]
+
+    ProjectKey:
+      type: string
+      description: 4-character uppercase alphanumeric project key.
+      pattern: "^[A-Z0-9]{4}$"
+      example: PROJ
+
+    TicketKey:
+      type: string
+      description: Ticket key in format PROJECT-###, where ### is a per-project sequence.
+      pattern: "^[A-Z0-9]{4}-\\d{3}$"
+      example: PROJ-001
+
+    ProjectRole:
+      type: string
+      enum: [admin, contributor, viewer]
+
+    ProjectPermission:
+      type: string
+      enum: [read, create, update, delete, admin]
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          $ref: "#/components/schemas/ProjectKey"
+        name:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        defaultSprintDurationDays:
+          type: integer
+          nullable: true
+      required: [id, key, name, createdAt, updatedAt]
+
+    ProjectCreateRequest:
+      type: object
+      properties:
+        key:
+          $ref: "#/components/schemas/ProjectKey"
+        name:
+          type: string
+        description:
+          type: string
+      required: [key, name]
+
+    ProjectUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        defaultSprintDurationDays:
+          type: integer
+          nullable: true
+
+    ProjectListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+      required: [items]
+
+    Group:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, createdAt, updatedAt]
+
+    GroupCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required: [name]
+
+    GroupUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    GroupListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Group"
+      required: [items]
+
+    GroupMember:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        user:
+          $ref: "#/components/schemas/UserSummary"
+      required: [groupId, userId]
+
+    GroupMemberCreateRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+      required: [userId]
+
+    GroupMemberListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupMember"
+      required: [items]
+
+    ProjectGroup:
+      type: object
+      properties:
+        projectId:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectPermission"
+      required: [projectId, groupId, role, permissions]
+
+    ProjectGroupCreateRequest:
+      type: object
+      properties:
+        groupId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+      required: [groupId, role]
+
+    ProjectGroupUpdateRequest:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/ProjectRole"
+      required: [role]
+
+    ProjectGroupListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectGroup"
+      required: [items]
+
+    WorkflowState:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        order:
+          type: integer
+        isDefault:
+          type: boolean
+        isClosed:
+          type: boolean
+      required: [id, projectId, name, order, isDefault, isClosed]
+
+    WorkflowStateInput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        order:
+          type: integer
+        isDefault:
+          type: boolean
+        isClosed:
+          type: boolean
+      required: [name, order, isDefault, isClosed]
+
+    WorkflowResponse:
+      type: object
+      properties:
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowState"
+      required: [states]
+
+    WorkflowUpdateRequest:
+      type: object
+      properties:
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowStateInput"
+      required: [states]
+
+    TicketPriority:
+      type: string
+      enum: [low, medium, high, urgent]
+
+    TicketType:
+      type: string
+      enum: [feature, bug]
+
+    TicketIncidentSeverity:
+      type: string
+      enum: [sev1, sev2, sev3, sev4]
+
+    BoardFilter:
+      type: object
+      properties:
+        assigneeId:
+          type: string
+          format: uuid
+        stateId:
+          type: string
+          format: uuid
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        type:
+          $ref: "#/components/schemas/TicketType"
+        q:
+          type: string
+        blocked:
+          type: boolean
+
+    DependencyRelationType:
+      type: string
+      enum: [blocks, blocked_by, related]
+
+    BoardFilterPreset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        ownerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        filters:
+          $ref: "#/components/schemas/BoardFilter"
+        shareToken:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, ownerId, name, filters, createdAt, updatedAt]
+
+    BoardFilterPresetCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        filters:
+          $ref: "#/components/schemas/BoardFilter"
+        generateShareToken:
+          type: boolean
+      required: [name, filters]
+
+    BoardFilterPresetUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        filters:
+          $ref: "#/components/schemas/BoardFilter"
+        generateShareToken:
+          type: boolean
+
+    BoardFilterPresetListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoardFilterPreset"
+      required: [items]
+
+    Story:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        storyPoints:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, title, createdAt, updatedAt]
+
+    StoryCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        storyPoints:
+          type: integer
+          nullable: true
+      required: [title]
+
+    StoryUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        storyPoints:
+          type: integer
+          nullable: true
+
+    StoryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Story"
+      required: [items]
+
+    TicketActivity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        action:
+          type: string
+          description: "Type of activity: state_changed, priority_changed, assignee_changed, type_changed, title_changed, description_changed"
+        field:
+          type: string
+        oldValue:
+          type: string
+        newValue:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, actorId, actorName, action, createdAt]
+
+    TicketActivityListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketActivity"
+      required: [items]
+
+    TicketComment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        authorId:
+          type: string
+          format: uuid
+        authorName:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, authorId, authorName, message, createdAt]
+
+    TicketCommentCreateRequest:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+    TicketCommentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketComment"
+      required: [items]
+
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          $ref: "#/components/schemas/TicketKey"
+        number:
+          type: integer
+        type:
+          $ref: "#/components/schemas/TicketType"
+        projectId:
+          type: string
+          format: uuid
+        projectKey:
+          $ref: "#/components/schemas/ProjectKey"
+        storyId:
+          type: string
+          format: uuid
+        story:
+          $ref: "#/components/schemas/Story"
+        title:
+          type: string
+        description:
+          type: string
+        stateId:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/WorkflowState"
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        assignee:
+          $ref: "#/components/schemas/UserSummary"
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        incidentEnabled:
+          type: boolean
+        incidentSeverity:
+          $ref: "#/components/schemas/TicketIncidentSeverity"
+          nullable: true
+        incidentImpact:
+          type: string
+          nullable: true
+        incidentCommanderId:
+          type: string
+          format: uuid
+          nullable: true
+        incidentCommander:
+          $ref: "#/components/schemas/UserSummary"
+        position:
+          type: number
+          format: float
+        blockedByCount:
+          type: integer
+        storyPoints:
+          type: integer
+          nullable: true
+        timeEstimate:
+          type: integer
+          nullable: true
+          description: Estimated effort in minutes
+        timeLogged:
+          type: integer
+          readOnly: true
+          description: Total logged time in minutes (computed)
+        isBlocked:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - key
+        - number
+        - type
+        - projectId
+        - projectKey
+        - storyId
+        - title
+        - stateId
+        - priority
+        - incidentEnabled
+        - position
+        - blockedByCount
+        - isBlocked
+        - createdAt
+        - updatedAt
+
+    TicketDependency:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        relatedTicketId:
+          type: string
+          format: uuid
+        relationType:
+          $ref: "#/components/schemas/DependencyRelationType"
+        relatedTicket:
+          $ref: "#/components/schemas/Ticket"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, ticketId, relatedTicketId, relationType, createdAt]
+
+    TicketDependencyCreateRequest:
+      type: object
+      properties:
+        relatedTicketId:
+          type: string
+          format: uuid
+        relationType:
+          $ref: "#/components/schemas/DependencyRelationType"
+      required: [relatedTicketId, relationType]
+
+    TicketDependencyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketDependency"
+      required: [items]
+
+    TicketDependencyGraphNode:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+        depth:
+          type: integer
+      required: [ticket, depth]
+
+    TicketDependencyGraphEdge:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sourceTicketId:
+          type: string
+          format: uuid
+        targetTicketId:
+          type: string
+          format: uuid
+        relationType:
+          $ref: "#/components/schemas/DependencyRelationType"
+      required: [id, sourceTicketId, targetTicketId, relationType]
+
+    TicketDependencyGraphResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketDependencyGraphNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketDependencyGraphEdge"
+      required: [nodes, edges]
+
+    TicketCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/TicketType"
+        storyId:
+          type: string
+          format: uuid
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        incidentEnabled:
+          type: boolean
+        incidentSeverity:
+          $ref: "#/components/schemas/TicketIncidentSeverity"
+          nullable: true
+        incidentImpact:
+          type: string
+          nullable: true
+        incidentCommanderId:
+          type: string
+          format: uuid
+          nullable: true
+        storyPoints:
+          type: integer
+          nullable: true
+        timeEstimate:
+          type: integer
+          nullable: true
+      required: [title, storyId]
+
+    TicketUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/TicketType"
+        storyId:
+          type: string
+          format: uuid
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        incidentEnabled:
+          type: boolean
+        incidentSeverity:
+          $ref: "#/components/schemas/TicketIncidentSeverity"
+          nullable: true
+        incidentImpact:
+          type: string
+          nullable: true
+        incidentCommanderId:
+          type: string
+          format: uuid
+          nullable: true
+        storyPoints:
+          type: integer
+          nullable: true
+        timeEstimate:
+          type: integer
+          nullable: true
+        position:
+          type: number
+          format: float
+
+    IncidentTimelineItemType:
+      type: string
+      enum: [activity, comment, webhook]
+
+    IncidentTimelineItem:
+      type: object
+      properties:
+        id:
+          type: string
+        ticketId:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/IncidentTimelineItemType"
+        title:
+          type: string
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, type, title, createdAt]
+
+    IncidentTimelineResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentTimelineItem"
+      required: [items]
+
+    TicketListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ticket"
+        total:
+          type: integer
+      required: [items, total]
+
+    BulkTicketAction:
+      type: string
+      enum: [move_state, assign, set_priority, delete]
+
+    BulkTicketOperationRequest:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/BulkTicketAction"
+        ticketIds:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: string
+            format: uuid
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+      required: [action, ticketIds]
+
+    BulkTicketOperationResult:
+      type: object
+      properties:
+        ticketId:
+          type: string
+          format: uuid
+        success:
+          type: boolean
+        errorCode:
+          type: string
+        message:
+          type: string
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticketId, success]
+
+    BulkTicketOperationResponse:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/BulkTicketAction"
+        total:
+          type: integer
+        successCount:
+          type: integer
+        errorCount:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkTicketOperationResult"
+      required: [action, total, successCount, errorCount, results]
+
+    BoardResponse:
+      type: object
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkflowState"
+        tickets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ticket"
+      required: [project, states, tickets]
+
+    WebhookEvent:
+      type: string
+      enum:
+        - ticket.created
+        - ticket.updated
+        - ticket.deleted
+        - ticket.state_changed
+
+    Webhook:
+      type: object
+      description: |
+        Webhook subscription configuration.
+        Outbound webhook POST bodies use `WebhookPayloadV1`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        enabled:
+          type: boolean
+        secret:
+          type: string
+          writeOnly: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, url, events, enabled, createdAt, updatedAt]
+
+    WebhookCreateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        enabled:
+          type: boolean
+        secret:
+          type: string
+      required: [url, events]
+
+    WebhookUpdateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        enabled:
+          type: boolean
+        secret:
+          type: string
+
+    WebhookListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Webhook"
+      required: [items]
+
+    WebhookTestRequest:
+      type: object
+      properties:
+        event:
+          $ref: "#/components/schemas/WebhookEvent"
+        ticketId:
+          type: string
+          format: uuid
+        payload:
+          type: object
+          additionalProperties: true
+
+    WebhookTestResponse:
+      type: object
+      properties:
+        delivered:
+          type: boolean
+        statusCode:
+          type: integer
+        responseBody:
+          type: string
+      required: [delivered]
+
+    WebhookPayloadV1:
+      type: object
+      description: Versioned outbound webhook body (`version=v1`).
+      properties:
+        version:
+          type: string
+          enum: [v1]
+        event:
+          $ref: "#/components/schemas/WebhookEvent"
+        eventTimestamp:
+          type: string
+          format: date-time
+        idempotencyKey:
+          type: string
+          format: uuid
+        data:
+          oneOf:
+            - $ref: "#/components/schemas/WebhookTicketCreatedData"
+            - $ref: "#/components/schemas/WebhookTicketUpdatedData"
+            - $ref: "#/components/schemas/WebhookTicketDeletedData"
+            - $ref: "#/components/schemas/WebhookTicketStateChangedData"
+      required: [version, event, eventTimestamp, idempotencyKey, data]
+
+    WebhookTicketCreatedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticket]
+
+    WebhookTicketUpdatedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticket]
+
+    WebhookTicketDeletedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+      required: [ticket]
+
+    WebhookTicketStateChangedData:
+      type: object
+      properties:
+        ticket:
+          $ref: "#/components/schemas/Ticket"
+        fromStateId:
+          type: string
+          format: uuid
+        toStateId:
+          type: string
+          format: uuid
+      required: [ticket, fromStateId, toStateId]
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        webhookId:
+          type: string
+          format: uuid
+        event:
+          type: string
+        attempt:
+          type: integer
+        statusCode:
+          type: integer
+        responseBody:
+          type: string
+        error:
+          type: string
+        delivered:
+          type: boolean
+        durationMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, webhookId, event, attempt, delivered, durationMs, createdAt]
+
+    WebhookDeliveryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookDelivery"
+      required: [items]
+
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+          format: int64
+        uploadedBy:
+          type: string
+          format: uuid
+        uploadedByName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, filename, contentType, size, uploadedBy, uploadedByName, createdAt]
+
+    AttachmentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attachment"
+      required: [items]
+
+    TimeEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        minutes:
+          type: integer
+        description:
+          type: string
+        loggedAt:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, userId, userName, minutes, loggedAt, createdAt]
+
+    TimeEntryCreateRequest:
+      type: object
+      properties:
+        minutes:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+        loggedAt:
+          type: string
+          format: date
+      required: [minutes]
+
+    TimeEntryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeEntry"
+        totalMinutes:
+          type: integer
+      required: [items, totalMinutes]
+
+    ProjectActivity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        ticketKey:
+          type: string
+        ticketTitle:
+          type: string
+        actorId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        action:
+          type: string
+        field:
+          type: string
+        oldValue:
+          type: string
+        newValue:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ticketId, ticketKey, ticketTitle, actorId, actorName, action, createdAt]
+
+    ProjectActivityListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectActivity"
+      required: [items]
+
+    ProjectLiveEventType:
+      type: string
+      enum:
+        - heartbeat
+        - notifications.unread_count
+        - notifications.changed
+        - board.refresh
+        - activity.changed
+        - presence.update
+        - ticket.lock_acquired
+        - ticket.lock_released
+        - ticket.comment_added
+
+    ProjectLiveEvent:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/ProjectLiveEventType"
+        projectId:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+      required: [type, projectId, timestamp]
+
+    NotificationType:
+      type: string
+      enum: [mention, assignment]
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        ticketKey:
+          $ref: "#/components/schemas/TicketKey"
+        ticketTitle:
+          type: string
+        type:
+          $ref: "#/components/schemas/NotificationType"
+        message:
+          type: string
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, userId, ticketId, ticketKey, ticketTitle, type, message, createdAt]
+
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+      required: [items]
+
+    NotificationUnreadCountResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+      required: [count]
+
+    NotificationMarkAllResponse:
+      type: object
+      properties:
+        updated:
+          type: integer
+      required: [updated]
+
+    NotificationPreferences:
+      type: object
+      properties:
+        mentionEnabled:
+          type: boolean
+        assignmentEnabled:
+          type: boolean
+      required: [mentionEnabled, assignmentEnabled]
+
+    NotificationPreferencesUpdateRequest:
+      type: object
+      properties:
+        mentionEnabled:
+          type: boolean
+        assignmentEnabled:
+          type: boolean
+
+    StatCount:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: integer
+      required: [label, value]
+
+    ProjectStats:
+      type: object
+      properties:
+        totalOpen:
+          type: integer
+        totalClosed:
+          type: integer
+        blockedOpen:
+          type: integer
+        byState:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+        byPriority:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+        byType:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+        byAssignee:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+      required: [totalOpen, totalClosed, blockedOpen, byState, byPriority, byType, byAssignee]
+
+    Sprint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        goal:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        ticketIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        committedTickets:
+          type: integer
+        status:
+          $ref: "#/components/schemas/SprintStatus"
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, name, startDate, endDate, ticketIds, committedTickets, status, createdAt, updatedAt]
+
+    SprintListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Sprint"
+      required: [items]
+
+    SprintCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        goal:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        ticketIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required: [name, startDate, endDate]
+
+    SprintTicketsRequest:
+      type: object
+      required: [ticketIds]
+      properties:
+        ticketIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    CapacitySettingScope:
+      type: string
+      enum: [team, user]
+
+    CapacitySetting:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        scope:
+          $ref: "#/components/schemas/CapacitySettingScope"
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        label:
+          type: string
+        capacity:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, scope, label, capacity, createdAt, updatedAt]
+
+    CapacitySettingInput:
+      type: object
+      properties:
+        scope:
+          $ref: "#/components/schemas/CapacitySettingScope"
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        label:
+          type: string
+        capacity:
+          type: integer
+      required: [scope, label, capacity]
+
+    CapacitySettingsReplaceRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapacitySettingInput"
+      required: [items]
+
+    CapacitySettingsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapacitySetting"
+      required: [items]
+
+    SprintForecastSummary:
+      type: object
+      properties:
+        sprint:
+          $ref: "#/components/schemas/Sprint"
+        committedTickets:
+          type: integer
+        capacity:
+          type: integer
+        projectedCompletion:
+          type: integer
+        overCapacityDelta:
+          type: integer
+        confidence:
+          type: number
+          format: float
+        iterations:
+          type: integer
+      required: [committedTickets, capacity, projectedCompletion, overCapacityDelta, confidence, iterations]
+
+    AiTriageSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+
+    AiTriageSettingsUpdateRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required: [enabled]
+
+    AiTriageField:
+      type: string
+      enum: [summary, priority, state, assignee]
+
+    AiTriageConfidence:
+      type: object
+      properties:
+        summary:
+          type: number
+          format: float
+        priority:
+          type: number
+          format: float
+        state:
+          type: number
+          format: float
+        assignee:
+          type: number
+          format: float
+      required: [summary, priority, state, assignee]
+
+    AiTriageSuggestion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        summary:
+          type: string
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        stateId:
+          type: string
+          format: uuid
+        assigneeId:
+          type: string
+          format: uuid
+          nullable: true
+        promptVersion:
+          type: string
+        model:
+          type: string
+        confidence:
+          $ref: "#/components/schemas/AiTriageConfidence"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, summary, priority, stateId, promptVersion, model, confidence, createdAt]
+
+    AiTriageSuggestionCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: "#/components/schemas/TicketType"
+      required: [title]
+
+    AiTriageSuggestionDecisionRequest:
+      type: object
+      properties:
+        acceptedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+        rejectedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+      required: [acceptedFields, rejectedFields]
+
+    AiTriageSuggestionDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        suggestionId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        acceptedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+        rejectedFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiTriageField"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, suggestionId, projectId, actorId, acceptedFields, rejectedFields, createdAt]
+
+    DateValuePoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        value:
+          type: integer
+      required: [date, value]
+
+    StateOpenPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        counts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatCount"
+      required: [date, counts]
+
+    ProjectReportingSummary:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        throughputByDay:
+          type: array
+          items:
+            $ref: "#/components/schemas/DateValuePoint"
+        averageCycleTimeHours:
+          type: number
+          format: float
+        openByState:
+          type: array
+          items:
+            $ref: "#/components/schemas/StateOpenPoint"
+      required: [from, to, throughputByDay, averageCycleTimeHours, openByState]
+
+    ProjectReportingExportJson:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        summary:
+          $ref: "#/components/schemas/ProjectReportingSummary"
+      required: [generatedAt, summary]
+
+    SprintStatus:
+      type: string
+      enum: [pending, planned, active, completed]
+
+    SprintCompleteRequest:
+      type: object
+      properties:
+        moveTicketIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        action:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        resourceName:
+          type: string
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        details:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, actorId, actorName, action, resourceType, resourceId, resourceName, projectId, details, createdAt]
+
+    AuditLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        total:
+          type: integer
+      required: [items, total]
+
+    AutomationActionType:
+      type: string
+
+    AutomationAction:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/AutomationActionType"
+        params:
+          type: object
+          additionalProperties:
+            type: string
+      required: [type, params]
+
+    AutomationActionResult:
+      type: object
+      properties:
+        type:
+          type: string
+        params:
+          type: object
+          additionalProperties:
+            type: string
+        success:
+          type: boolean
+        error:
+          type: string
+      required: [type, params, success]
+
+    AutomationExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        triggerEvent:
+          type: string
+        actionsRun:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationActionResult"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ruleId, ticketId, triggerEvent, actionsRun, createdAt]
+
+    AutomationExecutionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationExecution"
+      required: [items]
+
+    AutomationRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        triggerEvent:
+          type: string
+        triggerConditions:
+          type: object
+          additionalProperties:
+            type: string
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationAction"
+        enabled:
+          type: boolean
+        executionCount:
+          type: integer
+        lastExecutedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, name, triggerEvent, triggerConditions, actions, enabled, executionCount, lastExecutedAt, createdAt, updatedAt]
+
+    AutomationRuleListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationRule"
+      required: [items]
+
+    AutomationRuleCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        triggerEvent:
+          type: string
+        triggerConditions:
+          type: object
+          additionalProperties:
+            type: string
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationAction"
+        enabled:
+          type: boolean
+      required: [name, triggerEvent, actions]
+
+    AutomationRuleUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        triggerEvent:
+          type: string
+        triggerConditions:
+          type: object
+          additionalProperties:
+            type: string
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationAction"
+        enabled:
+          type: boolean
+
+    PortfolioTotals:
+      type: object
+      properties:
+        totalProjects:
+          type: integer
+        totalOpen:
+          type: integer
+        totalClosed:
+          type: integer
+        totalBlocked:
+          type: integer
+        totalUrgent:
+          type: integer
+      required: [totalProjects, totalOpen, totalClosed, totalBlocked, totalUrgent]
+
+    ProjectPortfolioEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectKey:
+          type: string
+        projectName:
+          type: string
+        totalOpen:
+          type: integer
+        totalClosed:
+          type: integer
+        urgentOpen:
+          type: integer
+        highOpen:
+          type: integer
+        blockedOpen:
+          type: integer
+        activeSprintName:
+          type: string
+          nullable: true
+        activeSprintEndDate:
+          type: string
+          format: date
+          nullable: true
+        activeSprintCommitted:
+          type: integer
+        activeSprintRemaining:
+          type: integer
+        avgCycleTimeHours:
+          type: number
+          format: float
+        weeklyThroughput:
+          type: integer
+      required: [id, projectKey, projectName, totalOpen, totalClosed, urgentOpen, highOpen, blockedOpen, activeSprintName, activeSprintEndDate, activeSprintCommitted, activeSprintRemaining, avgCycleTimeHours, weeklyThroughput]
+
+    PortfolioStats:
+      type: object
+      properties:
+        totals:
+          $ref: "#/components/schemas/PortfolioTotals"
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectPortfolioEntry"
+      required: [totals, projects]
+
+    TicketLockResponse:
+      type: object
+      properties:
+        ticketId:
+          type: string
+          format: uuid
+        lockedBy:
+          type: string
+          format: uuid
+        lockedByName:
+          type: string
+        acquiredAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+      required: [ticketId, lockedBy, lockedByName, acquiredAt, expiresAt]
+
+    TicketLockConflictResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        lockedBy:
+          type: string
+          format: uuid
+        lockedByName:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+      required: [error, lockedBy, lockedByName, expiresAt]
+
+    PresenceUpsertRequest:
+      type: object
+      properties:
+        view:
+          type: string
+        ticketId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [view]
+
+    PresenceEntry:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+        view:
+          type: string
+        ticketId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [userId, userName, view]
+
+    PresenceResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/PresenceEntry"
+      required: [users]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required: [error]

@@ -77,19 +77,11 @@ func TestDependenciesBlockedFilterAndGraph(t *testing.T) {
 		WhenIClickKey("board.filter_toggle_button").
 		WhenIClickKey("board.filter_blocked_checkbox").
 		Then("blocked filter hides unblocked ticket and keeps blocked ticket visible", func(s *Scenario) error {
-			aVisible, err := ticketTitleVisible(s.Harness(), ticketA.Key)
-			if err != nil {
-				return err
+			if err := s.Harness().ExpectTextHidden(ticketA.Key); err != nil {
+				return fmt.Errorf("expected unblocked ticket %q to be hidden: %w", ticketA.Key, err)
 			}
-			if aVisible {
-				return fmt.Errorf("expected unblocked ticket %q to be hidden", ticketA.Key)
-			}
-			bVisible, err := ticketTitleVisible(s.Harness(), ticketB.Key)
-			if err != nil {
-				return err
-			}
-			if !bVisible {
-				return fmt.Errorf("expected blocked ticket %q to be visible", ticketB.Key)
+			if err := s.Harness().ExpectTextVisible(ticketB.Key); err != nil {
+				return fmt.Errorf("expected blocked ticket %q to be visible: %w", ticketB.Key, err)
 			}
 			return nil
 		}).
@@ -127,8 +119,4 @@ func apiCreateDependencyExpect(h *Harness, ticketID, relatedTicketID, relationTy
 		return fmt.Errorf("expected response body to contain %q, got %s", expectBody, bodyText)
 	}
 	return nil
-}
-
-func ticketTitleVisible(h *Harness, title string) (bool, error) {
-	return h.page.GetByText(title).First().IsVisible()
 }

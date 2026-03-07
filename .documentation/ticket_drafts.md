@@ -792,3 +792,155 @@ CREATE INDEX ON ticket_locks (expires_at);
   - Second user sees read-only mode when lock is held
   - Comment added by one user appears live for the other
 - [ ] Feature flag: `VITE_LIVE_COLLAB_ENABLED` (default `false`)
+
+### TKT-029: SLA Targets, Due Dates, and Breach Escalation
+- **Priority:** `P1`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Teams cannot reliably see which tickets are at risk of missing expected response or completion timelines.
+- **Scope:**
+  - Add per-project SLA policy config by priority/type (target durations for first response and completion).
+  - Add ticket due date field and board/card countdown badges.
+  - Add SLA states (`on_track`, `at_risk`, `breached`) computed server-side.
+  - Add automation hooks for escalation actions on breach (comment, assign, priority bump, webhook).
+  - Add dashboard widgets for breached and at-risk counts.
+- **Acceptance Criteria:**
+  - SLA status is visible on board cards and ticket modal.
+  - Breach transitions emit activities and optionally trigger automation.
+  - Dashboard includes trend counts for at-risk and breached tickets.
+  - OpenAPI, frontend types, and E2E selectors are updated.
+
+### TKT-030: Custom Fields and Ticket-Type Form Schemas
+- **Priority:** `P1`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Fixed ticket fields are limiting for teams with domain-specific workflows.
+- **Scope:**
+  - Add project-level custom field definitions (`text`, `number`, `date`, `enum`, `user`, `boolean`).
+  - Add ticket-type schema mapping (which fields appear for `bug`, `feature`, etc.).
+  - Add required-by-state rules for validation during transitions.
+  - Render dynamic sections in New Ticket and Ticket Modal forms.
+  - Include custom fields in filtering and export endpoints.
+- **Acceptance Criteria:**
+  - Admin can define and reorder custom fields in Settings.
+  - Dynamic fields render correctly and persist in ticket payloads.
+  - Validation blocks state changes when required fields are missing.
+  - API and generated frontend types remain OpenAPI-first.
+
+### TKT-031: WIP Limits and Flow Health Insights
+- **Priority:** `P1`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Teams can overload columns without feedback, increasing cycle time and context switching.
+- **Scope:**
+  - Add per-workflow-state WIP limit settings.
+  - Show board warnings when a state exceeds limit.
+  - Add flow health panel: aging WIP, cycle-time percentiles, throughput trend.
+  - Add optional enforcement mode preventing drag/drop into overloaded states.
+- **Acceptance Criteria:**
+  - WIP limits can be configured in workflow settings.
+  - Over-limit states are clearly highlighted in board header and story rows.
+  - Dashboard flow panel updates from live project data.
+  - E2E covers warning mode and enforcement mode behavior.
+
+### TKT-032: Release and Version Management
+- **Priority:** `P1-P2`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Planning and delivery are disconnected; teams cannot package tickets into releasable versions with clear notes.
+- **Scope:**
+  - Add release entities (`name`, `version`, `status`, `targetDate`, `notes`).
+  - Allow linking tickets to a release from board and modal.
+  - Auto-generate draft release notes from completed tickets.
+  - Add release status transitions (`planned`, `in_progress`, `released`, `archived`).
+  - Add release export endpoint (`markdown` and `json`).
+- **Acceptance Criteria:**
+  - Users can create releases and assign/unassign tickets.
+  - Release notes generation includes ticket key, title, type, and notable changes.
+  - Released tickets and release history are filterable in board/dashboard.
+  - API schemas and frontend route contract are documented in OpenAPI.
+
+### TKT-033: Approval Gates for Sensitive Workflow Transitions
+- **Priority:** `P1-P2`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** High-impact transitions (for example to production-ready states) need explicit approval and traceability.
+- **Scope:**
+  - Add approval policies per workflow transition.
+  - Support approver scopes: specific users, groups, or role-based approvers.
+  - Add approval requests, decision log, and rejection reasons.
+  - Enforce transition blocking until required approvals are met.
+  - Integrate with existing audit log and notifications.
+- **Acceptance Criteria:**
+  - Attempted gated transitions return clear blocked responses when approval is missing.
+  - Approval decisions are visible in ticket activity and admin audit log.
+  - Approvers get inbox notifications with deep links to approve/reject.
+  - E2E covers allow/deny and multi-approver flows.
+
+### TKT-034: Automation Rule Simulator and Dry-Run Replay
+- **Priority:** `P2`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Rule mistakes are risky; users need confidence before enabling automations in production.
+- **Scope:**
+  - Add simulation mode for rules without mutating live tickets.
+  - Replay selected historical events (for example last 7/30 days) against draft rules.
+  - Show predicted action outcomes and failure reasons.
+  - Add "compare result" diff view for each affected ticket.
+  - Store simulation runs for later review.
+- **Acceptance Criteria:**
+  - Users can run simulation from rule editor before saving/enabling.
+  - Simulation output includes matched event count and per-action success/failure prediction.
+  - No ticket mutations occur during dry-run.
+  - API exposes simulation results with pagination for large runs.
+
+### TKT-035: Shared Operational Views by Team Role
+- **Priority:** `P2`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Personal presets are useful but teams still lack standardized role-based working views.
+- **Scope:**
+  - Add project-scoped shared views managed by admins/contributors.
+  - Support view ownership and permissions (private, team-shared, project-shared).
+  - Allow locking parts of view config (required filters/sort/group).
+  - Add default-per-role view selection (Support, QA, Product, Engineering).
+  - Track usage metrics for views.
+- **Acceptance Criteria:**
+  - Shared views appear in board "Views" dropdown with ownership metadata.
+  - Users can duplicate shared views into personal variants.
+  - Locked filters cannot be overridden in restricted views.
+  - E2E verifies visibility rules for viewer/contributor/admin.
+
+### TKT-036: Similar Ticket and Knowledge Link Suggestions
+- **Priority:** `P2-P3`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Duplicate tickets and missing historical context increase resolution time.
+- **Scope:**
+  - Add similar-ticket suggestions during ticket creation/edit.
+  - Add knowledge links section for postmortems, runbooks, and related docs.
+  - Score suggestions by text similarity + metadata overlap (type, component, labels when available).
+  - Allow one-click linking of suggested items into ticket metadata.
+  - Add suppression action ("not relevant") to improve ranking.
+- **Acceptance Criteria:**
+  - Suggestion panel appears in New Ticket and Ticket Modal.
+  - Suggestions include confidence indicators and quick-link actions.
+  - Linked knowledge items are shown in ticket detail and exports.
+  - Performance target: suggestion call under 300ms for common projects.
+
+### TKT-037: Inbound Email to Ticket Gateway
+- **Priority:** `P2-P3`
+- **Type:** `feature`
+- **Status:** `Todo`
+- **Problem:** Work requests often arrive by email and are manually copied into the system.
+- **Scope:**
+  - Add per-project inbound email addresses/aliases.
+  - Parse inbound messages into new tickets or comments by thread key.
+  - Support basic attachment ingestion and sender mapping.
+  - Add anti-spoof checks and allowlist settings.
+  - Add processing log with retry status and errors.
+- **Acceptance Criteria:**
+  - New inbound emails create tickets with subject/body mapping.
+  - Replies on known threads append comments to correct ticket.
+  - Attachments are stored through existing attachment pipeline.
+  - Admin can inspect processing logs and reprocess failed messages.

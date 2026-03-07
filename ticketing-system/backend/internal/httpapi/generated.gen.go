@@ -26,15 +26,6 @@ const (
 	Summary  AiTriageField = "summary"
 )
 
-// Defines values for AutomationActionType.
-const (
-	AutomationActionTypeAddComment  AutomationActionType = "add_comment"
-	AutomationActionTypeCallWebhook AutomationActionType = "call_webhook"
-	AutomationActionTypeSetAssignee AutomationActionType = "set_assignee"
-	AutomationActionTypeSetPriority AutomationActionType = "set_priority"
-	AutomationActionTypeSetState    AutomationActionType = "set_state"
-)
-
 // Defines values for BulkTicketAction.
 const (
 	BulkTicketActionAssign      BulkTicketAction = "assign"
@@ -80,15 +71,16 @@ const (
 
 // Defines values for ProjectRole.
 const (
-	ProjectRoleAdmin       ProjectRole = "admin"
-	ProjectRoleContributor ProjectRole = "contributor"
-	ProjectRoleViewer      ProjectRole = "viewer"
+	Admin       ProjectRole = "admin"
+	Contributor ProjectRole = "contributor"
+	Viewer      ProjectRole = "viewer"
 )
 
 // Defines values for SprintStatus.
 const (
 	Active    SprintStatus = "active"
 	Completed SprintStatus = "completed"
+	Pending   SprintStatus = "pending"
 	Planned   SprintStatus = "planned"
 )
 
@@ -262,9 +254,6 @@ type AutomationAction struct {
 	Type   AutomationActionType `json:"type"`
 }
 
-// AutomationActionType defines model for AutomationAction.Type.
-type AutomationActionType string
-
 // AutomationActionResult defines model for AutomationActionResult.
 type AutomationActionResult struct {
 	Error   *string           `json:"error,omitempty"`
@@ -272,6 +261,9 @@ type AutomationActionResult struct {
 	Success bool              `json:"success"`
 	Type    string            `json:"type"`
 }
+
+// AutomationActionType defines model for AutomationActionType.
+type AutomationActionType = string
 
 // AutomationExecution defines model for AutomationExecution.
 type AutomationExecution struct {
@@ -579,6 +571,25 @@ type PortfolioTotals struct {
 	TotalUrgent   int `json:"totalUrgent"`
 }
 
+// PresenceEntry defines model for PresenceEntry.
+type PresenceEntry struct {
+	TicketId *openapi_types.UUID `json:"ticketId"`
+	UserId   openapi_types.UUID  `json:"userId"`
+	UserName string              `json:"userName"`
+	View     string              `json:"view"`
+}
+
+// PresenceResponse defines model for PresenceResponse.
+type PresenceResponse struct {
+	Users []PresenceEntry `json:"users"`
+}
+
+// PresenceUpsertRequest defines model for PresenceUpsertRequest.
+type PresenceUpsertRequest struct {
+	TicketId *openapi_types.UUID `json:"ticketId"`
+	View     string              `json:"view"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	CreatedAt                 time.Time          `json:"createdAt"`
@@ -662,20 +673,16 @@ type ProjectPortfolioEntry struct {
 	ActiveSprintEndDate   *openapi_types.Date `json:"activeSprintEndDate"`
 	ActiveSprintName      *string             `json:"activeSprintName"`
 	ActiveSprintRemaining int                 `json:"activeSprintRemaining"`
-
-	// AvgCycleTimeHours Average hours from open to close (last 30 days)
-	AvgCycleTimeHours float32            `json:"avgCycleTimeHours"`
-	BlockedOpen       int                `json:"blockedOpen"`
-	HighOpen          int                `json:"highOpen"`
-	Id                openapi_types.UUID `json:"id"`
-	ProjectKey        string             `json:"projectKey"`
-	ProjectName       string             `json:"projectName"`
-	TotalClosed       int                `json:"totalClosed"`
-	TotalOpen         int                `json:"totalOpen"`
-	UrgentOpen        int                `json:"urgentOpen"`
-
-	// WeeklyThroughput Tickets closed in the last 7 days
-	WeeklyThroughput int `json:"weeklyThroughput"`
+	AvgCycleTimeHours     float32             `json:"avgCycleTimeHours"`
+	BlockedOpen           int                 `json:"blockedOpen"`
+	HighOpen              int                 `json:"highOpen"`
+	Id                    openapi_types.UUID  `json:"id"`
+	ProjectKey            string              `json:"projectKey"`
+	ProjectName           string              `json:"projectName"`
+	TotalClosed           int                 `json:"totalClosed"`
+	TotalOpen             int                 `json:"totalOpen"`
+	UrgentOpen            int                 `json:"urgentOpen"`
+	WeeklyThroughput      int                 `json:"weeklyThroughput"`
 }
 
 // ProjectReportingExportJson defines model for ProjectReportingExportJson.
@@ -967,6 +974,23 @@ type TicketKey = string
 type TicketListResponse struct {
 	Items []Ticket `json:"items"`
 	Total int      `json:"total"`
+}
+
+// TicketLockConflictResponse defines model for TicketLockConflictResponse.
+type TicketLockConflictResponse struct {
+	Error        string             `json:"error"`
+	ExpiresAt    time.Time          `json:"expiresAt"`
+	LockedBy     openapi_types.UUID `json:"lockedBy"`
+	LockedByName string             `json:"lockedByName"`
+}
+
+// TicketLockResponse defines model for TicketLockResponse.
+type TicketLockResponse struct {
+	AcquiredAt   time.Time          `json:"acquiredAt"`
+	ExpiresAt    time.Time          `json:"expiresAt"`
+	LockedBy     openapi_types.UUID `json:"lockedBy"`
+	LockedByName string             `json:"lockedByName"`
+	TicketId     openapi_types.UUID `json:"ticketId"`
 }
 
 // TicketPriority defines model for TicketPriority.
@@ -1274,6 +1298,9 @@ type UpdateProjectGroupJSONRequestBody = ProjectGroupUpdateRequest
 // UpdateNotificationPreferencesJSONRequestBody defines body for UpdateNotificationPreferences for application/json ContentType.
 type UpdateNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdateRequest
 
+// UpsertPresenceJSONRequestBody defines body for UpsertPresence for application/json ContentType.
+type UpsertPresenceJSONRequestBody = PresenceUpsertRequest
+
 // CreateProjectSprintJSONRequestBody defines body for CreateProjectSprint for application/json ContentType.
 type CreateProjectSprintJSONRequestBody = SprintCreateRequest
 
@@ -1327,7 +1354,7 @@ type CreateTicketDependencyJSONRequestBody = TicketDependencyCreateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// List admin audit log entries
+	// List audit log entries
 	// (GET /admin/audit-log)
 	ListAuditLog(w http.ResponseWriter, r *http.Request, params ListAuditLogParams)
 	// Sync all Keycloak users to database
@@ -1372,7 +1399,7 @@ type ServerInterface interface {
 	// Health check
 	// (GET /health)
 	HealthCheck(w http.ResponseWriter, r *http.Request)
-	// Get cross-project portfolio statistics
+	// Get portfolio statistics across all projects
 	// (GET /portfolio/stats)
 	GetPortfolioStats(w http.ResponseWriter, r *http.Request, params GetPortfolioStatsParams)
 	// List projects
@@ -1420,7 +1447,7 @@ type ServerInterface interface {
 	// Update automation rule
 	// (PUT /projects/{projectId}/automation/rules/{ruleId})
 	UpdateAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID)
-	// List automation rule executions
+	// List automation executions for a rule
 	// (GET /projects/{projectId}/automation/rules/{ruleId}/executions)
 	ListAutomationExecutions(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID)
 	// Kanban board snapshot
@@ -1486,6 +1513,9 @@ type ServerInterface interface {
 	// Mark a notification as read
 	// (POST /projects/{projectId}/notifications/{notificationId}/read)
 	MarkNotificationRead(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, notificationId openapi_types.UUID)
+	// Upsert current user presence in a project
+	// (POST /projects/{projectId}/presence)
+	UpsertPresence(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
 	// Export project reporting snapshot
 	// (GET /projects/{projectId}/reporting/export)
 	ExportProjectReportingSnapshot(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ExportProjectReportingSnapshotParams)
@@ -1624,6 +1654,15 @@ type ServerInterface interface {
 	// List incident timeline events for ticket
 	// (GET /tickets/{id}/incident-timeline)
 	ListTicketIncidentTimeline(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Release an edit lock
+	// (DELETE /tickets/{id}/lock)
+	ReleaseTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Acquire or refresh an edit lock on a ticket
+	// (POST /tickets/{id}/lock)
+	AcquireTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Renew an existing edit lock
+	// (PUT /tickets/{id}/lock)
+	RenewTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// List users
 	// (GET /users)
 	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
@@ -1633,7 +1672,7 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
-// List admin audit log entries
+// List audit log entries
 // (GET /admin/audit-log)
 func (_ Unimplemented) ListAuditLog(w http.ResponseWriter, r *http.Request, params ListAuditLogParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1723,7 +1762,7 @@ func (_ Unimplemented) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Get cross-project portfolio statistics
+// Get portfolio statistics across all projects
 // (GET /portfolio/stats)
 func (_ Unimplemented) GetPortfolioStats(w http.ResponseWriter, r *http.Request, params GetPortfolioStatsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1819,7 +1858,7 @@ func (_ Unimplemented) UpdateAutomationRule(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// List automation rule executions
+// List automation executions for a rule
 // (GET /projects/{projectId}/automation/rules/{ruleId}/executions)
 func (_ Unimplemented) ListAutomationExecutions(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1948,6 +1987,12 @@ func (_ Unimplemented) GetNotificationUnreadCount(w http.ResponseWriter, r *http
 // Mark a notification as read
 // (POST /projects/{projectId}/notifications/{notificationId}/read)
 func (_ Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, notificationId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Upsert current user presence in a project
+// (POST /projects/{projectId}/presence)
+func (_ Unimplemented) UpsertPresence(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2224,6 +2269,24 @@ func (_ Unimplemented) GetTicketIncidentPostmortem(w http.ResponseWriter, r *htt
 // List incident timeline events for ticket
 // (GET /tickets/{id}/incident-timeline)
 func (_ Unimplemented) ListTicketIncidentTimeline(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Release an edit lock
+// (DELETE /tickets/{id}/lock)
+func (_ Unimplemented) ReleaseTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Acquire or refresh an edit lock on a ticket
+// (POST /tickets/{id}/lock)
+func (_ Unimplemented) AcquireTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Renew an existing edit lock
+// (PUT /tickets/{id}/lock)
+func (_ Unimplemented) RenewTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3972,6 +4035,37 @@ func (siw *ServerInterfaceWrapper) MarkNotificationRead(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// UpsertPresence operation middleware
+func (siw *ServerInterfaceWrapper) UpsertPresence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpsertPresence(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ExportProjectReportingSnapshot operation middleware
 func (siw *ServerInterfaceWrapper) ExportProjectReportingSnapshot(w http.ResponseWriter, r *http.Request) {
 
@@ -5703,6 +5797,99 @@ func (siw *ServerInterfaceWrapper) ListTicketIncidentTimeline(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// ReleaseTicketLock operation middleware
+func (siw *ServerInterfaceWrapper) ReleaseTicketLock(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReleaseTicketLock(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AcquireTicketLock operation middleware
+func (siw *ServerInterfaceWrapper) AcquireTicketLock(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcquireTicketLock(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenewTicketLock operation middleware
+func (siw *ServerInterfaceWrapper) RenewTicketLock(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenewTicketLock(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -6009,6 +6196,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/projects/{projectId}/notifications/{notificationId}/read", wrapper.MarkNotificationRead)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/presence", wrapper.UpsertPresence)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/reporting/export", wrapper.ExportProjectReportingSnapshot)
 	})
 	r.Group(func(r chi.Router) {
@@ -6145,6 +6335,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/tickets/{id}/incident-timeline", wrapper.ListTicketIncidentTimeline)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/tickets/{id}/lock", wrapper.ReleaseTicketLock)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tickets/{id}/lock", wrapper.AcquireTicketLock)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/tickets/{id}/lock", wrapper.RenewTicketLock)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/users", wrapper.ListUsers)

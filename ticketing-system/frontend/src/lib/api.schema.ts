@@ -72,23 +72,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/audit-log": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List admin audit log entries */
-        get: operations["listAuditLog"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/admin/sync-users": {
         parameters: {
             query?: never;
@@ -100,6 +83,23 @@ export interface paths {
         put?: never;
         /** Sync all Keycloak users to database */
         post: operations["syncUsers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List audit log entries */
+        get: operations["listAuditLog"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -132,6 +132,23 @@ export interface paths {
         };
         /** List users */
         get: operations["listUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get portfolio statistics across all projects */
+        get: operations["getPortfolioStats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -531,6 +548,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tickets/{id}/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renew an existing edit lock */
+        put: operations["renewTicketLock"];
+        /** Acquire or refresh an edit lock on a ticket */
+        post: operations["acquireTicketLock"];
+        /** Release an edit lock */
+        delete: operations["releaseTicketLock"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/tickets/{ticketId}/attachments": {
         parameters: {
             query?: never;
@@ -635,23 +671,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/portfolio/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get cross-project portfolio statistics */
-        get: operations["getPortfolioStats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/projects/{projectId}/sprints": {
         parameters: {
             query?: never;
@@ -665,24 +684,6 @@ export interface paths {
         /** Create a project sprint */
         post: operations["createProjectSprint"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{projectId}/sprints/{sprintId}/tickets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add tickets to sprint */
-        post: operations["addSprintTickets"];
-        /** Remove tickets from sprint */
-        delete: operations["removeSprintTickets"];
         options?: never;
         head?: never;
         patch?: never;
@@ -716,6 +717,78 @@ export interface paths {
         put?: never;
         /** Complete a sprint */
         post: operations["completeProjectSprint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/sprints/{sprintId}/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add tickets to sprint */
+        post: operations["addSprintTickets"];
+        /** Remove tickets from sprint */
+        delete: operations["removeSprintTickets"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/automation/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List automation rules */
+        get: operations["listAutomationRules"];
+        put?: never;
+        /** Create automation rule */
+        post: operations["createAutomationRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/automation/rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get automation rule */
+        get: operations["getAutomationRule"];
+        /** Update automation rule */
+        put: operations["updateAutomationRule"];
+        post?: never;
+        /** Delete automation rule */
+        delete: operations["deleteAutomationRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/automation/rules/{ruleId}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List automation executions for a rule */
+        get: operations["listAutomationExecutions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -837,6 +910,23 @@ export interface paths {
         get: operations["exportProjectReportingSnapshot"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upsert current user presence in a project */
+        post: operations["upsertPresence"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1116,60 +1206,6 @@ export interface paths {
         put?: never;
         /** Send test webhook */
         post: operations["testWebhook"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{projectId}/automation/rules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List automation rules */
-        get: operations["listAutomationRules"];
-        put?: never;
-        /** Create automation rule */
-        post: operations["createAutomationRule"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{projectId}/automation/rules/{ruleId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get automation rule */
-        get: operations["getAutomationRule"];
-        /** Update automation rule */
-        put: operations["updateAutomationRule"];
-        post?: never;
-        /** Delete automation rule */
-        delete: operations["deleteAutomationRule"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects/{projectId}/automation/rules/{ruleId}/executions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List automation rule executions */
-        get: operations["listAutomationExecutions"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1789,7 +1825,7 @@ export interface components {
             items: components["schemas"]["ProjectActivity"][];
         };
         /** @enum {string} */
-        ProjectLiveEventType: "heartbeat" | "notifications.unread_count" | "notifications.changed" | "board.refresh" | "activity.changed";
+        ProjectLiveEventType: "heartbeat" | "notifications.unread_count" | "notifications.changed" | "board.refresh" | "activity.changed" | "presence.update" | "ticket.lock_acquired" | "ticket.lock_released" | "ticket.comment_added";
         ProjectLiveEvent: {
             type: components["schemas"]["ProjectLiveEventType"];
             /** Format: uuid */
@@ -1850,64 +1886,6 @@ export interface components {
             byType: components["schemas"]["StatCount"][];
             byAssignee: components["schemas"]["StatCount"][];
         };
-        AuditLogEntry: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            actorId: string;
-            actorName: string;
-            action: string;
-            resourceType: string;
-            resourceId: string;
-            resourceName: string;
-            /** Format: uuid */
-            projectId?: string | null;
-            details: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
-            createdAt: string;
-        };
-        AuditLogListResponse: {
-            items: components["schemas"]["AuditLogEntry"][];
-            total: number;
-        };
-        ProjectPortfolioEntry: {
-            /** Format: uuid */
-            id: string;
-            projectKey: string;
-            projectName: string;
-            totalOpen: number;
-            totalClosed: number;
-            urgentOpen: number;
-            highOpen: number;
-            blockedOpen: number;
-            activeSprintName?: string | null;
-            /** Format: date */
-            activeSprintEndDate?: string | null;
-            activeSprintCommitted: number;
-            activeSprintRemaining: number;
-            /** @description Tickets closed in the last 7 days */
-            weeklyThroughput: number;
-            /**
-             * Format: float
-             * @description Average hours from open to close (last 30 days)
-             */
-            avgCycleTimeHours: number;
-        };
-        PortfolioTotals: {
-            totalProjects: number;
-            totalOpen: number;
-            totalClosed: number;
-            totalBlocked: number;
-            totalUrgent: number;
-        };
-        PortfolioStats: {
-            totals: components["schemas"]["PortfolioTotals"];
-            projects: components["schemas"]["ProjectPortfolioEntry"][];
-        };
-        /** @enum {string} */
-        SprintStatus: "planned" | "active" | "completed";
         Sprint: {
             /** Format: uuid */
             id: string;
@@ -1915,13 +1893,13 @@ export interface components {
             projectId: string;
             name: string;
             goal?: string;
-            status: components["schemas"]["SprintStatus"];
             /** Format: date */
             startDate: string;
             /** Format: date */
             endDate: string;
             ticketIds: string[];
             committedTickets: number;
+            status: components["schemas"]["SprintStatus"];
             /** Format: date-time */
             completedAt?: string | null;
             /** Format: date-time */
@@ -1943,9 +1921,6 @@ export interface components {
         };
         SprintTicketsRequest: {
             ticketIds: string[];
-        };
-        SprintCompleteRequest: {
-            moveTicketIds?: string[];
         };
         /** @enum {string} */
         CapacitySettingScope: "team" | "user";
@@ -2070,54 +2045,39 @@ export interface components {
             generatedAt: string;
             summary: components["schemas"]["ProjectReportingSummary"];
         };
-        AutomationAction: {
-            /** @enum {string} */
-            type: "set_state" | "set_assignee" | "set_priority" | "add_comment" | "call_webhook";
-            params: {
-                [key: string]: string;
-            };
+        /** @enum {string} */
+        SprintStatus: "pending" | "planned" | "active" | "completed";
+        SprintCompleteRequest: {
+            moveTicketIds?: string[];
         };
-        AutomationRule: {
+        AuditLogEntry: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
-            projectId: string;
-            name: string;
-            enabled: boolean;
-            triggerEvent: string;
-            triggerConditions: {
-                [key: string]: string;
+            actorId: string;
+            actorName: string;
+            action: string;
+            resourceType: string;
+            resourceId: string;
+            resourceName: string;
+            /** Format: uuid */
+            projectId: string | null;
+            details: {
+                [key: string]: unknown;
             };
-            actions: components["schemas"]["AutomationAction"][];
-            executionCount: number;
-            /** Format: date-time */
-            lastExecutedAt?: string | null;
             /** Format: date-time */
             createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
         };
-        AutomationRuleListResponse: {
-            items: components["schemas"]["AutomationRule"][];
+        AuditLogListResponse: {
+            items: components["schemas"]["AuditLogEntry"][];
+            total: number;
         };
-        AutomationRuleCreateRequest: {
-            name: string;
-            /** @default true */
-            enabled: boolean;
-            triggerEvent: string;
-            triggerConditions?: {
+        AutomationActionType: string;
+        AutomationAction: {
+            type: components["schemas"]["AutomationActionType"];
+            params: {
                 [key: string]: string;
             };
-            actions: components["schemas"]["AutomationAction"][];
-        };
-        AutomationRuleUpdateRequest: {
-            name?: string;
-            enabled?: boolean;
-            triggerEvent?: string;
-            triggerConditions?: {
-                [key: string]: string;
-            };
-            actions?: components["schemas"]["AutomationAction"][];
         };
         AutomationActionResult: {
             type: string;
@@ -2141,6 +2101,112 @@ export interface components {
         };
         AutomationExecutionListResponse: {
             items: components["schemas"]["AutomationExecution"][];
+        };
+        AutomationRule: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            triggerEvent: string;
+            triggerConditions: {
+                [key: string]: string;
+            };
+            actions: components["schemas"]["AutomationAction"][];
+            enabled: boolean;
+            executionCount: number;
+            /** Format: date-time */
+            lastExecutedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        AutomationRuleListResponse: {
+            items: components["schemas"]["AutomationRule"][];
+        };
+        AutomationRuleCreateRequest: {
+            name: string;
+            triggerEvent: string;
+            triggerConditions?: {
+                [key: string]: string;
+            };
+            actions: components["schemas"]["AutomationAction"][];
+            enabled?: boolean;
+        };
+        AutomationRuleUpdateRequest: {
+            name?: string;
+            triggerEvent?: string;
+            triggerConditions?: {
+                [key: string]: string;
+            };
+            actions?: components["schemas"]["AutomationAction"][];
+            enabled?: boolean;
+        };
+        PortfolioTotals: {
+            totalProjects: number;
+            totalOpen: number;
+            totalClosed: number;
+            totalBlocked: number;
+            totalUrgent: number;
+        };
+        ProjectPortfolioEntry: {
+            /** Format: uuid */
+            id: string;
+            projectKey: string;
+            projectName: string;
+            totalOpen: number;
+            totalClosed: number;
+            urgentOpen: number;
+            highOpen: number;
+            blockedOpen: number;
+            activeSprintName: string | null;
+            /** Format: date */
+            activeSprintEndDate: string | null;
+            activeSprintCommitted: number;
+            activeSprintRemaining: number;
+            /** Format: float */
+            avgCycleTimeHours: number;
+            weeklyThroughput: number;
+        };
+        PortfolioStats: {
+            totals: components["schemas"]["PortfolioTotals"];
+            projects: components["schemas"]["ProjectPortfolioEntry"][];
+        };
+        TicketLockResponse: {
+            /** Format: uuid */
+            ticketId: string;
+            /** Format: uuid */
+            lockedBy: string;
+            lockedByName: string;
+            /** Format: date-time */
+            acquiredAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        TicketLockConflictResponse: {
+            error: string;
+            /** Format: uuid */
+            lockedBy: string;
+            lockedByName: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        PresenceUpsertRequest: {
+            view: string;
+            /** Format: uuid */
+            ticketId?: string | null;
+        };
+        PresenceEntry: {
+            /** Format: uuid */
+            userId: string;
+            userName: string;
+            view: string;
+            /** Format: uuid */
+            ticketId?: string | null;
+        };
+        PresenceResponse: {
+            users: components["schemas"]["PresenceEntry"][];
         };
         ErrorResponse: {
             error: string;
@@ -2247,41 +2313,6 @@ export interface operations {
             };
         };
     };
-    listAuditLog: {
-        parameters: {
-            query?: {
-                projectId?: string;
-                resourceType?: string;
-                actorId?: string;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Audit log entries */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuditLogListResponse"];
-                };
-            };
-            /** @description Admin required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     syncUsers: {
         parameters: {
             query?: never;
@@ -2307,6 +2338,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listAuditLog: {
+        parameters: {
+            query?: {
+                projectId?: string;
+                resourceType?: string;
+                actorId?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit log entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogListResponse"];
                 };
             };
         };
@@ -2390,6 +2447,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserListResponse"];
+                };
+            };
+        };
+    };
+    getPortfolioStats: {
+        parameters: {
+            query?: {
+                format?: "json" | "csv";
+                /** @description Filter to projects where this user is a member */
+                ownerId?: string;
+                /** @description Filter to projects belonging to this group */
+                groupId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Portfolio statistics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioStats"];
                 };
             };
         };
@@ -3317,6 +3400,86 @@ export interface operations {
             };
         };
     };
+    renewTicketLock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lock renewed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketLockResponse"];
+                };
+            };
+            /** @description Lock not held by caller */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    acquireTicketLock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lock acquired */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketLockResponse"];
+                };
+            };
+            /** @description Lock held by another user */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketLockConflictResponse"];
+                };
+            };
+        };
+    };
+    releaseTicketLock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lock released */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listTicketAttachments: {
         parameters: {
             query?: never;
@@ -3519,32 +3682,6 @@ export interface operations {
             };
         };
     };
-    getPortfolioStats: {
-        parameters: {
-            query?: {
-                format?: "json" | "csv";
-                /** @description Filter to projects where this user is a member */
-                ownerId?: string;
-                /** @description Filter to projects belonging to this group */
-                groupId?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Portfolio statistics aggregated across all accessible projects */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortfolioStats"];
-                };
-            };
-        };
-    };
     listProjectSprints: {
         parameters: {
             query?: never;
@@ -3590,6 +3727,52 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Sprint"];
                 };
+            };
+        };
+    };
+    startProjectSprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                sprintId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sprint started */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    completeProjectSprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                sprintId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SprintCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Sprint completed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -3647,52 +3830,144 @@ export interface operations {
             };
         };
     };
-    startProjectSprint: {
+    listAutomationRules: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 projectId: string;
-                sprintId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Started sprint */
+            /** @description Automation rules */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Sprint"];
+                    "application/json": components["schemas"]["AutomationRuleListResponse"];
                 };
             };
         };
     };
-    completeProjectSprint: {
+    createAutomationRule: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 projectId: string;
-                sprintId: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["SprintCompleteRequest"];
+                "application/json": components["schemas"]["AutomationRuleCreateRequest"];
             };
         };
         responses: {
-            /** @description Completed sprint */
+            /** @description Rule created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRule"];
+                };
+            };
+        };
+    };
+    getAutomationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Automation rule */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Sprint"];
+                    "application/json": components["schemas"]["AutomationRule"];
+                };
+            };
+        };
+    };
+    updateAutomationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRuleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Rule updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRule"];
+                };
+            };
+        };
+    };
+    deleteAutomationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rule deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listAutomationExecutions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Automation executions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationExecutionListResponse"];
                 };
             };
         };
@@ -3919,6 +4194,32 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectReportingExportJson"];
                     "text/csv": string;
+                };
+            };
+        };
+    };
+    upsertPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresenceUpsertRequest"];
+            };
+        };
+        responses: {
+            /** @description Current presence list for the project */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresenceResponse"];
                 };
             };
         };
@@ -4490,166 +4791,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebhookTestResponse"];
-                };
-            };
-        };
-    };
-    listAutomationRules: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List of automation rules */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationRuleListResponse"];
-                };
-            };
-        };
-    };
-    createAutomationRule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRuleCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Created rule */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationRule"];
-                };
-            };
-        };
-    };
-    getAutomationRule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: string;
-                ruleId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Automation rule */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationRule"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    updateAutomationRule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: string;
-                ruleId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRuleUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Updated rule */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationRule"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    deleteAutomationRule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: string;
-                ruleId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    listAutomationExecutions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: string;
-                ruleId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List of executions */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationExecutionListResponse"];
                 };
             };
         };

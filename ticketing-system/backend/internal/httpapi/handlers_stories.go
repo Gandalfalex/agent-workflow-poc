@@ -186,7 +186,20 @@ func (h *API) AddTicketComment(w http.ResponseWriter, r *http.Request, id openap
 	h.notifyAssigneeComment(r, ticket, authorID, user.Name)
 	h.notifyMentions(r, ticket.ProjectID, ticket, authorID, user.Name, req.Message)
 
-	writeJSON(w, http.StatusCreated, mapComment(comment))
+	mapped := mapComment(comment)
+	h.publishProjectLiveEvent(ticket.ProjectID, projectEventCommentAdded, map[string]any{
+		"ticketId": ticketID.String(),
+		"comment": map[string]any{
+			"id":         mapped.Id.String(),
+			"ticketId":   mapped.TicketId.String(),
+			"authorId":   mapped.AuthorId.String(),
+			"authorName": mapped.AuthorName,
+			"message":    mapped.Message,
+			"createdAt":  mapped.CreatedAt,
+		},
+	})
+
+	writeJSON(w, http.StatusCreated, mapped)
 }
 
 func (h *API) DeleteTicketComment(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, commentId openapi_types.UUID) {

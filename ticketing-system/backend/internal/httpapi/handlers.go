@@ -15,6 +15,7 @@ import (
 	"ticketing-system/backend/internal/auth"
 	"ticketing-system/backend/internal/automation"
 	"ticketing-system/backend/internal/blob"
+	"ticketing-system/backend/internal/presence"
 	"ticketing-system/backend/internal/store"
 	"ticketing-system/backend/internal/webhook"
 
@@ -125,6 +126,10 @@ type Store interface {
 	UpdateAutomationRule(ctx context.Context, id, projectID uuid.UUID, input store.AutomationRuleUpdateInput) (store.AutomationRule, error)
 	DeleteAutomationRule(ctx context.Context, id, projectID uuid.UUID) error
 	ListAutomationExecutions(ctx context.Context, ruleID uuid.UUID) ([]store.AutomationExecution, error)
+	AcquireTicketLock(ctx context.Context, ticketID, userID uuid.UUID, userName string, ttl time.Duration) (store.TicketLock, bool, error)
+	GetTicketLock(ctx context.Context, ticketID uuid.UUID) (store.TicketLock, bool, error)
+	RenewTicketLock(ctx context.Context, ticketID, userID uuid.UUID, ttl time.Duration) (store.TicketLock, error)
+	ReleaseTicketLock(ctx context.Context, ticketID, userID uuid.UUID) error
 }
 
 type Authenticator interface {
@@ -147,6 +152,7 @@ type API struct {
 	engine                    automation.EngineRunner
 	live                      *projectLiveHub
 	blob                      blob.ObjectStore
+	presenceStore             presence.StoreIface
 	maxUploadSize             int64
 	cookieName                string
 	cookieTTL                 time.Duration
@@ -202,6 +208,7 @@ func NewHandler(st Store, authClient Authenticator, webhookDispatcher WebhookDis
 		engine:                    opts.AutomationEngine,
 		live:                      newProjectLiveHub(),
 		blob:                      opts.BlobStore,
+		presenceStore:             opts.PresenceStore,
 		maxUploadSize:             maxUpload,
 		cookieName:                cookieName,
 		cookieTTL:                 ttl,
@@ -228,6 +235,7 @@ type HandlerOptions struct {
 	BlobStore                 blob.ObjectStore
 	MaxUploadSize             int64
 	AutomationEngine          automation.EngineRunner
+	PresenceStore             presence.StoreIface
 }
 
 func (h *API) projectFor(projectID openapi_types.UUID) Project {
@@ -1114,6 +1122,25 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 	}
 	if !h.requireProjectRole(w, r, current.ProjectID, roleContributor) {
 		return
+	}
+
+	// Enforce edit lock: if another user holds an active lock, reject the update.
+	if h.presenceStore != nil {
+		lock, hasLock, lockErr := h.store.GetTicketLock(r.Context(), ticketID)
+		if lockErr == nil && hasLock {
+			user, _ := authUser(r.Context())
+			userID, parseErr := uuid.Parse(user.ID)
+			if parseErr == nil && lock.LockedBy != userID {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusLocked)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":     "ticket_locked",
+					"lockedBy":  lock.LockedByName,
+					"expiresAt": lock.ExpiresAt.Format(time.RFC3339),
+				})
+				return
+			}
+		}
 	}
 
 	req, ok := decodeJSON[ticketUpdateRequest](w, r, "ticket_update")

@@ -171,6 +171,33 @@ export type AutomationRuleUpdateRequest = components["schemas"]["AutomationRuleU
 export type AutomationExecution = components["schemas"]["AutomationExecution"];
 export type AutomationExecutionListResponse = components["schemas"]["AutomationExecutionListResponse"];
 
+// Live Collaboration types (not in generated schema)
+export type TicketLock = {
+    ticketId: string;
+    lockedBy: string;
+    lockedByName: string;
+    acquiredAt: string;
+    expiresAt: string;
+};
+
+export type TicketLockConflict = {
+    error: string;
+    lockedBy: string;
+    lockedByName: string;
+    expiresAt: string;
+};
+
+export type PresenceEntry = {
+    userId: string;
+    userName: string;
+    view: "board" | "ticket";
+    ticketId?: string;
+};
+
+export type PresenceResponse = {
+    users: PresenceEntry[];
+};
+
 const API_BASE = (
   import.meta.env.VITE_API_BASE ||
   (import.meta.env.BASE_URL || "/").replace(/\/$/, "") + "/rest/v1"
@@ -1218,4 +1245,29 @@ export async function listAutomationExecutions(
   return request<AutomationExecutionListResponse>(
     `/projects/${projectId}/automation/rules/${ruleId}/executions`,
   );
+}
+
+// Live Collaboration API functions
+
+export async function acquireTicketLock(ticketId: string): Promise<TicketLock> {
+  return request<TicketLock>(`/tickets/${ticketId}/lock`, { method: "POST" });
+}
+
+export async function renewTicketLock(ticketId: string): Promise<TicketLock> {
+  return request<TicketLock>(`/tickets/${ticketId}/lock`, { method: "PUT" });
+}
+
+export async function releaseTicketLock(ticketId: string): Promise<void> {
+  await request<void>(`/tickets/${ticketId}/lock`, { method: "DELETE" });
+}
+
+export async function upsertPresence(
+  projectId: string,
+  view: "board" | "ticket",
+  ticketId?: string,
+): Promise<PresenceResponse> {
+  return request<PresenceResponse>(`/projects/${projectId}/presence`, {
+    method: "POST",
+    body: JSON.stringify({ view, ticketId: ticketId ?? null }),
+  });
 }

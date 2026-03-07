@@ -14,6 +14,7 @@ import (
 	"ticketing-system/backend/internal/config"
 	"ticketing-system/backend/internal/httpapi"
 	"ticketing-system/backend/internal/migrate"
+	"ticketing-system/backend/internal/presence"
 	"ticketing-system/backend/internal/store"
 	"ticketing-system/backend/internal/webhook"
 )
@@ -45,6 +46,7 @@ func main() {
 
 	dispatcher := webhook.New(st)
 	automationEngine := automation.New(st, dispatcher)
+	presenceStore := presence.New(30 * time.Second)
 
 	blobStore, err := blob.NewMinIO(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
 	if err != nil {
@@ -67,6 +69,7 @@ func main() {
 		AllowedOrigins:   cfg.CORSAllowedOrigins,
 		BlobStore:        blobOpt,
 		AutomationEngine: automationEngine,
+		PresenceStore:    presenceStore,
 	})
 	router := httpapi.Router(handler)
 	apiHandler := http.Handler(router)
