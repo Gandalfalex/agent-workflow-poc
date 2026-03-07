@@ -97,3 +97,6 @@ type automationRuleCreateRequest = AutomationRuleCreateRequest
 type automationRuleUpdateRequest = AutomationRuleUpdateRequest
 type automationExecutionResponse = AutomationExecution
 type automationExecutionListResponse = AutomationExecutionListResponse
+type slaPolicyEntryResponse = SlaPolicyEntry
+type slaPolicyListResponse = SlaPolicyListResponse
+type slaPolicyUpdateRequest = SlaPolicyUpdateRequest

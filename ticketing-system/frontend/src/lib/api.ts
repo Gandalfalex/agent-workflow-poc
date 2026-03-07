@@ -170,6 +170,10 @@ export type AutomationRuleCreateRequest = components["schemas"]["AutomationRuleC
 export type AutomationRuleUpdateRequest = components["schemas"]["AutomationRuleUpdateRequest"];
 export type AutomationExecution = components["schemas"]["AutomationExecution"];
 export type AutomationExecutionListResponse = components["schemas"]["AutomationExecutionListResponse"];
+export type SlaStatus = components["schemas"]["SlaStatus"];
+export type SlaPolicyEntry = components["schemas"]["SlaPolicyEntry"];
+export type SlaPolicyListResponse = components["schemas"]["SlaPolicyListResponse"];
+export type SlaPolicyUpdateRequest = components["schemas"]["SlaPolicyUpdateRequest"];
 
 // Live Collaboration types (not in generated schema)
 export type TicketLock = {
@@ -1269,5 +1273,23 @@ export async function upsertPresence(
   return request<PresenceResponse>(`/projects/${projectId}/presence`, {
     method: "POST",
     body: JSON.stringify({ view, ticketId: ticketId ?? null }),
+  });
+}
+
+// SLA policy API functions
+
+export async function getSlaPolicies(
+  projectId: string,
+): Promise<SlaPolicyListResponse> {
+  return request<SlaPolicyListResponse>(`/projects/${projectId}/sla-policies`);
+}
+
+export async function updateSlaPolicies(
+  projectId: string,
+  items: SlaPolicyEntry[],
+): Promise<SlaPolicyListResponse> {
+  return request<SlaPolicyListResponse>(`/projects/${projectId}/sla-policies`, {
+    method: "PUT",
+    body: JSON.stringify({ items }),
   });
 }

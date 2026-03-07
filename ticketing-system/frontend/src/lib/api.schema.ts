@@ -741,6 +741,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/sla-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get SLA policies for a project */
+        get: operations["getSlaPolicies"];
+        /** Replace SLA policies for a project */
+        put: operations["updateSlaPolicies"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/automation/rules": {
         parameters: {
             query?: never;
@@ -1532,6 +1550,11 @@ export interface components {
             readonly timeLogged?: number;
             isBlocked: boolean;
             /** Format: date-time */
+            dueDate?: string | null;
+            slaStatus?: components["schemas"]["SlaStatus"];
+            /** Format: date-time */
+            slaBreachAt?: string | null;
+            /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
@@ -1593,6 +1616,8 @@ export interface components {
             incidentCommanderId?: string | null;
             storyPoints?: number | null;
             timeEstimate?: number | null;
+            /** Format: date-time */
+            dueDate?: string | null;
         };
         TicketUpdateRequest: {
             title?: string;
@@ -1612,6 +1637,8 @@ export interface components {
             incidentCommanderId?: string | null;
             storyPoints?: number | null;
             timeEstimate?: number | null;
+            /** Format: date-time */
+            dueDate?: string | null;
             /** Format: float */
             position?: number;
         };
@@ -1885,6 +1912,8 @@ export interface components {
             byPriority: components["schemas"]["StatCount"][];
             byType: components["schemas"]["StatCount"][];
             byAssignee: components["schemas"]["StatCount"][];
+            slaBreached: number;
+            slaAtRisk: number;
         };
         Sprint: {
             /** Format: uuid */
@@ -2207,6 +2236,25 @@ export interface components {
         };
         PresenceResponse: {
             users: components["schemas"]["PresenceEntry"][];
+        };
+        /** @enum {string} */
+        SlaStatus: "on_track" | "at_risk" | "breached";
+        /** @description SLA target durations for a specific priority+type combination. */
+        SlaPolicyEntry: {
+            priority: components["schemas"]["TicketPriority"];
+            ticketType: components["schemas"]["TicketType"];
+            /** @description Target hours until first comment/activity after creation. */
+            firstResponseHours: number;
+            /** @description Target hours until ticket reaches a closed state. */
+            completionHours: number;
+            /** @description Percentage of completion window at which ticket becomes at_risk (default 80). */
+            atRiskThresholdPct: number;
+        };
+        SlaPolicyListResponse: {
+            items: components["schemas"]["SlaPolicyEntry"][];
+        };
+        SlaPolicyUpdateRequest: {
+            items: components["schemas"]["SlaPolicyEntry"][];
         };
         ErrorResponse: {
             error: string;
@@ -3826,6 +3874,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Sprint"];
+                };
+            };
+        };
+    };
+    getSlaPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SLA policy list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlaPolicyListResponse"];
+                };
+            };
+        };
+    };
+    updateSlaPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SlaPolicyUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated SLA policies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlaPolicyListResponse"];
                 };
             };
         };

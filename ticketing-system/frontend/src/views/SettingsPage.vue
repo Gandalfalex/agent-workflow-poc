@@ -10,11 +10,13 @@ import {
     createAdminUser,
     exportProjectReportingSnapshot,
     getProjectAiTriageSettings,
+    getSlaPolicies,
     listProjectCapacitySettings,
     replaceProjectCapacitySettings,
     syncUsersFromIdentityProvider,
     updateProject,
     updateProjectAiTriageSettings,
+    updateSlaPolicies,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type {
@@ -23,6 +25,7 @@ import type {
     Group,
     ProjectRole,
     ReportingExportFormat,
+    SlaPolicyEntry,
     WebhookDelivery,
     WebhookEvent,
     WebhookResponse,
@@ -39,7 +42,7 @@ const sessionStore = useSessionStore();
 const { t } = useI18n();
 
 const settingsTab = ref<
-    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation"
+    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation" | "sla"
 >(
     "projects",
 );
@@ -194,6 +197,65 @@ async function toggleRuleExpanded(projectId: string, ruleId: string) {
     } else {
         expandedRuleId.value = ruleId;
         await automationStore.loadExecutions(projectId, ruleId);
+    }
+}
+
+// SLA tab state
+const slaPolicies = ref<SlaPolicyEntry[]>([]);
+const slaLoading = ref(false);
+const slaSaving = ref(false);
+
+const PRIORITIES = ["low", "medium", "high", "urgent"] as const;
+const TICKET_TYPES = ["feature", "bug"] as const;
+
+async function loadSlaPolicies() {
+    if (!selectedProjectId.value) return;
+    slaLoading.value = true;
+    try {
+        const res = await getSlaPolicies(selectedProjectId.value);
+        slaPolicies.value = res.items;
+    } catch {
+        // ignore
+    } finally {
+        slaLoading.value = false;
+    }
+}
+
+function slaPolicyFor(priority: string, ticketType: string): SlaPolicyEntry {
+    return slaPolicies.value.find(p => p.priority === priority && p.ticketType === ticketType)
+        ?? { priority: priority as SlaPolicyEntry["priority"], ticketType: ticketType as SlaPolicyEntry["ticketType"], firstResponseHours: 24, completionHours: 72, atRiskThresholdPct: 80 };
+}
+
+function setSlaPolicyField(
+    priority: string,
+    ticketType: string,
+    field: "firstResponseHours" | "completionHours" | "atRiskThresholdPct",
+    value: number,
+) {
+    const existing = slaPolicies.value.find(p => p.priority === priority && p.ticketType === ticketType);
+    if (existing) {
+        existing[field] = value;
+    } else {
+        slaPolicies.value.push({
+            priority: priority as SlaPolicyEntry["priority"],
+            ticketType: ticketType as SlaPolicyEntry["ticketType"],
+            firstResponseHours: field === "firstResponseHours" ? value : 24,
+            completionHours: field === "completionHours" ? value : 72,
+            atRiskThresholdPct: field === "atRiskThresholdPct" ? value : 80,
+        });
+    }
+}
+
+async function saveSlaPolicies() {
+    if (!selectedProjectId.value) return;
+    slaSaving.value = true;
+    try {
+        const res = await updateSlaPolicies(selectedProjectId.value, slaPolicies.value);
+        slaPolicies.value = res.items;
+    } catch {
+        // ignore
+    } finally {
+        slaSaving.value = false;
     }
 }
 
@@ -1155,6 +1217,15 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'automation'; automationStore.loadRules(selectedProjectId)"
             >
                 {{ t("settings.tab.automation") }}
+            </Button>
+            <Button
+                data-testid="settings.sla_tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'sla'"
+                @click="settingsTab = 'sla'; loadSlaPolicies()"
+            >
+                SLA
             </Button>
         </div>
     </section>
@@ -2795,6 +2866,100 @@ watch(selectedGroupId, async () => {
                     </div>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- SLA Policies -->
+    <section
+        v-if="settingsTab === 'sla'"
+        data-testid="settings.sla_view"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">Settings</p>
+                <h3 class="mt-1 text-lg font-semibold">SLA Policies</h3>
+                <p class="mt-1 text-xs text-muted-foreground">Configure first response and completion targets per priority and ticket type.</p>
+            </div>
+            <Button
+                data-testid="settings.sla_save_button"
+                size="sm"
+                :disabled="slaSaving"
+                @click="saveSlaPolicies"
+            >
+                {{ slaSaving ? "Saving…" : "Save" }}
+            </Button>
+        </div>
+
+        <div v-if="slaLoading" class="text-sm text-muted-foreground">Loading…</div>
+        <div v-else class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                        <th class="pb-2 text-left font-medium">Priority</th>
+                        <th class="pb-2 text-left font-medium">Type</th>
+                        <th class="pb-2 text-right font-medium">First Response (h)</th>
+                        <th class="pb-2 text-right font-medium">Completion (h)</th>
+                        <th class="pb-2 text-right font-medium">At-Risk Threshold (%)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template v-for="priority in PRIORITIES" :key="priority">
+                    <tr
+                        v-for="type in TICKET_TYPES"
+                        :key="`${priority}-${type}`"
+                        class="border-b border-border/50 last:border-0"
+                    >
+                        <td class="py-2 pr-4">
+                            <span class="rounded px-2 py-0.5 text-xs font-semibold capitalize"
+                                :class="{
+                                    'bg-red-500/20 text-red-300': priority === 'urgent',
+                                    'bg-orange-500/20 text-orange-300': priority === 'high',
+                                    'bg-amber-500/20 text-amber-300': priority === 'medium',
+                                    'bg-slate-500/20 text-slate-300': priority === 'low',
+                                }"
+                            >{{ priority }}</span>
+                        </td>
+                        <td class="py-2 pr-4">
+                            <span class="rounded px-2 py-0.5 text-xs font-semibold capitalize"
+                                :class="type === 'bug' ? 'bg-rose-500/15 text-rose-300' : 'bg-sky-500/15 text-sky-300'"
+                            >{{ type }}</span>
+                        </td>
+                        <td class="py-2 text-right">
+                            <input
+                                type="number"
+                                min="1"
+                                :data-testid="`settings.sla_first_response_${priority}_${type}`"
+                                class="w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                                :value="slaPolicyFor(priority, type).firstResponseHours"
+                                @input="setSlaPolicyField(priority, type, 'firstResponseHours', +($event.target as HTMLInputElement).value)"
+                            />
+                        </td>
+                        <td class="py-2 text-right">
+                            <input
+                                type="number"
+                                min="1"
+                                :data-testid="`settings.sla_completion_${priority}_${type}`"
+                                class="w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                                :value="slaPolicyFor(priority, type).completionHours"
+                                @input="setSlaPolicyField(priority, type, 'completionHours', +($event.target as HTMLInputElement).value)"
+                            />
+                        </td>
+                        <td class="py-2 text-right">
+                            <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                :data-testid="`settings.sla_at_risk_${priority}_${type}`"
+                                class="w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                                :value="slaPolicyFor(priority, type).atRiskThresholdPct"
+                                @input="setSlaPolicyField(priority, type, 'atRiskThresholdPct', +($event.target as HTMLInputElement).value)"
+                            />
+                        </td>
+                    </tr>
+                    </template>
+                </tbody>
+            </table>
         </div>
     </section>
 </template>

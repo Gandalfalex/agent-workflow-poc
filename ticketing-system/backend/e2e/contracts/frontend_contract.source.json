@@ -205,7 +205,14 @@
     "automation.rule_list": "automation.rule_list",
     "automation.add_rule_button": "automation.add_rule_button",
     "automation.rule_name_input": "automation.rule_name_input",
-    "automation.rule_save_button": "automation.rule_save_button"
+    "automation.rule_save_button": "automation.rule_save_button",
+    "settings.sla_tab": "settings.sla_tab",
+    "settings.sla_view": "settings.sla_view",
+    "settings.sla_save_button": "settings.sla_save_button",
+    "dashboard.sla_breached_card": "dashboard.sla-breached-card",
+    "dashboard.sla_at_risk_card": "dashboard.sla-at-risk-card",
+    "board.ticket_sla_badge": "board.ticket-sla-badge",
+    "board.ticket_due_date_badge": "board.ticket-due-date-badge"
   },
   "flows": {
     "smoke_login_screen": {

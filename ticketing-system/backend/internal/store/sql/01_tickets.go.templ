@@ -9,7 +9,8 @@ s.name, s.sort_order, s.is_default, s.is_closed,
 COALESCE(blockers.blocked_by_count, 0) AS blocked_by_count,
 (COALESCE(blockers.blocked_by_count, 0) > 0) AS is_blocked,
 u.name,
-cu.name
+cu.name,
+t.due_date
 {{end}}
 
 {{define "ticket_select_joins"}}
@@ -60,9 +61,9 @@ WHERE t.id = $1
 INSERT INTO tickets (
   project_id, title, description, type, story_id, state_id, assignee_id, priority,
   incident_enabled, incident_severity, incident_impact, incident_commander_id, position,
-  story_points, time_estimate
+  story_points, time_estimate, due_date
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING id
 {{end}}
 

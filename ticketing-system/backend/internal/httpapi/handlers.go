@@ -68,6 +68,8 @@ type Store interface {
 	UpdateTicket(ctx context.Context, id uuid.UUID, input store.TicketUpdateInput) (store.Ticket, error)
 	DeleteTicket(ctx context.Context, id uuid.UUID) error
 	GetProjectStats(ctx context.Context, projectID uuid.UUID) (store.ProjectStats, error)
+	GetSlaPolicies(ctx context.Context, projectID uuid.UUID) ([]store.SlaPolicyEntry, error)
+	UpdateSlaPolicies(ctx context.Context, projectID uuid.UUID, entries []store.SlaPolicyEntry) ([]store.SlaPolicyEntry, error)
 	GetPortfolioStats(ctx context.Context, userID uuid.UUID, filter store.PortfolioFilter) (store.PortfolioStats, error)
 	CreateAuditLog(ctx context.Context, input store.AuditLogCreateInput) error
 	ListAuditLog(ctx context.Context, filter store.AuditLogFilter) ([]store.AuditLogEntry, int, error)
@@ -743,6 +745,9 @@ func (h *API) GetBoard(w http.ResponseWriter, r *http.Request, projectId openapi
 	if handleListError(w, r, err, "tickets", "ticket_load") {
 		return
 	}
+	if policies, err := h.store.GetSlaPolicies(r.Context(), projectUUID); err == nil {
+		tickets = store.ApplySlaStatus(tickets, policies)
+	}
 
 	writeJSON(w, http.StatusOK, boardResponse{
 		Project: mapProject(project),
@@ -787,6 +792,9 @@ func (h *API) ListTickets(w http.ResponseWriter, r *http.Request, projectId open
 	tickets, total, err := h.store.ListTickets(r.Context(), filter)
 	if handleListError(w, r, err, "tickets", "ticket_list") {
 		return
+	}
+	if policies, err := h.store.GetSlaPolicies(r.Context(), filter.ProjectID); err == nil {
+		tickets = store.ApplySlaStatus(tickets, policies)
 	}
 
 	writeJSON(w, http.StatusOK, ticketListResponse{Items: mapSlice(tickets, mapTicket), Total: total})
@@ -856,6 +864,7 @@ func (h *API) CreateTicket(w http.ResponseWriter, r *http.Request, projectId ope
 		IncidentCommanderID: parseOpenapiUUIDPtr(req.IncidentCommanderId),
 		StoryPoints:         req.StoryPoints,
 		TimeEstimate:        req.TimeEstimate,
+		DueDate:             req.DueDate,
 	})
 	if handleDBErrorWithCode(w, r, err, "ticket", "ticket_create", "ticket_create_failed") {
 		return
@@ -1109,6 +1118,10 @@ func (h *API) GetTicket(w http.ResponseWriter, r *http.Request, id openapi_types
 	if !h.requireProjectAccess(w, r, ticket.ProjectID) {
 		return
 	}
+	if policies, err := h.store.GetSlaPolicies(r.Context(), ticket.ProjectID); err == nil {
+		tickets := store.ApplySlaStatus([]store.Ticket{ticket}, policies)
+		ticket = tickets[0]
+	}
 
 	writeJSON(w, http.StatusOK, mapTicket(ticket))
 }
@@ -1216,6 +1229,14 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 	}
 	if req.TimeEstimate != nil {
 		input.TimeEstimate = req.TimeEstimate
+	}
+	if req.DueDate != nil {
+		// A JSON null clears the due date; a non-null value sets it.
+		if *req.DueDate == (time.Time{}) {
+			input.ClearDueDate = true
+		} else {
+			input.DueDate = req.DueDate
+		}
 	}
 
 	ticket, err := h.store.UpdateTicket(r.Context(), ticketID, input)

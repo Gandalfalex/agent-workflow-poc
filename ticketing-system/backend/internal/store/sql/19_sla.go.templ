@@ -1,0 +1,38 @@
+{{define "sla_policies_by_project.sql"}}
+SELECT priority, ticket_type, first_response_hours, completion_hours, at_risk_threshold_pct
+FROM sla_policies
+WHERE project_id = $1
+ORDER BY priority, ticket_type
+{{end}}
+
+{{define "sla_policies_delete_by_project.sql"}}
+DELETE FROM sla_policies WHERE project_id = $1
+{{end}}
+
+{{define "sla_policies_upsert.sql"}}
+INSERT INTO sla_policies (project_id, priority, ticket_type, first_response_hours, completion_hours, at_risk_threshold_pct)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (project_id, priority, ticket_type)
+DO UPDATE SET
+    first_response_hours  = EXCLUDED.first_response_hours,
+    completion_hours      = EXCLUDED.completion_hours,
+    at_risk_threshold_pct = EXCLUDED.at_risk_threshold_pct,
+    updated_at            = NOW()
+{{end}}
+
+{{define "stats_sla.sql"}}
+SELECT
+    COALESCE(SUM(CASE WHEN sp.completion_hours IS NOT NULL AND ws.is_closed = false
+        AND NOW() > (t.created_at + (sp.completion_hours::float * interval '1 hour'))
+        THEN 1 ELSE 0 END), 0)::int AS sla_breached,
+    COALESCE(SUM(CASE WHEN sp.completion_hours IS NOT NULL AND ws.is_closed = false
+        AND NOW() <= (t.created_at + (sp.completion_hours::float * interval '1 hour'))
+        AND NOW() > (t.created_at + ((sp.completion_hours::float * sp.at_risk_threshold_pct::float / 100.0) * interval '1 hour'))
+        THEN 1 ELSE 0 END), 0)::int AS sla_at_risk
+FROM tickets t
+JOIN workflow_states ws ON ws.id = t.state_id
+LEFT JOIN sla_policies sp ON sp.project_id = t.project_id
+    AND sp.priority = t.priority
+    AND sp.ticket_type = t.type
+WHERE t.project_id = $1
+{{end}}

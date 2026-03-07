@@ -16,6 +16,8 @@ type ProjectStats struct {
 	TotalOpen   int
 	TotalClosed int
 	BlockedOpen int
+	SlaBreached int
+	SlaAtRisk   int
 	ByState     []StatCount
 	ByPriority  []StatCount
 	ByType      []StatCount
@@ -82,6 +84,10 @@ func (s *Store) GetProjectStats(ctx context.Context, projectID uuid.UUID) (Proje
 	}
 
 	if err := s.db.QueryRow(ctx, mustSQL("stats_blocked_open", nil), projectID).Scan(&stats.BlockedOpen); err != nil {
+		return stats, err
+	}
+
+	if err := s.db.QueryRow(ctx, mustSQL("stats_sla", nil), projectID).Scan(&stats.SlaBreached, &stats.SlaAtRisk); err != nil {
 		return stats, err
 	}
 

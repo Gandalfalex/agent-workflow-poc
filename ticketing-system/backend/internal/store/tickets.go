@@ -45,8 +45,12 @@ type Ticket struct {
 	StoryPoints           *int
 	TimeEstimate          *int
 	TimeLogged            int
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
+	DueDate               *time.Time
+	// SlaStatus and SlaBreachAt are computed in-process from SLA policies, not stored.
+	SlaStatus   *string
+	SlaBreachAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type TicketFilter struct {
@@ -73,6 +77,7 @@ type TicketCreateInput struct {
 	IncidentCommanderID *uuid.UUID
 	StoryPoints         *int
 	TimeEstimate        *int
+	DueDate             *time.Time
 }
 
 type TicketUpdateInput struct {
@@ -90,6 +95,8 @@ type TicketUpdateInput struct {
 	Position            *float64
 	StoryPoints         *int
 	TimeEstimate        *int
+	DueDate             *time.Time
+	ClearDueDate        bool
 }
 
 func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket, int, error) {
@@ -218,6 +225,7 @@ func (s *Store) CreateTicket(ctx context.Context, projectID uuid.UUID, input Tic
 		position,
 		input.StoryPoints,
 		input.TimeEstimate,
+		input.DueDate,
 	)
 
 	if err := row.Scan(&ticketID); err != nil {
@@ -313,6 +321,11 @@ func (s *Store) UpdateTicket(ctx context.Context, id uuid.UUID, input TicketUpda
 		}
 		if input.TimeEstimate != nil {
 			updates = append(updates, fmt.Sprintf("time_estimate = %s", arg(*input.TimeEstimate)))
+		}
+		if input.ClearDueDate {
+			updates = append(updates, "due_date = NULL")
+		} else if input.DueDate != nil {
+			updates = append(updates, fmt.Sprintf("due_date = %s", arg(*input.DueDate)))
 		}
 
 		position := input.Position
@@ -429,6 +442,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&ticket.IsBlocked,
 		&ticket.AssigneeName,
 		&ticket.IncidentCommanderName,
+		&ticket.DueDate,
 	)
 	return ticket, err
 }

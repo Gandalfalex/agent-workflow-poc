@@ -110,6 +110,9 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 		Position:            float32(ticket.Position),
 		BlockedByCount:      ticket.BlockedByCount,
 		IsBlocked:           ticket.IsBlocked,
+		DueDate:             ticket.DueDate,
+		SlaStatus:           (*SlaStatus)(ticket.SlaStatus),
+		SlaBreachAt:         ticket.SlaBreachAt,
 		CreatedAt:           ticket.CreatedAt,
 		UpdatedAt:           ticket.UpdatedAt,
 	}
@@ -300,6 +303,8 @@ func mapProjectStats(stats store.ProjectStats) projectStatsResponse {
 		TotalOpen:   stats.TotalOpen,
 		TotalClosed: stats.TotalClosed,
 		BlockedOpen: stats.BlockedOpen,
+		SlaBreached: stats.SlaBreached,
+		SlaAtRisk:   stats.SlaAtRisk,
 		ByState:     mapStatCounts(stats.ByState),
 		ByPriority:  mapStatCounts(stats.ByPriority),
 		ByType:      mapStatCounts(stats.ByType),

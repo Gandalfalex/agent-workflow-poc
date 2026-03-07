@@ -796,7 +796,7 @@ CREATE INDEX ON ticket_locks (expires_at);
 ### TKT-029: SLA Targets, Due Dates, and Breach Escalation
 - **Priority:** `P1`
 - **Type:** `feature`
-- **Status:** `Todo`
+- **Status:** `Done`
 - **Problem:** Teams cannot reliably see which tickets are at risk of missing expected response or completion timelines.
 - **Scope:**
   - Add per-project SLA policy config by priority/type (target durations for first response and completion).

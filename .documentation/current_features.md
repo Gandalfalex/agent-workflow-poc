@@ -218,6 +218,18 @@ Snapshot date: March 7, 2026
 - `BoardPresenceBar.vue`: avatar bubbles showing active users (max 5 + overflow count).
 - OpenAPI-first restoration: `openapi.yaml` (deleted in commit 0cbec5a) restored and extended with all new schemas/paths; `make generate` regenerates `generated.gen.go` and `api.schema.ts` — router.go is clean with only `HandlerWithOptions`.
 
+## SLA Targets, Due Dates, and Breach Escalation (TKT-029, March 7, 2026)
+- Per-project SLA policy configuration by priority × ticket type (`sla_policies` table, migration `025_sla.sql`).
+- Policy fields: `firstResponseHours`, `completionHours`, `atRiskThresholdPct`.
+- SLA status computed server-side (in-process, not stored): `on_track`, `at_risk`, `breached`. Applied in `GetBoard`, `ListTickets`, `GetTicket` handlers via `store.ApplySlaStatus`.
+- Ticket `dueDate` field (nullable `TIMESTAMPTZ`): user-settable via create/update API. `ClearDueDate` flag handles explicit NULL clearing.
+- Dashboard stat cards: "SLA Breached" and "SLA At Risk" (`slaBreached`/`slaAtRisk` from `GET /projects/{id}/stats` — computed via SQL LEFT JOIN on `sla_policies`).
+- Board card badges: SLA status (color-coded: red=breached, amber=at_risk, emerald=on_track) and due date countdown (overdue/Xh/Xd).
+- Settings SLA tab: policy grid (priority × type) with editable hours and threshold. Save via `PUT /projects/{projectId}/sla-policies`.
+- REST API: `GET /projects/{projectId}/sla-policies` (any role), `PUT /projects/{projectId}/sla-policies` (admin only).
+- E2E tests: API CRUD, SLA status computation, UI tab navigation, viewer RBAC (`sla_test.go`).
+- OpenAPI-first: new schemas `SlaStatus`, `SlaPolicyEntry`, `SlaPolicyListResponse`, `SlaPolicyUpdateRequest`; `dueDate`/`slaStatus`/`slaBreachAt` on `Ticket`; `slaBreached`/`slaAtRisk` on `ProjectStats`.
+
 ## Automation Engine (TKT-027, March 5, 2026)
 - Per-project automation rules with trigger events + conditions + ordered actions.
 - `automation_rules` and `automation_executions` tables (migration `023_automation_rules.sql`).

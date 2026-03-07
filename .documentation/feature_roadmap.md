@@ -221,7 +221,8 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 2. ~~RBAC/admin audit trail for sensitive actions (P2)~~ **DONE — TKT-026**
 3. ~~TKT-021: Portfolio command center (P2)~~ **DONE — TKT-021**
 4. ~~Rule-based automation engine (P2-P3)~~ **DONE — TKT-027**
-5. Live collaboration mode (P3)
+5. ~~Live collaboration mode (P3)~~ **DONE — TKT-028**
+6. ~~SLA targets, due dates, breach escalation (P1)~~ **DONE — TKT-029**
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.

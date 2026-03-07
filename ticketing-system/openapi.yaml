@@ -1542,6 +1542,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/Sprint"
 
+  /projects/{projectId}/sla-policies:
+    get:
+      summary: Get SLA policies for a project
+      operationId: getSlaPolicies
+      tags: [sla]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: SLA policy list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlaPolicyListResponse"
+    put:
+      summary: Replace SLA policies for a project
+      operationId: updateSlaPolicies
+      tags: [sla]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SlaPolicyUpdateRequest"
+      responses:
+        "200":
+          description: Updated SLA policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlaPolicyListResponse"
+
   /projects/{projectId}/automation/rules:
     get:
       summary: List automation rules
@@ -3178,6 +3222,17 @@ components:
           description: Total logged time in minutes (computed)
         isBlocked:
           type: boolean
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        slaStatus:
+          $ref: "#/components/schemas/SlaStatus"
+          nullable: true
+        slaBreachAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -3322,6 +3377,10 @@ components:
         timeEstimate:
           type: integer
           nullable: true
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
       required: [title, storyId]
 
     TicketUpdateRequest:
@@ -3362,6 +3421,10 @@ components:
           nullable: true
         timeEstimate:
           type: integer
+          nullable: true
+        dueDate:
+          type: string
+          format: date-time
           nullable: true
         position:
           type: number
@@ -3946,7 +4009,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/StatCount"
-      required: [totalOpen, totalClosed, blockedOpen, byState, byPriority, byType, byAssignee]
+        slaBreached:
+          type: integer
+        slaAtRisk:
+          type: integer
+      required: [totalOpen, totalClosed, blockedOpen, byState, byPriority, byType, byAssignee, slaBreached, slaAtRisk]
 
     Sprint:
       type: object
@@ -4615,6 +4682,47 @@ components:
           items:
             $ref: "#/components/schemas/PresenceEntry"
       required: [users]
+
+    SlaStatus:
+      type: string
+      enum: [on_track, at_risk, breached]
+
+    SlaPolicyEntry:
+      type: object
+      description: SLA target durations for a specific priority+type combination.
+      properties:
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        ticketType:
+          $ref: "#/components/schemas/TicketType"
+        firstResponseHours:
+          type: integer
+          description: Target hours until first comment/activity after creation.
+        completionHours:
+          type: integer
+          description: Target hours until ticket reaches a closed state.
+        atRiskThresholdPct:
+          type: integer
+          description: Percentage of completion window at which ticket becomes at_risk (default 80).
+      required: [priority, ticketType, firstResponseHours, completionHours, atRiskThresholdPct]
+
+    SlaPolicyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlaPolicyEntry"
+      required: [items]
+
+    SlaPolicyUpdateRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlaPolicyEntry"
+      required: [items]
 
     ErrorResponse:
       type: object

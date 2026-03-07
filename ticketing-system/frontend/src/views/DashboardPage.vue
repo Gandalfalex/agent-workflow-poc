@@ -259,6 +259,28 @@ watch(selectedSprintId, reloadForecast);
                     {{ stats.blockedOpen }}
                 </p>
             </div>
+            <div
+                data-testid="dashboard.sla-breached-card"
+                class="rounded-2xl border border-border border-l-4 border-l-red-500 bg-red-500/5 px-5 py-5"
+            >
+                <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                    SLA Breached
+                </p>
+                <p class="mt-2 text-3xl font-bold tabular-nums text-red-400">
+                    {{ stats.slaBreached }}
+                </p>
+            </div>
+            <div
+                data-testid="dashboard.sla-at-risk-card"
+                class="rounded-2xl border border-border border-l-4 border-l-amber-400 bg-amber-400/5 px-5 py-5"
+            >
+                <p class="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                    SLA At Risk
+                </p>
+                <p class="mt-2 text-3xl font-bold tabular-nums text-amber-300">
+                    {{ stats.slaAtRisk }}
+                </p>
+            </div>
         </div>
 
         <!-- By State -->

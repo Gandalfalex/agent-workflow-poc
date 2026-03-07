@@ -399,6 +399,14 @@ func (f *fakeStore) GetProjectStats(ctx context.Context, projectID uuid.UUID) (s
 	return store.ProjectStats{}, nil
 }
 
+func (f *fakeStore) GetSlaPolicies(ctx context.Context, projectID uuid.UUID) ([]store.SlaPolicyEntry, error) {
+	return []store.SlaPolicyEntry{}, nil
+}
+
+func (f *fakeStore) UpdateSlaPolicies(ctx context.Context, projectID uuid.UUID, entries []store.SlaPolicyEntry) ([]store.SlaPolicyEntry, error) {
+	return entries, nil
+}
+
 func (f *fakeStore) GetPortfolioStats(ctx context.Context, userID uuid.UUID, filter store.PortfolioFilter) (store.PortfolioStats, error) {
 	return store.PortfolioStats{Projects: []store.ProjectPortfolioEntry{}}, nil
 }

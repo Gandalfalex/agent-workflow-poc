@@ -75,6 +75,23 @@ const assigneeInitials = (name?: string) => {
 
 const priorityShort = (priority: string) => priority.substring(0, 3);
 
+const slaColor = (status?: string | null) => {
+    switch (status) {
+        case "breached": return "border-red-500/50 bg-red-500/10 text-red-300";
+        case "at_risk":  return "border-amber-500/50 bg-amber-500/10 text-amber-300";
+        default:         return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+    }
+};
+
+const dueDateCountdown = (dateStr?: string | null): string | null => {
+    if (!dateStr) return null;
+    const diff = new Date(dateStr).getTime() - Date.now();
+    if (diff < 0) return "overdue";
+    const h = Math.floor(diff / 3_600_000);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+};
+
 const formatTitleForDisplay = (title: string) => {
     const match = title.match(/^(.*?)(\d{10,})$/);
     if (!match) {
@@ -190,6 +207,24 @@ const formatTitleForDisplay = (title: string) => {
                             count: props.ticket.blockedByCount,
                         })
                     }}
+                </span>
+                <span
+                    v-if="props.ticket.slaStatus"
+                    data-testid="board.ticket-sla-badge"
+                    class="rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
+                    :class="slaColor(props.ticket.slaStatus)"
+                    :title="`SLA: ${props.ticket.slaStatus?.replace('_',' ')}`"
+                >
+                    {{ props.ticket.slaStatus === "breached" ? "SLA!" : props.ticket.slaStatus === "at_risk" ? "risk" : "ok" }}
+                </span>
+                <span
+                    v-if="dueDateCountdown(props.ticket.dueDate)"
+                    data-testid="board.ticket-due-date-badge"
+                    class="rounded-md border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
+                    :class="dueDateCountdown(props.ticket.dueDate) === 'overdue' ? 'border-red-500/50 bg-red-500/10 text-red-300' : 'border-sky-500/40 bg-sky-500/10 text-sky-300'"
+                    :title="props.ticket.dueDate ? `Due: ${new Date(props.ticket.dueDate).toLocaleDateString()}` : ''"
+                >
+                    {{ dueDateCountdown(props.ticket.dueDate) }}
                 </span>
             </div>
             <div class="flex items-center gap-1.5">

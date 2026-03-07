@@ -76,6 +76,13 @@ const (
 	Viewer      ProjectRole = "viewer"
 )
 
+// Defines values for SlaStatus.
+const (
+	AtRisk   SlaStatus = "at_risk"
+	Breached SlaStatus = "breached"
+	OnTrack  SlaStatus = "on_track"
+)
+
 // Defines values for SprintStatus.
 const (
 	Active    SprintStatus = "active"
@@ -710,6 +717,8 @@ type ProjectStats struct {
 	ByPriority  []StatCount `json:"byPriority"`
 	ByState     []StatCount `json:"byState"`
 	ByType      []StatCount `json:"byType"`
+	SlaAtRisk   int         `json:"slaAtRisk"`
+	SlaBreached int         `json:"slaBreached"`
 	TotalClosed int         `json:"totalClosed"`
 	TotalOpen   int         `json:"totalOpen"`
 }
@@ -720,6 +729,33 @@ type ProjectUpdateRequest struct {
 	Description               *string `json:"description,omitempty"`
 	Name                      *string `json:"name,omitempty"`
 }
+
+// SlaPolicyEntry SLA target durations for a specific priority+type combination.
+type SlaPolicyEntry struct {
+	// AtRiskThresholdPct Percentage of completion window at which ticket becomes at_risk (default 80).
+	AtRiskThresholdPct int `json:"atRiskThresholdPct"`
+
+	// CompletionHours Target hours until ticket reaches a closed state.
+	CompletionHours int `json:"completionHours"`
+
+	// FirstResponseHours Target hours until first comment/activity after creation.
+	FirstResponseHours int            `json:"firstResponseHours"`
+	Priority           TicketPriority `json:"priority"`
+	TicketType         TicketType     `json:"ticketType"`
+}
+
+// SlaPolicyListResponse defines model for SlaPolicyListResponse.
+type SlaPolicyListResponse struct {
+	Items []SlaPolicyEntry `json:"items"`
+}
+
+// SlaPolicyUpdateRequest defines model for SlaPolicyUpdateRequest.
+type SlaPolicyUpdateRequest struct {
+	Items []SlaPolicyEntry `json:"items"`
+}
+
+// SlaStatus defines model for SlaStatus.
+type SlaStatus string
 
 // Sprint defines model for Sprint.
 type Sprint struct {
@@ -833,6 +869,7 @@ type Ticket struct {
 	BlockedByCount      int                     `json:"blockedByCount"`
 	CreatedAt           time.Time               `json:"createdAt"`
 	Description         *string                 `json:"description,omitempty"`
+	DueDate             *time.Time              `json:"dueDate"`
 	Id                  openapi_types.UUID      `json:"id"`
 	IncidentCommander   *UserSummary            `json:"incidentCommander,omitempty"`
 	IncidentCommanderId *openapi_types.UUID     `json:"incidentCommanderId"`
@@ -850,6 +887,8 @@ type Ticket struct {
 
 	// ProjectKey 4-character uppercase alphanumeric project key.
 	ProjectKey  ProjectKey         `json:"projectKey"`
+	SlaBreachAt *time.Time         `json:"slaBreachAt"`
+	SlaStatus   *SlaStatus         `json:"slaStatus,omitempty"`
 	State       *WorkflowState     `json:"state,omitempty"`
 	StateId     openapi_types.UUID `json:"stateId"`
 	Story       *Story             `json:"story,omitempty"`
@@ -909,6 +948,7 @@ type TicketCommentListResponse struct {
 type TicketCreateRequest struct {
 	AssigneeId          *openapi_types.UUID     `json:"assigneeId"`
 	Description         *string                 `json:"description,omitempty"`
+	DueDate             *time.Time              `json:"dueDate"`
 	IncidentCommanderId *openapi_types.UUID     `json:"incidentCommanderId"`
 	IncidentEnabled     *bool                   `json:"incidentEnabled,omitempty"`
 	IncidentImpact      *string                 `json:"incidentImpact"`
@@ -1003,6 +1043,7 @@ type TicketType string
 type TicketUpdateRequest struct {
 	AssigneeId          *openapi_types.UUID     `json:"assigneeId"`
 	Description         *string                 `json:"description,omitempty"`
+	DueDate             *time.Time              `json:"dueDate"`
 	IncidentCommanderId *openapi_types.UUID     `json:"incidentCommanderId"`
 	IncidentEnabled     *bool                   `json:"incidentEnabled,omitempty"`
 	IncidentImpact      *string                 `json:"incidentImpact"`
@@ -1301,6 +1342,9 @@ type UpdateNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdat
 // UpsertPresenceJSONRequestBody defines body for UpsertPresence for application/json ContentType.
 type UpsertPresenceJSONRequestBody = PresenceUpsertRequest
 
+// UpdateSlaPoliciesJSONRequestBody defines body for UpdateSlaPolicies for application/json ContentType.
+type UpdateSlaPoliciesJSONRequestBody = SlaPolicyUpdateRequest
+
 // CreateProjectSprintJSONRequestBody defines body for CreateProjectSprint for application/json ContentType.
 type CreateProjectSprintJSONRequestBody = SprintCreateRequest
 
@@ -1522,6 +1566,12 @@ type ServerInterface interface {
 	// Get lightweight project reporting summary
 	// (GET /projects/{projectId}/reporting/summary)
 	GetProjectReportingSummary(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectReportingSummaryParams)
+	// Get SLA policies for a project
+	// (GET /projects/{projectId}/sla-policies)
+	GetSlaPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Replace SLA policies for a project
+	// (PUT /projects/{projectId}/sla-policies)
+	UpdateSlaPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
 	// Get sprint forecast summary
 	// (GET /projects/{projectId}/sprint-forecast)
 	GetProjectSprintForecast(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectSprintForecastParams)
@@ -2005,6 +2055,18 @@ func (_ Unimplemented) ExportProjectReportingSnapshot(w http.ResponseWriter, r *
 // Get lightweight project reporting summary
 // (GET /projects/{projectId}/reporting/summary)
 func (_ Unimplemented) GetProjectReportingSummary(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params GetProjectReportingSummaryParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get SLA policies for a project
+// (GET /projects/{projectId}/sla-policies)
+func (_ Unimplemented) GetSlaPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Replace SLA policies for a project
+// (PUT /projects/{projectId}/sla-policies)
+func (_ Unimplemented) UpdateSlaPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4174,6 +4236,68 @@ func (siw *ServerInterfaceWrapper) GetProjectReportingSummary(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// GetSlaPolicies operation middleware
+func (siw *ServerInterfaceWrapper) GetSlaPolicies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSlaPolicies(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSlaPolicies operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSlaPolicies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSlaPolicies(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetProjectSprintForecast operation middleware
 func (siw *ServerInterfaceWrapper) GetProjectSprintForecast(w http.ResponseWriter, r *http.Request) {
 
@@ -6203,6 +6327,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/reporting/summary", wrapper.GetProjectReportingSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/sla-policies", wrapper.GetSlaPolicies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}/sla-policies", wrapper.UpdateSlaPolicies)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/sprint-forecast", wrapper.GetProjectSprintForecast)
