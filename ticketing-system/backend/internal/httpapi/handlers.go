@@ -147,6 +147,16 @@ type Store interface {
 	DeleteCustomField(ctx context.Context, id, projectID uuid.UUID) error
 	GetCustomFieldValues(ctx context.Context, ticketID uuid.UUID) ([]store.CustomFieldValue, error)
 	SetCustomFieldValues(ctx context.Context, ticketID uuid.UUID, values []store.CustomFieldValueInput) ([]store.CustomFieldValue, error)
+	GetApprovalPolicies(ctx context.Context, projectID uuid.UUID) ([]store.ApprovalPolicy, error)
+	ReplaceApprovalPolicies(ctx context.Context, projectID uuid.UUID, inputs []store.ApprovalPolicyInput) ([]store.ApprovalPolicy, error)
+	LookupApprovalPolicy(ctx context.Context, projectID, fromStateID, toStateID uuid.UUID) (*store.ApprovalPolicy, error)
+	GetPendingApprovalRequest(ctx context.Context, ticketID, toStateID uuid.UUID) (*store.ApprovalRequest, error)
+	GetApprovalRequestByID(ctx context.Context, requestID, ticketID uuid.UUID) (*store.ApprovalRequest, error)
+	ListApprovalRequests(ctx context.Context, ticketID uuid.UUID) ([]store.ApprovalRequest, error)
+	CreateApprovalRequest(ctx context.Context, ticketID, policyID, fromStateID, toStateID, requestedBy uuid.UUID, requestedByName string, requiredCount int) (*store.ApprovalRequest, error)
+	AddApprovalDecision(ctx context.Context, requestID, approverID uuid.UUID, approverName, decision string, reason *string) (*store.ApprovalDecision, error)
+	UpdateApprovalRequestStatus(ctx context.Context, requestID uuid.UUID, status string, approvedCount int) (*store.ApprovalRequest, error)
+	HasDuplicateApprovalDecision(ctx context.Context, requestID, approverID uuid.UUID) (bool, error)
 }
 
 type Authenticator interface {
@@ -1206,6 +1216,54 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 							writeError(w, http.StatusConflict, "wip_limit_exceeded", "WIP limit reached for this state")
 							return
 						}
+					}
+				}
+			}
+
+			// Approval gate: check if a policy exists for this transition.
+			policy, policyErr := h.store.LookupApprovalPolicy(r.Context(), current.ProjectID, current.StateID, stateID)
+			if policyErr == nil && policy != nil {
+				user, _ := authUser(r.Context())
+				userID, _ := uuid.Parse(user.ID)
+
+				// Check for a pending request for this transition.
+				pending, pendingErr := h.store.GetPendingApprovalRequest(r.Context(), ticketID, stateID)
+				if pendingErr == nil && pending != nil {
+					if pending.ApprovedCount >= pending.RequiredCount {
+						// Approved — allow the transition; mark request resolved.
+						_, _ = h.store.UpdateApprovalRequestStatus(r.Context(), pending.ID, "approved", pending.ApprovedCount)
+					} else {
+						// Still waiting.
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusConflict)
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"error":         "approval_pending",
+							"requestId":     pending.ID.String(),
+							"approvedCount": pending.ApprovedCount,
+							"requiredCount": pending.RequiredCount,
+							"message":       "approval in progress",
+						})
+						return
+					}
+				} else {
+					// No pending request — create one and return 202.
+					newReq, reqErr := h.store.CreateApprovalRequest(r.Context(),
+						ticketID, policy.ID, current.StateID, stateID,
+						userID, user.Name, policy.RequiredCount)
+					if reqErr == nil {
+						go h.recordAudit(r.Context(), userID, user.Name, "approval_request.created", "ticket", ticketID.String(), current.Title, &current.ProjectID, map[string]any{
+							"fromStateId": current.StateID.String(),
+							"toStateId":   stateID.String(),
+							"requestId":   newReq.ID.String(),
+						})
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusAccepted)
+						_ = json.NewEncoder(w).Encode(map[string]any{
+							"status":    "approval_required",
+							"requestId": newReq.ID.String(),
+							"message":   "approval requested before transitioning state",
+						})
+						return
 					}
 				}
 			}

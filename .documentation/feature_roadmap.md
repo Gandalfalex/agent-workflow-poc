@@ -226,6 +226,7 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 7. ~~Custom fields and ticket-type form schemas (P1)~~ **DONE — TKT-030**
 8. ~~WIP limits and flow health insights (P1)~~ **DONE — TKT-031**
 9. ~~Release and version management (P1-P2)~~ **DONE — TKT-032**
+10. ~~Approval gates for sensitive workflow transitions (P1-P2)~~ **DONE — TKT-033**
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.

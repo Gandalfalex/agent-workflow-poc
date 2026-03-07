@@ -884,6 +884,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/approval-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get approval policies for a project */
+        get: operations["getApprovalPolicies"];
+        /** Replace approval policies for a project */
+        put: operations["replaceApprovalPolicies"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{ticketId}/approval-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List approval requests for a ticket */
+        get: operations["listApprovalRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{ticketId}/approval-requests/{requestId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a transition request */
+        post: operations["approveRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tickets/{ticketId}/approval-requests/{requestId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a transition request */
+        post: operations["rejectRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/automation/rules": {
         parameters: {
             query?: never;
@@ -2542,6 +2611,94 @@ export interface components {
             /** @description Rendered markdown or JSON string depending on format */
             content: string;
         };
+        /** @enum {string} */
+        ApprovalScope: "any_member" | "role" | "group";
+        ApprovalPolicy: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            fromStateId: string;
+            /** Format: uuid */
+            toStateId: string;
+            /** @default 1 */
+            requiredCount: number;
+            scope: components["schemas"]["ApprovalScope"];
+            /** Format: uuid */
+            groupId?: string | null;
+            role?: string | null;
+        };
+        ApprovalPolicyInput: {
+            /** Format: uuid */
+            fromStateId: string;
+            /** Format: uuid */
+            toStateId: string;
+            /** @default 1 */
+            requiredCount: number;
+            scope: components["schemas"]["ApprovalScope"];
+            /** Format: uuid */
+            groupId?: string | null;
+            role?: string | null;
+        };
+        ApprovalPolicyListResponse: {
+            items: components["schemas"]["ApprovalPolicy"][];
+        };
+        ApprovalPoliciesReplaceRequest: {
+            items: components["schemas"]["ApprovalPolicyInput"][];
+        };
+        /** @enum {string} */
+        ApprovalStatus: "pending" | "approved" | "rejected" | "cancelled";
+        ApprovalDecision: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            requestId: string;
+            /** Format: uuid */
+            approverId: string;
+            approverName: string;
+            /** @enum {string} */
+            decision: "approved" | "rejected";
+            reason?: string | null;
+            /** Format: date-time */
+            decidedAt: string;
+        };
+        ApprovalRequest: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            ticketId: string;
+            /** Format: uuid */
+            policyId: string;
+            /** Format: uuid */
+            fromStateId: string;
+            /** Format: uuid */
+            toStateId: string;
+            /** Format: uuid */
+            requestedBy: string;
+            requestedByName: string;
+            status: components["schemas"]["ApprovalStatus"];
+            requiredCount: number;
+            approvedCount: number;
+            decisions: components["schemas"]["ApprovalDecision"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            resolvedAt?: string | null;
+        };
+        ApprovalRequestListResponse: {
+            items: components["schemas"]["ApprovalRequest"][];
+        };
+        ApprovalDecisionRequest: {
+            reason?: string | null;
+        };
+        ApprovalRequiredResponse: {
+            /** @enum {string} */
+            status: "approval_required";
+            /** Format: uuid */
+            requestId: string;
+            message: string;
+        };
         ErrorResponse: {
             error: string;
             message?: string;
@@ -3410,6 +3567,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Approval required before transition */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequiredResponse"];
                 };
             };
         };
@@ -4545,6 +4711,148 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReleaseExportResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getApprovalPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approval policies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalPolicyListResponse"];
+                };
+            };
+        };
+    };
+    replaceApprovalPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalPoliciesReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated policies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalPolicyListResponse"];
+                };
+            };
+        };
+    };
+    listApprovalRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approval requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequestListResponse"];
+                };
+            };
+        };
+    };
+    approveRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticketId: string;
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApprovalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Approval recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequest"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rejectRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticketId: string;
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApprovalDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Rejection recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRequest"];
                 };
             };
             /** @description Not found */

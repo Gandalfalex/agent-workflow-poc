@@ -863,7 +863,7 @@ CREATE INDEX ON ticket_locks (expires_at);
 ### TKT-033: Approval Gates for Sensitive Workflow Transitions
 - **Priority:** `P1-P2`
 - **Type:** `feature`
-- **Status:** `Todo`
+- **Status:** `Completed (March 7, 2026)`
 - **Problem:** High-impact transitions (for example to production-ready states) need explicit approval and traceability.
 - **Scope:**
   - Add approval policies per workflow transition.

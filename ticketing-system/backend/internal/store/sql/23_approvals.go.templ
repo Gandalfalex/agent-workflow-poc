@@ -1,0 +1,141 @@
+{{define "approval_policies_by_project.sql"}}
+SELECT
+    id,
+    project_id,
+    from_state_id,
+    to_state_id,
+    required_count,
+    scope,
+    group_id,
+    role,
+    created_at
+FROM approval_policies
+WHERE project_id = $1
+ORDER BY created_at
+{{end}}
+
+{{define "approval_policy_delete_by_project.sql"}}
+DELETE FROM approval_policies WHERE project_id = $1
+{{end}}
+
+{{define "approval_policy_insert.sql"}}
+INSERT INTO approval_policies
+    (project_id, from_state_id, to_state_id, required_count, scope, group_id, role)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, project_id, from_state_id, to_state_id, required_count, scope, group_id, role, created_at
+{{end}}
+
+{{define "approval_policy_lookup.sql"}}
+SELECT
+    id,
+    project_id,
+    from_state_id,
+    to_state_id,
+    required_count,
+    scope,
+    group_id,
+    role,
+    created_at
+FROM approval_policies
+WHERE project_id = $1 AND from_state_id = $2 AND to_state_id = $3
+LIMIT 1
+{{end}}
+
+{{define "approval_request_insert.sql"}}
+INSERT INTO approval_requests
+    (ticket_id, policy_id, from_state_id, to_state_id, requested_by, requested_by_name, required_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, ticket_id, policy_id, from_state_id, to_state_id, requested_by, requested_by_name, status, required_count, approved_count, created_at, resolved_at
+{{end}}
+
+{{define "approval_request_pending_by_ticket.sql"}}
+SELECT
+    id,
+    ticket_id,
+    policy_id,
+    from_state_id,
+    to_state_id,
+    requested_by,
+    requested_by_name,
+    status,
+    required_count,
+    approved_count,
+    created_at,
+    resolved_at
+FROM approval_requests
+WHERE ticket_id = $1 AND status = 'pending' AND to_state_id = $2
+ORDER BY created_at DESC
+LIMIT 1
+{{end}}
+
+{{define "approval_requests_by_ticket.sql"}}
+SELECT
+    id,
+    ticket_id,
+    policy_id,
+    from_state_id,
+    to_state_id,
+    requested_by,
+    requested_by_name,
+    status,
+    required_count,
+    approved_count,
+    created_at,
+    resolved_at
+FROM approval_requests
+WHERE ticket_id = $1
+ORDER BY created_at DESC
+{{end}}
+
+{{define "approval_request_by_id.sql"}}
+SELECT
+    id,
+    ticket_id,
+    policy_id,
+    from_state_id,
+    to_state_id,
+    requested_by,
+    requested_by_name,
+    status,
+    required_count,
+    approved_count,
+    created_at,
+    resolved_at
+FROM approval_requests
+WHERE id = $1 AND ticket_id = $2
+{{end}}
+
+{{define "approval_decision_insert.sql"}}
+INSERT INTO approval_decisions
+    (request_id, approver_id, approver_name, decision, reason)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, request_id, approver_id, approver_name, decision, reason, decided_at
+{{end}}
+
+{{define "approval_decisions_by_request.sql"}}
+SELECT
+    id,
+    request_id,
+    approver_id,
+    approver_name,
+    decision,
+    reason,
+    decided_at
+FROM approval_decisions
+WHERE request_id = $1
+ORDER BY decided_at
+{{end}}
+
+{{define "approval_request_update_status.sql"}}
+UPDATE approval_requests
+SET
+    status = $2,
+    approved_count = $3,
+    resolved_at = CASE WHEN $2 IN ('approved','rejected','cancelled') THEN now() ELSE NULL END
+WHERE id = $1
+RETURNING id, ticket_id, policy_id, from_state_id, to_state_id, requested_by, requested_by_name, status, required_count, approved_count, created_at, resolved_at
+{{end}}
+
+{{define "approval_check_duplicate_decision.sql"}}
+SELECT COUNT(*) FROM approval_decisions WHERE request_id = $1 AND approver_id = $2
+{{end}}

@@ -14,11 +14,13 @@ import {
     deleteRelease,
     exportProjectReportingSnapshot,
     exportRelease,
+    getApprovalPolicies,
     getProjectAiTriageSettings,
     getSlaPolicies,
     listCustomFields,
     listProjectCapacitySettings,
     listReleases,
+    replaceApprovalPolicies,
     replaceProjectCapacitySettings,
     syncUsersFromIdentityProvider,
     updateCustomField,
@@ -30,6 +32,9 @@ import {
 import { useI18n } from "@/lib/i18n";
 import type {
     AiTriageSettings,
+    ApprovalPolicy,
+    ApprovalPolicyInput,
+    ApprovalScope,
     CapacitySetting,
     CustomFieldDefinition,
     CustomFieldOption,
@@ -57,7 +62,7 @@ const sessionStore = useSessionStore();
 const { t } = useI18n();
 
 const settingsTab = ref<
-    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation" | "sla" | "custom-fields" | "releases"
+    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation" | "sla" | "custom-fields" | "releases" | "approvals"
 >(
     "projects",
 );
@@ -371,6 +376,64 @@ async function exportReleaseNotes(id: string, format: "markdown" | "json") {
         URL.revokeObjectURL(url);
     } catch {
         // ignore
+    }
+}
+
+// Approvals tab state
+const approvalPolicies = ref<ApprovalPolicy[]>([]);
+const approvalPoliciesLoading = ref(false);
+const approvalPoliciesError = ref("");
+const approvalPolicyDraft = ref<ApprovalPolicyInput[]>([]);
+
+async function loadApprovalPolicies() {
+    if (!selectedProjectId.value) return;
+    approvalPoliciesLoading.value = true;
+    approvalPoliciesError.value = "";
+    try {
+        const res = await getApprovalPolicies(selectedProjectId.value);
+        approvalPolicies.value = res.items;
+        approvalPolicyDraft.value = res.items.map(p => ({
+            fromStateId: p.fromStateId,
+            toStateId: p.toStateId,
+            requiredCount: p.requiredCount,
+            scope: p.scope,
+            groupId: p.groupId ?? undefined,
+            role: p.role ?? undefined,
+        }));
+    } catch {
+        approvalPoliciesError.value = "Failed to load approval policies";
+    } finally {
+        approvalPoliciesLoading.value = false;
+    }
+}
+
+function addApprovalPolicyRow() {
+    if (!workflowStates.value.length) return;
+    const first = workflowStates.value[0];
+    const second = workflowStates.value[1] ?? workflowStates.value[0];
+    approvalPolicyDraft.value.push({
+        fromStateId: first!.id,
+        toStateId: second!.id,
+        requiredCount: 1,
+        scope: "any_member" as ApprovalScope,
+    });
+}
+
+function removeApprovalPolicyRow(index: number) {
+    approvalPolicyDraft.value.splice(index, 1);
+}
+
+async function saveApprovalPolicies() {
+    if (!selectedProjectId.value) return;
+    approvalPoliciesLoading.value = true;
+    approvalPoliciesError.value = "";
+    try {
+        const res = await replaceApprovalPolicies(selectedProjectId.value, { items: approvalPolicyDraft.value });
+        approvalPolicies.value = res.items;
+    } catch {
+        approvalPoliciesError.value = "Failed to save approval policies";
+    } finally {
+        approvalPoliciesLoading.value = false;
     }
 }
 
@@ -1483,6 +1546,15 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'releases'; loadReleases()"
             >
                 Releases
+            </Button>
+            <Button
+                data-testid="settings.approvals_tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'approvals'"
+                @click="settingsTab = 'approvals'; loadApprovalPolicies()"
+            >
+                Approvals
             </Button>
         </div>
     </section>
@@ -3549,6 +3621,106 @@ watch(selectedGroupId, async () => {
 
         <div v-else-if="!releasesLoading" class="text-sm text-muted-foreground">
             No releases yet. Create one to start tracking versions.
+        </div>
+    </section>
+
+    <!-- Approvals Tab -->
+    <section
+        v-if="settingsTab === 'approvals'"
+        data-testid="settings.approvals_view"
+        class="rounded-2xl border border-border bg-card/80 p-5 shadow-sm"
+    >
+        <div class="flex items-center justify-between mb-4">
+            <p class="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground">
+                Approval Gates
+            </p>
+            <div class="flex gap-2">
+                <Button
+                    data-testid="settings.approvals_add_button"
+                    variant="outline"
+                    size="sm"
+                    @click="addApprovalPolicyRow"
+                >
+                    + Add Gate
+                </Button>
+                <Button
+                    data-testid="settings.approvals_save_button"
+                    variant="default"
+                    size="sm"
+                    :disabled="approvalPoliciesLoading"
+                    @click="saveApprovalPolicies"
+                >
+                    Save
+                </Button>
+            </div>
+        </div>
+        <p class="text-xs text-muted-foreground mb-4">
+            Require approval before a ticket can move between specific states. The transition will be held until the required number of approvals is received.
+        </p>
+        <div v-if="approvalPoliciesError" class="text-xs text-destructive mb-3">{{ approvalPoliciesError }}</div>
+        <div v-if="approvalPoliciesLoading" class="text-xs text-muted-foreground animate-pulse">Loading...</div>
+        <div
+            v-else-if="approvalPolicyDraft.length > 0"
+            data-testid="settings.approvals_list"
+            class="space-y-2"
+        >
+            <div
+                v-for="(policy, index) in approvalPolicyDraft"
+                :key="index"
+                data-testid="settings.approvals_item"
+                class="grid grid-cols-[1fr_1fr_80px_1fr_auto] gap-2 items-center rounded-xl border border-border bg-background/60 px-3 py-2"
+            >
+                <div>
+                    <label class="text-[10px] text-muted-foreground uppercase tracking-wider">From State</label>
+                    <select
+                        :value="policy.fromStateId"
+                        class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        @change="policy.fromStateId = ($event.target as HTMLSelectElement).value"
+                    >
+                        <option v-for="s in workflowStates" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] text-muted-foreground uppercase tracking-wider">To State</label>
+                    <select
+                        :value="policy.toStateId"
+                        class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        @change="policy.toStateId = ($event.target as HTMLSelectElement).value"
+                    >
+                        <option v-for="s in workflowStates" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Required</label>
+                    <input
+                        :value="policy.requiredCount ?? 1"
+                        type="number"
+                        min="1"
+                        class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        @input="policy.requiredCount = Number(($event.target as HTMLInputElement).value)"
+                    />
+                </div>
+                <div>
+                    <label class="text-[10px] text-muted-foreground uppercase tracking-wider">Scope</label>
+                    <select
+                        :value="policy.scope"
+                        class="mt-1 w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                        @change="policy.scope = ($event.target as HTMLSelectElement).value as ApprovalScope"
+                    >
+                        <option value="any_member">Any member</option>
+                        <option value="role">By role</option>
+                        <option value="group">By group</option>
+                    </select>
+                </div>
+                <button
+                    type="button"
+                    class="text-xs text-destructive hover:text-destructive/80 transition px-2"
+                    @click="removeApprovalPolicyRow(index)"
+                >✕</button>
+            </div>
+        </div>
+        <div v-else class="text-sm text-muted-foreground">
+            No approval gates configured. Add a gate to require approval before sensitive state transitions.
         </div>
     </section>
 </template>

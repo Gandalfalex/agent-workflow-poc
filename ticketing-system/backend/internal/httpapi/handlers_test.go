@@ -881,6 +881,46 @@ func (f *fakeStore) GetReleaseTickets(ctx context.Context, releaseID uuid.UUID) 
 	return []store.ReleaseTicket{}, nil
 }
 
+func (f *fakeStore) GetApprovalPolicies(ctx context.Context, projectID uuid.UUID) ([]store.ApprovalPolicy, error) {
+	return []store.ApprovalPolicy{}, nil
+}
+
+func (f *fakeStore) ReplaceApprovalPolicies(ctx context.Context, projectID uuid.UUID, inputs []store.ApprovalPolicyInput) ([]store.ApprovalPolicy, error) {
+	return []store.ApprovalPolicy{}, nil
+}
+
+func (f *fakeStore) LookupApprovalPolicy(ctx context.Context, projectID, fromStateID, toStateID uuid.UUID) (*store.ApprovalPolicy, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) GetPendingApprovalRequest(ctx context.Context, ticketID, toStateID uuid.UUID) (*store.ApprovalRequest, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) GetApprovalRequestByID(ctx context.Context, requestID, ticketID uuid.UUID) (*store.ApprovalRequest, error) {
+	return nil, store.ErrApprovalRequestNotFound
+}
+
+func (f *fakeStore) ListApprovalRequests(ctx context.Context, ticketID uuid.UUID) ([]store.ApprovalRequest, error) {
+	return []store.ApprovalRequest{}, nil
+}
+
+func (f *fakeStore) CreateApprovalRequest(ctx context.Context, ticketID, policyID, fromStateID, toStateID, requestedBy uuid.UUID, requestedByName string, requiredCount int) (*store.ApprovalRequest, error) {
+	return &store.ApprovalRequest{Decisions: []store.ApprovalDecision{}}, nil
+}
+
+func (f *fakeStore) AddApprovalDecision(ctx context.Context, requestID, approverID uuid.UUID, approverName, decision string, reason *string) (*store.ApprovalDecision, error) {
+	return &store.ApprovalDecision{}, nil
+}
+
+func (f *fakeStore) UpdateApprovalRequestStatus(ctx context.Context, requestID uuid.UUID, status string, approvedCount int) (*store.ApprovalRequest, error) {
+	return &store.ApprovalRequest{Decisions: []store.ApprovalDecision{}}, nil
+}
+
+func (f *fakeStore) HasDuplicateApprovalDecision(ctx context.Context, requestID, approverID uuid.UUID) (bool, error) {
+	return false, nil
+}
+
 type fakeAuth struct {
 	loginUser  auth.User
 	loginToken auth.TokenSet

@@ -197,6 +197,17 @@ export type ReleaseListResponse = components["schemas"]["ReleaseListResponse"];
 export type ReleaseCreateRequest = components["schemas"]["ReleaseCreateRequest"];
 export type ReleaseUpdateRequest = components["schemas"]["ReleaseUpdateRequest"];
 export type ReleaseExportResponse = components["schemas"]["ReleaseExportResponse"];
+export type ApprovalScope = components["schemas"]["ApprovalScope"];
+export type ApprovalStatus = components["schemas"]["ApprovalStatus"];
+export type ApprovalPolicy = components["schemas"]["ApprovalPolicy"];
+export type ApprovalPolicyInput = components["schemas"]["ApprovalPolicyInput"];
+export type ApprovalPolicyListResponse = components["schemas"]["ApprovalPolicyListResponse"];
+export type ApprovalPoliciesReplaceRequest = components["schemas"]["ApprovalPoliciesReplaceRequest"];
+export type ApprovalDecision = components["schemas"]["ApprovalDecision"];
+export type ApprovalRequest = components["schemas"]["ApprovalRequest"];
+export type ApprovalRequestListResponse = components["schemas"]["ApprovalRequestListResponse"];
+export type ApprovalDecisionRequest = components["schemas"]["ApprovalDecisionRequest"];
+export type ApprovalRequiredResponse = components["schemas"]["ApprovalRequiredResponse"];
 
 // Live Collaboration types (not in generated schema)
 export type TicketLock = {
@@ -1431,4 +1442,50 @@ export async function exportRelease(
   return request<ReleaseExportResponse>(
     `/projects/${id}/releases/${releaseId}/export?format=${format}`,
   );
+}
+
+export async function getApprovalPolicies(
+  projectId: string | undefined,
+): Promise<ApprovalPolicyListResponse> {
+  const id = resolveProjectId(projectId);
+  return request<ApprovalPolicyListResponse>(`/projects/${id}/approval-policies`);
+}
+
+export async function replaceApprovalPolicies(
+  projectId: string | undefined,
+  data: ApprovalPoliciesReplaceRequest,
+): Promise<ApprovalPolicyListResponse> {
+  const id = resolveProjectId(projectId);
+  return request<ApprovalPolicyListResponse>(`/projects/${id}/approval-policies`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listApprovalRequests(
+  ticketId: string,
+): Promise<ApprovalRequestListResponse> {
+  return request<ApprovalRequestListResponse>(`/tickets/${ticketId}/approval-requests`);
+}
+
+export async function approveRequest(
+  ticketId: string,
+  requestId: string,
+  data?: ApprovalDecisionRequest,
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/tickets/${ticketId}/approval-requests/${requestId}/approve`, {
+    method: "POST",
+    body: data ? JSON.stringify(data) : undefined,
+  });
+}
+
+export async function rejectRequest(
+  ticketId: string,
+  requestId: string,
+  data?: ApprovalDecisionRequest,
+): Promise<ApprovalRequest> {
+  return request<ApprovalRequest>(`/tickets/${ticketId}/approval-requests/${requestId}/reject`, {
+    method: "POST",
+    body: data ? JSON.stringify(data) : undefined,
+  });
 }

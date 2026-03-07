@@ -674,3 +674,58 @@ func mapAutomationExecution(e store.AutomationExecution) automationExecutionResp
 		CreatedAt:    e.CreatedAt,
 	}
 }
+
+func mapApprovalPolicy(p store.ApprovalPolicy) approvalPolicyResponse {
+	resp := approvalPolicyResponse{
+		Id:            toOpenapiUUID(p.ID),
+		ProjectId:     toOpenapiUUID(p.ProjectID),
+		FromStateId:   toOpenapiUUID(p.FromStateID),
+		ToStateId:     toOpenapiUUID(p.ToStateID),
+		RequiredCount: p.RequiredCount,
+		Scope:         ApprovalScope(p.Scope),
+	}
+	if p.GroupID != nil {
+		gid := toOpenapiUUID(*p.GroupID)
+		resp.GroupId = &gid
+	}
+	if p.Role != nil {
+		resp.Role = p.Role
+	}
+	return resp
+}
+
+func mapApprovalDecision(d store.ApprovalDecision) ApprovalDecision {
+	resp := ApprovalDecision{
+		Id:           toOpenapiUUID(d.ID),
+		RequestId:    toOpenapiUUID(d.RequestID),
+		ApproverId:   toOpenapiUUID(d.ApproverID),
+		ApproverName: d.ApproverName,
+		Decision:     ApprovalDecisionDecision(d.Decision),
+		DecidedAt:    d.DecidedAt,
+	}
+	if d.Reason != nil {
+		resp.Reason = d.Reason
+	}
+	return resp
+}
+
+func mapApprovalRequest(r store.ApprovalRequest) approvalRequestResponse {
+	resp := approvalRequestResponse{
+		Id:              toOpenapiUUID(r.ID),
+		TicketId:        toOpenapiUUID(r.TicketID),
+		PolicyId:        toOpenapiUUID(r.PolicyID),
+		FromStateId:     toOpenapiUUID(r.FromStateID),
+		ToStateId:       toOpenapiUUID(r.ToStateID),
+		RequestedBy:     toOpenapiUUID(r.RequestedBy),
+		RequestedByName: r.RequestedByName,
+		Status:          ApprovalStatus(r.Status),
+		RequiredCount:   r.RequiredCount,
+		ApprovedCount:   r.ApprovedCount,
+		Decisions:       mapSlice(r.Decisions, mapApprovalDecision),
+		CreatedAt:       r.CreatedAt,
+	}
+	if r.ResolvedAt != nil {
+		resp.ResolvedAt = r.ResolvedAt
+	}
+	return resp
+}

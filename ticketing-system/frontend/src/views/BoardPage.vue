@@ -95,6 +95,7 @@ const showPresetEditor = ref(false);
 const selectedTicket = ref<TicketResponse | null>(null);
 const projectReleases = ref<Release[]>([]);
 const selectedReleaseId = ref<string | null>(null);
+const ticketApprovalPendingRequestId = ref<string | null>(null);
 const ticketEditor = ref({
     title: "",
     description: "",
@@ -574,6 +575,7 @@ const closeTicket = () => {
     boardStore.clearComments();
     incidentTimeline.value = [];
     incidentTimelineLoading.value = false;
+    ticketApprovalPendingRequestId.value = null;
 };
 
 const addDependencySubmit = async () => {
@@ -661,11 +663,17 @@ const saveTicket = async () => {
     };
 
     try {
-        await boardStore.updateTicket(
+        const result = await boardStore.updateTicket(
             selectedTicket.value.id,
             payload,
-        );
-        closeTicket();
+        ) as TicketResponse & { status?: string; requestId?: string };
+        if (result && result.status === "approval_required") {
+            ticketApprovalPendingRequestId.value = result.requestId ?? null;
+            toast.info("Approval requested — awaiting approval before state transitions.");
+        } else {
+            ticketApprovalPendingRequestId.value = null;
+            closeTicket();
+        }
     } catch (err) {
         if (!handleAuthError(err)) {
             ticketError.value = "Unable to update ticket.";
@@ -1782,6 +1790,7 @@ watch(
         :lock-conflict="lockConflict"
         :releases="projectReleases"
         :selected-release-id="selectedReleaseId"
+        :approval-pending-request-id="ticketApprovalPendingRequestId"
         @update:editor="updateTicketEditor"
         @update:selectedReleaseId="selectedReleaseId = $event"
         @update:commentDraft="updateCommentDraft"

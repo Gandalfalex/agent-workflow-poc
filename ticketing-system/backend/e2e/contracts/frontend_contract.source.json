@@ -241,7 +241,16 @@
     "settings.releases_list": "settings.releases_list",
     "settings.releases_item": "settings.releases_item",
     "ticket.release_selector": "ticket.release_selector",
-    "dashboard.releases_section": "dashboard.releases_section"
+    "dashboard.releases_section": "dashboard.releases_section",
+    "settings.approvals_tab": "settings.approvals_tab",
+    "settings.approvals_view": "settings.approvals_view",
+    "settings.approvals_add_button": "settings.approvals_add_button",
+    "settings.approvals_save_button": "settings.approvals_save_button",
+    "settings.approvals_list": "settings.approvals_list",
+    "settings.approvals_item": "settings.approvals_item",
+    "ticket.approval_banner": "ticket.approval_banner",
+    "ticket.approve_button": "ticket.approve_button",
+    "ticket.reject_button": "ticket.reject_button"
   },
   "flows": {
     "smoke_login_screen": {

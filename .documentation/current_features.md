@@ -290,3 +290,21 @@ Snapshot date: March 7, 2026
 - Access control: read for viewers+, write/delete for contributors+.
 - E2E contract: 12 new selectors (216 total).
 - E2E tests: full CRUD, export (markdown + JSON), ticket linking and export verification, viewer access (`release_test.go`).
+
+## Approval Gates for Sensitive Workflow Transitions (TKT-033)
+- `approval_policies` table: per-project gate rules on `(from_state, to_state)` with `requiredCount` and `scope` (`any_member`, `role`, `group`).
+- `approval_requests` table: pending/resolved requests per ticket with requestor, counts, and status lifecycle.
+- `approval_decisions` table: immutable decision log (approved/rejected) per request.
+- Migration `029_approval_gates.sql`.
+- `GET/PUT /projects/{projectId}/approval-policies` — admin configures gates; viewers can read.
+- `GET /tickets/{ticketId}/approval-requests` — list requests with decisions.
+- `POST /tickets/{ticketId}/approval-requests/{requestId}/approve|reject` — record decision.
+- Enforcement in `UpdateTicket`: on state change, if a policy exists → returns `202 approval_required` with `requestId`; if pending request exists but not yet approved → returns `409 approval_pending`; once approved → allows transition.
+- Prevents duplicate decisions from the same approver.
+- Audit log entries: `approval_request.created`, `approval_decision.approved`, `approval_decision.rejected`.
+- Store: `GetApprovalPolicies`, `ReplaceApprovalPolicies`, `LookupApprovalPolicy`, `GetPendingApprovalRequest`, `GetApprovalRequestByID`, `ListApprovalRequests`, `CreateApprovalRequest`, `AddApprovalDecision`, `UpdateApprovalRequestStatus`, `HasDuplicateApprovalDecision` (sql template `23_approvals.go.templ`).
+- Frontend — SettingsPage: Approvals tab with per-transition gate editor (from/to state, required count, scope).
+- Frontend — TicketModal: approval pending banner showing pending requests with Approve/Reject buttons; banner shown when save returns 202 or pending requests exist.
+- Frontend — BoardPage: `saveTicket` detects 202 response, sets `ticketApprovalPendingRequestId`, shows toast.
+- E2E contract: 9 new selectors (225 total).
+- E2E tests: policy CRUD, gated transition returns 202, second attempt returns 409, approve unblocks, reject triggers new request, viewer access (`approval_gates_test.go`).

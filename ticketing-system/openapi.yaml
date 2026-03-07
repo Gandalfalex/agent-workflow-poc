@@ -22,6 +22,7 @@ tags:
   - name: admin
   - name: custom-fields
   - name: releases
+  - name: approvals
 
 security:
   - sessionAuth: []
@@ -787,6 +788,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Ticket"
+        "202":
+          description: Approval required before transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequiredResponse"
     delete:
       summary: Delete ticket
       operationId: deleteTicket
@@ -1917,6 +1924,144 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReleaseExportResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/approval-policies:
+    get:
+      summary: Get approval policies for a project
+      operationId: getApprovalPolicies
+      tags: [approvals]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approval policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalPolicyListResponse"
+    put:
+      summary: Replace approval policies for a project
+      operationId: replaceApprovalPolicies
+      tags: [approvals]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalPoliciesReplaceRequest"
+      responses:
+        "200":
+          description: Updated policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalPolicyListResponse"
+
+  /tickets/{ticketId}/approval-requests:
+    get:
+      summary: List approval requests for a ticket
+      operationId: listApprovalRequests
+      tags: [approvals]
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approval requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequestListResponse"
+
+  /tickets/{ticketId}/approval-requests/{requestId}/approve:
+    post:
+      summary: Approve a transition request
+      operationId: approveRequest
+      tags: [approvals]
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecisionRequest"
+      responses:
+        "200":
+          description: Approval recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tickets/{ticketId}/approval-requests/{requestId}/reject:
+    post:
+      summary: Reject a transition request
+      operationId: rejectRequest
+      tags: [approvals]
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecisionRequest"
+      responses:
+        "200":
+          description: Rejection recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
         "404":
           description: Not found
           content:
@@ -5425,6 +5570,182 @@ components:
           type: string
           description: Rendered markdown or JSON string depending on format
       required: [releaseId, name, status, content]
+
+    ApprovalScope:
+      type: string
+      enum: [any_member, role, group]
+
+    ApprovalPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        fromStateId:
+          type: string
+          format: uuid
+        toStateId:
+          type: string
+          format: uuid
+        requiredCount:
+          type: integer
+          minimum: 1
+          default: 1
+        scope:
+          $ref: "#/components/schemas/ApprovalScope"
+        groupId:
+          type: string
+          format: uuid
+          nullable: true
+        role:
+          type: string
+          nullable: true
+      required: [id, projectId, fromStateId, toStateId, requiredCount, scope]
+
+    ApprovalPolicyInput:
+      type: object
+      properties:
+        fromStateId:
+          type: string
+          format: uuid
+        toStateId:
+          type: string
+          format: uuid
+        requiredCount:
+          type: integer
+          minimum: 1
+          default: 1
+        scope:
+          $ref: "#/components/schemas/ApprovalScope"
+        groupId:
+          type: string
+          format: uuid
+          nullable: true
+        role:
+          type: string
+          nullable: true
+      required: [fromStateId, toStateId, scope]
+
+    ApprovalPolicyListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalPolicy"
+      required: [items]
+
+    ApprovalPoliciesReplaceRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalPolicyInput"
+      required: [items]
+
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, rejected, cancelled]
+
+    ApprovalDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        requestId:
+          type: string
+          format: uuid
+        approverId:
+          type: string
+          format: uuid
+        approverName:
+          type: string
+        decision:
+          type: string
+          enum: [approved, rejected]
+        reason:
+          type: string
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+      required: [id, requestId, approverId, approverName, decision, decidedAt]
+
+    ApprovalRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ticketId:
+          type: string
+          format: uuid
+        policyId:
+          type: string
+          format: uuid
+        fromStateId:
+          type: string
+          format: uuid
+        toStateId:
+          type: string
+          format: uuid
+        requestedBy:
+          type: string
+          format: uuid
+        requestedByName:
+          type: string
+        status:
+          $ref: "#/components/schemas/ApprovalStatus"
+        requiredCount:
+          type: integer
+        approvedCount:
+          type: integer
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalDecision"
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, ticketId, policyId, fromStateId, toStateId, requestedBy, requestedByName, status, requiredCount, approvedCount, decisions, createdAt]
+
+    ApprovalRequestListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalRequest"
+      required: [items]
+
+    ApprovalDecisionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+
+    ApprovalRequiredResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [approval_required]
+        requestId:
+          type: string
+          format: uuid
+        message:
+          type: string
+      required: [status, requestId, message]
 
     ErrorResponse:
       type: object

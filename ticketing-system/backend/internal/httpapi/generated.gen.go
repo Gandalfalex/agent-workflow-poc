@@ -26,6 +26,32 @@ const (
 	Summary  AiTriageField = "summary"
 )
 
+// Defines values for ApprovalDecisionDecision.
+const (
+	ApprovalDecisionDecisionApproved ApprovalDecisionDecision = "approved"
+	ApprovalDecisionDecisionRejected ApprovalDecisionDecision = "rejected"
+)
+
+// Defines values for ApprovalRequiredResponseStatus.
+const (
+	ApprovalRequired ApprovalRequiredResponseStatus = "approval_required"
+)
+
+// Defines values for ApprovalScope.
+const (
+	ApprovalScopeAnyMember ApprovalScope = "any_member"
+	ApprovalScopeGroup     ApprovalScope = "group"
+	ApprovalScopeRole      ApprovalScope = "role"
+)
+
+// Defines values for ApprovalStatus.
+const (
+	ApprovalStatusApproved  ApprovalStatus = "approved"
+	ApprovalStatusCancelled ApprovalStatus = "cancelled"
+	ApprovalStatusPending   ApprovalStatus = "pending"
+	ApprovalStatusRejected  ApprovalStatus = "rejected"
+)
+
 // Defines values for BulkTicketAction.
 const (
 	BulkTicketActionAssign      BulkTicketAction = "assign"
@@ -224,6 +250,95 @@ type AiTriageSuggestionDecisionRequest struct {
 	AcceptedFields []AiTriageField `json:"acceptedFields"`
 	RejectedFields []AiTriageField `json:"rejectedFields"`
 }
+
+// ApprovalDecision defines model for ApprovalDecision.
+type ApprovalDecision struct {
+	ApproverId   openapi_types.UUID       `json:"approverId"`
+	ApproverName string                   `json:"approverName"`
+	DecidedAt    time.Time                `json:"decidedAt"`
+	Decision     ApprovalDecisionDecision `json:"decision"`
+	Id           openapi_types.UUID       `json:"id"`
+	Reason       *string                  `json:"reason"`
+	RequestId    openapi_types.UUID       `json:"requestId"`
+}
+
+// ApprovalDecisionDecision defines model for ApprovalDecision.Decision.
+type ApprovalDecisionDecision string
+
+// ApprovalDecisionRequest defines model for ApprovalDecisionRequest.
+type ApprovalDecisionRequest struct {
+	Reason *string `json:"reason"`
+}
+
+// ApprovalPoliciesReplaceRequest defines model for ApprovalPoliciesReplaceRequest.
+type ApprovalPoliciesReplaceRequest struct {
+	Items []ApprovalPolicyInput `json:"items"`
+}
+
+// ApprovalPolicy defines model for ApprovalPolicy.
+type ApprovalPolicy struct {
+	FromStateId   openapi_types.UUID  `json:"fromStateId"`
+	GroupId       *openapi_types.UUID `json:"groupId"`
+	Id            openapi_types.UUID  `json:"id"`
+	ProjectId     openapi_types.UUID  `json:"projectId"`
+	RequiredCount int                 `json:"requiredCount"`
+	Role          *string             `json:"role"`
+	Scope         ApprovalScope       `json:"scope"`
+	ToStateId     openapi_types.UUID  `json:"toStateId"`
+}
+
+// ApprovalPolicyInput defines model for ApprovalPolicyInput.
+type ApprovalPolicyInput struct {
+	FromStateId   openapi_types.UUID  `json:"fromStateId"`
+	GroupId       *openapi_types.UUID `json:"groupId"`
+	RequiredCount *int                `json:"requiredCount,omitempty"`
+	Role          *string             `json:"role"`
+	Scope         ApprovalScope       `json:"scope"`
+	ToStateId     openapi_types.UUID  `json:"toStateId"`
+}
+
+// ApprovalPolicyListResponse defines model for ApprovalPolicyListResponse.
+type ApprovalPolicyListResponse struct {
+	Items []ApprovalPolicy `json:"items"`
+}
+
+// ApprovalRequest defines model for ApprovalRequest.
+type ApprovalRequest struct {
+	ApprovedCount   int                `json:"approvedCount"`
+	CreatedAt       time.Time          `json:"createdAt"`
+	Decisions       []ApprovalDecision `json:"decisions"`
+	FromStateId     openapi_types.UUID `json:"fromStateId"`
+	Id              openapi_types.UUID `json:"id"`
+	PolicyId        openapi_types.UUID `json:"policyId"`
+	RequestedBy     openapi_types.UUID `json:"requestedBy"`
+	RequestedByName string             `json:"requestedByName"`
+	RequiredCount   int                `json:"requiredCount"`
+	ResolvedAt      *time.Time         `json:"resolvedAt"`
+	Status          ApprovalStatus     `json:"status"`
+	TicketId        openapi_types.UUID `json:"ticketId"`
+	ToStateId       openapi_types.UUID `json:"toStateId"`
+}
+
+// ApprovalRequestListResponse defines model for ApprovalRequestListResponse.
+type ApprovalRequestListResponse struct {
+	Items []ApprovalRequest `json:"items"`
+}
+
+// ApprovalRequiredResponse defines model for ApprovalRequiredResponse.
+type ApprovalRequiredResponse struct {
+	Message   string                         `json:"message"`
+	RequestId openapi_types.UUID             `json:"requestId"`
+	Status    ApprovalRequiredResponseStatus `json:"status"`
+}
+
+// ApprovalRequiredResponseStatus defines model for ApprovalRequiredResponse.Status.
+type ApprovalRequiredResponseStatus string
+
+// ApprovalScope defines model for ApprovalScope.
+type ApprovalScope string
+
+// ApprovalStatus defines model for ApprovalStatus.
+type ApprovalStatus string
 
 // Attachment defines model for Attachment.
 type Attachment struct {
@@ -1529,6 +1644,9 @@ type CreateAiTriageSuggestionJSONRequestBody = AiTriageSuggestionCreateRequest
 // RecordAiTriageSuggestionDecisionJSONRequestBody defines body for RecordAiTriageSuggestionDecision for application/json ContentType.
 type RecordAiTriageSuggestionDecisionJSONRequestBody = AiTriageSuggestionDecisionRequest
 
+// ReplaceApprovalPoliciesJSONRequestBody defines body for ReplaceApprovalPolicies for application/json ContentType.
+type ReplaceApprovalPoliciesJSONRequestBody = ApprovalPoliciesReplaceRequest
+
 // CreateAutomationRuleJSONRequestBody defines body for CreateAutomationRule for application/json ContentType.
 type CreateAutomationRuleJSONRequestBody = AutomationRuleCreateRequest
 
@@ -1625,6 +1743,12 @@ type SetTicketCustomFieldValuesJSONRequestBody = CustomFieldValueUpsertRequest
 // CreateTicketDependencyJSONRequestBody defines body for CreateTicketDependency for application/json ContentType.
 type CreateTicketDependencyJSONRequestBody = TicketDependencyCreateRequest
 
+// ApproveRequestJSONRequestBody defines body for ApproveRequest for application/json ContentType.
+type ApproveRequestJSONRequestBody = ApprovalDecisionRequest
+
+// RejectRequestJSONRequestBody defines body for RejectRequest for application/json ContentType.
+type RejectRequestJSONRequestBody = ApprovalDecisionRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List audit log entries
@@ -1705,6 +1829,12 @@ type ServerInterface interface {
 	// Record field-by-field acceptance or rejection for an AI triage suggestion
 	// (POST /projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision)
 	RecordAiTriageSuggestionDecision(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, suggestionId openapi_types.UUID)
+	// Get approval policies for a project
+	// (GET /projects/{projectId}/approval-policies)
+	GetApprovalPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Replace approval policies for a project
+	// (PUT /projects/{projectId}/approval-policies)
+	ReplaceApprovalPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
 	// List automation rules
 	// (GET /projects/{projectId}/automation/rules)
 	ListAutomationRules(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -1981,6 +2111,15 @@ type ServerInterface interface {
 	// Renew an existing edit lock
 	// (PUT /tickets/{id}/lock)
 	RenewTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List approval requests for a ticket
+	// (GET /tickets/{ticketId}/approval-requests)
+	ListApprovalRequests(w http.ResponseWriter, r *http.Request, ticketId openapi_types.UUID)
+	// Approve a transition request
+	// (POST /tickets/{ticketId}/approval-requests/{requestId}/approve)
+	ApproveRequest(w http.ResponseWriter, r *http.Request, ticketId openapi_types.UUID, requestId openapi_types.UUID)
+	// Reject a transition request
+	// (POST /tickets/{ticketId}/approval-requests/{requestId}/reject)
+	RejectRequest(w http.ResponseWriter, r *http.Request, ticketId openapi_types.UUID, requestId openapi_types.UUID)
 	// List users
 	// (GET /users)
 	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
@@ -2143,6 +2282,18 @@ func (_ Unimplemented) CreateAiTriageSuggestion(w http.ResponseWriter, r *http.R
 // Record field-by-field acceptance or rejection for an AI triage suggestion
 // (POST /projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision)
 func (_ Unimplemented) RecordAiTriageSuggestionDecision(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, suggestionId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get approval policies for a project
+// (GET /projects/{projectId}/approval-policies)
+func (_ Unimplemented) GetApprovalPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Replace approval policies for a project
+// (PUT /projects/{projectId}/approval-policies)
+func (_ Unimplemented) ReplaceApprovalPolicies(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2695,6 +2846,24 @@ func (_ Unimplemented) AcquireTicketLock(w http.ResponseWriter, r *http.Request,
 // Renew an existing edit lock
 // (PUT /tickets/{id}/lock)
 func (_ Unimplemented) RenewTicketLock(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List approval requests for a ticket
+// (GET /tickets/{ticketId}/approval-requests)
+func (_ Unimplemented) ListApprovalRequests(w http.ResponseWriter, r *http.Request, ticketId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Approve a transition request
+// (POST /tickets/{ticketId}/approval-requests/{requestId}/approve)
+func (_ Unimplemented) ApproveRequest(w http.ResponseWriter, r *http.Request, ticketId openapi_types.UUID, requestId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Reject a transition request
+// (POST /tickets/{ticketId}/approval-requests/{requestId}/reject)
+func (_ Unimplemented) RejectRequest(w http.ResponseWriter, r *http.Request, ticketId openapi_types.UUID, requestId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3469,6 +3638,68 @@ func (siw *ServerInterfaceWrapper) RecordAiTriageSuggestionDecision(w http.Respo
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RecordAiTriageSuggestionDecision(w, r, projectId, suggestionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetApprovalPolicies operation middleware
+func (siw *ServerInterfaceWrapper) GetApprovalPolicies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetApprovalPolicies(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReplaceApprovalPolicies operation middleware
+func (siw *ServerInterfaceWrapper) ReplaceApprovalPolicies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReplaceApprovalPolicies(w, r, projectId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6828,6 +7059,117 @@ func (siw *ServerInterfaceWrapper) RenewTicketLock(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListApprovalRequests operation middleware
+func (siw *ServerInterfaceWrapper) ListApprovalRequests(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListApprovalRequests(w, r, ticketId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ApproveRequest operation middleware
+func (siw *ServerInterfaceWrapper) ApproveRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", chi.URLParam(r, "requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveRequest(w, r, ticketId, requestId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectRequest operation middleware
+func (siw *ServerInterfaceWrapper) RejectRequest(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "ticketId" -------------
+	var ticketId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ticketId", chi.URLParam(r, "ticketId"), &ticketId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ticketId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "requestId" -------------
+	var requestId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "requestId", chi.URLParam(r, "requestId"), &requestId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "requestId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectRequest(w, r, ticketId, requestId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -7051,6 +7393,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/ai-triage/suggestions/{suggestionId}/decision", wrapper.RecordAiTriageSuggestionDecision)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/approval-policies", wrapper.GetApprovalPolicies)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}/approval-policies", wrapper.ReplaceApprovalPolicies)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/automation/rules", wrapper.ListAutomationRules)
@@ -7327,6 +7675,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/tickets/{id}/lock", wrapper.RenewTicketLock)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tickets/{ticketId}/approval-requests", wrapper.ListApprovalRequests)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tickets/{ticketId}/approval-requests/{requestId}/approve", wrapper.ApproveRequest)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tickets/{ticketId}/approval-requests/{requestId}/reject", wrapper.RejectRequest)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/users", wrapper.ListUsers)

@@ -23,11 +23,15 @@ import type {
     WorkflowState,
 } from "@/lib/api";
 import {
+    approveRequest,
     downloadTicketAttachmentUrl,
     getTicketCustomFieldValues,
+    listApprovalRequests,
     listCustomFields,
+    rejectRequest,
     setTicketCustomFieldValues,
 } from "@/lib/api";
+import type { ApprovalRequest } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 type TicketEditor = {
@@ -85,6 +89,7 @@ const props = defineProps<{
     lockConflict?: TicketLockConflict | null;
     releases?: Release[];
     selectedReleaseId?: string | null;
+    approvalPendingRequestId?: string | null;
 }>();
 
 const sprintToAdd = ref("");
@@ -263,6 +268,70 @@ watch(
     },
     { immediate: true },
 );
+
+// Approval requests
+const approvalRequests = ref<ApprovalRequest[]>([]);
+const approvalLoading = ref(false);
+const approvalDecisionBusy = ref(false);
+const approvalDecisionError = ref("");
+
+async function loadApprovalRequests() {
+    if (!props.ticketId) return;
+    approvalLoading.value = true;
+    try {
+        const res = await listApprovalRequests(props.ticketId);
+        approvalRequests.value = res.items;
+    } catch {
+        // silent
+    } finally {
+        approvalLoading.value = false;
+    }
+}
+
+watch(
+    () => props.approvalPendingRequestId,
+    (id) => {
+        if (id) loadApprovalRequests();
+    },
+);
+
+watch(
+    () => props.ticketId,
+    (id) => {
+        if (id) loadApprovalRequests();
+    },
+    { immediate: true },
+);
+
+const pendingApprovalRequests = computed(() =>
+    approvalRequests.value.filter(r => r.status === "pending"),
+);
+
+async function handleApprove(requestId: string) {
+    approvalDecisionBusy.value = true;
+    approvalDecisionError.value = "";
+    try {
+        const updated = await approveRequest(props.ticketId, requestId);
+        approvalRequests.value = approvalRequests.value.map(r => r.id === requestId ? updated : r);
+    } catch (e: unknown) {
+        approvalDecisionError.value = (e as Error).message ?? "Failed";
+    } finally {
+        approvalDecisionBusy.value = false;
+    }
+}
+
+async function handleReject(requestId: string) {
+    approvalDecisionBusy.value = true;
+    approvalDecisionError.value = "";
+    try {
+        const updated = await rejectRequest(props.ticketId, requestId);
+        approvalRequests.value = approvalRequests.value.map(r => r.id === requestId ? updated : r);
+    } catch (e: unknown) {
+        approvalDecisionError.value = (e as Error).message ?? "Failed";
+    } finally {
+        approvalDecisionBusy.value = false;
+    }
+}
 
 const updateEditor = (patch: Partial<TicketEditor>) => {
     emit("update:editor", { ...props.editor, ...patch });
@@ -535,6 +604,44 @@ const relationLabel = (relationType: string): string => {
                     <strong>{{ props.lockConflict.lockedByName || "Another user" }}</strong>
                     has this ticket open for editing. Your changes cannot be saved until they close it.
                 </span>
+            </div>
+
+            <!-- Approval pending banner -->
+            <div
+                v-if="props.approvalPendingRequestId || pendingApprovalRequests.length > 0"
+                data-testid="ticket.approval_banner"
+                class="mx-6 mt-4 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200"
+            >
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="text-sky-400">&#x23F3;</span>
+                    <strong>Approval required</strong>
+                </div>
+                <div v-for="req in pendingApprovalRequests" :key="req.id" class="flex items-center justify-between gap-3 mt-2">
+                    <span class="text-xs text-sky-300">
+                        {{ req.approvedCount }}/{{ req.requiredCount }} approvals received
+                        <span class="text-muted-foreground ml-1">— requested by {{ req.requestedByName }}</span>
+                    </span>
+                    <div v-if="!props.readOnly" class="flex gap-2">
+                        <button
+                            data-testid="ticket.approve_button"
+                            type="button"
+                            class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300 hover:bg-emerald-500/20 transition"
+                            :disabled="approvalDecisionBusy"
+                            @click="handleApprove(req.id)"
+                        >Approve</button>
+                        <button
+                            data-testid="ticket.reject_button"
+                            type="button"
+                            class="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20 transition"
+                            :disabled="approvalDecisionBusy"
+                            @click="handleReject(req.id)"
+                        >Reject</button>
+                    </div>
+                </div>
+                <div v-if="pendingApprovalRequests.length === 0" class="text-xs text-sky-300">
+                    Waiting for approvers to review this transition.
+                </div>
+                <div v-if="approvalDecisionError" class="text-xs text-rose-300 mt-1">{{ approvalDecisionError }}</div>
             </div>
 
             <!-- Body: scrollable two-column layout -->
