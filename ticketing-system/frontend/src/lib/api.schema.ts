@@ -830,6 +830,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List releases for a project */
+        get: operations["listReleases"];
+        put?: never;
+        /** Create a release */
+        post: operations["createRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/releases/{releaseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a release */
+        get: operations["getRelease"];
+        put?: never;
+        post?: never;
+        /** Delete a release */
+        delete: operations["deleteRelease"];
+        options?: never;
+        head?: never;
+        /** Update a release */
+        patch: operations["updateRelease"];
+        trace?: never;
+    };
+    "/projects/{projectId}/releases/{releaseId}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export release notes */
+        get: operations["exportRelease"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/automation/rules": {
         parameters: {
             query?: never;
@@ -1631,6 +1685,8 @@ export interface components {
             slaStatus?: components["schemas"]["SlaStatus"];
             /** Format: date-time */
             slaBreachAt?: string | null;
+            /** Format: uuid */
+            releaseId?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1718,6 +1774,8 @@ export interface components {
             dueDate?: string | null;
             /** Format: float */
             position?: number;
+            /** Format: uuid */
+            releaseId?: string | null;
         };
         /** @enum {string} */
         IncidentTimelineItemType: "activity" | "comment" | "webhook";
@@ -2433,6 +2491,56 @@ export interface components {
         };
         CustomFieldValueUpsertRequest: {
             values: components["schemas"]["CustomFieldValueInput"][];
+        };
+        /** @enum {string} */
+        ReleaseStatus: "planned" | "in_progress" | "released" | "archived";
+        Release: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            version?: string | null;
+            status: components["schemas"]["ReleaseStatus"];
+            /** Format: date */
+            targetDate?: string | null;
+            notes?: string | null;
+            /** @description Total tickets linked to this release */
+            ticketCount: number;
+            /** @description Closed tickets linked to this release */
+            closedTicketCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ReleaseListResponse: {
+            items: components["schemas"]["Release"][];
+        };
+        ReleaseCreateRequest: {
+            name: string;
+            version?: string | null;
+            status?: components["schemas"]["ReleaseStatus"];
+            /** Format: date */
+            targetDate?: string | null;
+            notes?: string | null;
+        };
+        ReleaseUpdateRequest: {
+            name?: string;
+            version?: string | null;
+            status?: components["schemas"]["ReleaseStatus"];
+            /** Format: date */
+            targetDate?: string | null;
+            notes?: string | null;
+        };
+        ReleaseExportResponse: {
+            /** Format: uuid */
+            releaseId: string;
+            name: string;
+            version?: string | null;
+            status: components["schemas"]["ReleaseStatus"];
+            /** @description Rendered markdown or JSON string depending on format */
+            content: string;
         };
         ErrorResponse: {
             error: string;
@@ -4270,6 +4378,177 @@ export interface operations {
             };
             /** @description Required fields missing for state transition */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listReleases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Release list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseListResponse"];
+                };
+            };
+        };
+    };
+    createRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Release created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+        };
+    };
+    getRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Release */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateRelease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated release */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    exportRelease: {
+        parameters: {
+            query?: {
+                format?: "markdown" | "json";
+            };
+            header?: never;
+            path: {
+                projectId: string;
+                releaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exported release notes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseExportResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

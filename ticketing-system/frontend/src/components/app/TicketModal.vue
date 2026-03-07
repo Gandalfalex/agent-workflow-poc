@@ -9,6 +9,7 @@ import type {
     CustomFieldValue,
     DependencyRelationType,
     IncidentTimelineItem,
+    Release,
     Sprint,
     TicketActivity,
     TicketComment,
@@ -82,6 +83,8 @@ const props = defineProps<{
     ticketId: string;
     readOnly?: boolean;
     lockConflict?: TicketLockConflict | null;
+    releases?: Release[];
+    selectedReleaseId?: string | null;
 }>();
 
 const sprintToAdd = ref("");
@@ -105,6 +108,7 @@ const emit = defineEmits<{
     (e: "delete-time-entry", timeEntryId: string): void;
     (e: "add-to-sprint", sprintId: string): void;
     (e: "remove-from-sprint", sprintId: string): void;
+    (e: "update:selectedReleaseId", value: string | null): void;
 }>();
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -695,6 +699,25 @@ const relationLabel = (relationType: string): string => {
                                     "
                                 />
                             </div>
+                        </div>
+                        <div v-if="props.releases && props.releases.length > 0">
+                            <label class="text-xs font-semibold text-muted-foreground">Release</label>
+                            <select
+                                data-testid="ticket.release_selector"
+                                :value="props.selectedReleaseId || ''"
+                                class="mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                :disabled="props.readOnly"
+                                @change="emit('update:selectedReleaseId', ($event.target as HTMLSelectElement).value || null)"
+                            >
+                                <option value="">— No release —</option>
+                                <option
+                                    v-for="rel in props.releases"
+                                    :key="rel.id"
+                                    :value="rel.id"
+                                >
+                                    {{ rel.name }}{{ rel.version ? ` (${rel.version})` : '' }}
+                                </option>
+                            </select>
                         </div>
                         <div class="rounded-xl border border-border bg-background/40 p-3" data-testid="ticket.incident-section">
                             <div class="flex items-center justify-between">

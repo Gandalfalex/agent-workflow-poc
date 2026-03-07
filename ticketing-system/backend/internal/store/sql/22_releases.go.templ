@@ -1,0 +1,69 @@
+{{define "releases_list.sql"}}
+SELECT
+    r.id,
+    r.project_id,
+    r.name,
+    r.version,
+    r.status,
+    r.target_date,
+    r.notes,
+    COUNT(t.id)::int                                              AS ticket_count,
+    COUNT(t.id) FILTER (WHERE ws.is_closed = true)::int          AS closed_ticket_count,
+    r.created_at,
+    r.updated_at
+FROM releases r
+LEFT JOIN tickets t ON t.release_id = r.id
+LEFT JOIN workflow_states ws ON ws.id = t.state_id
+WHERE r.project_id = $1
+GROUP BY r.id
+ORDER BY r.created_at DESC
+{{end}}
+
+{{define "release_by_id.sql"}}
+SELECT
+    r.id,
+    r.project_id,
+    r.name,
+    r.version,
+    r.status,
+    r.target_date,
+    r.notes,
+    COUNT(t.id)::int                                              AS ticket_count,
+    COUNT(t.id) FILTER (WHERE ws.is_closed = true)::int          AS closed_ticket_count,
+    r.created_at,
+    r.updated_at
+FROM releases r
+LEFT JOIN tickets t ON t.release_id = r.id
+LEFT JOIN workflow_states ws ON ws.id = t.state_id
+WHERE r.id = $1 AND r.project_id = $2
+GROUP BY r.id
+{{end}}
+
+{{define "release_insert.sql"}}
+INSERT INTO releases (id, project_id, name, version, status, target_date, notes, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+{{end}}
+
+{{define "release_update.sql"}}
+UPDATE releases
+SET name = $1, version = $2, status = $3, target_date = $4, notes = $5, updated_at = $6
+WHERE id = $7 AND project_id = $8
+{{end}}
+
+{{define "release_delete.sql"}}
+DELETE FROM releases WHERE id = $1 AND project_id = $2
+{{end}}
+
+{{define "release_tickets.sql"}}
+SELECT
+    t.id,
+    t.key,
+    t.title,
+    t.type,
+    ws.is_closed,
+    ws.name AS state_name
+FROM tickets t
+JOIN workflow_states ws ON ws.id = t.state_id
+WHERE t.release_id = $1
+ORDER BY t.key
+{{end}}

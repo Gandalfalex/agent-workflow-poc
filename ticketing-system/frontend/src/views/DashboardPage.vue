@@ -68,8 +68,8 @@ const typeTrack: Record<string, string> = {
     bug: "bg-rose-400/15",
 };
 
-import type { ProjectActivity, FlowHealthStats } from "@/lib/api";
-import { getFlowHealth } from "@/lib/api";
+import type { ProjectActivity, FlowHealthStats, Release } from "@/lib/api";
+import { getFlowHealth, listReleases } from "@/lib/api";
 
 const relativeTime = (dateStr: string): string => {
     const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -115,6 +115,7 @@ const handleAuthError = (err: unknown) => {
 
 const flowHealth = ref<FlowHealthStats | null>(null);
 const flowHealthLoading = ref(false);
+const releases = ref<Release[]>([]);
 
 const maxThroughput = computed(() =>
     Math.max(1, ...(flowHealth.value?.throughput?.map((d) => d.count) ?? [1])),
@@ -135,7 +136,8 @@ const loadFlowHealth = async () => {
 const loadStats = async () => {
     if (!props.projectId) return;
     try {
-        await Promise.all([
+        const [relRes] = await Promise.all([
+            listReleases(props.projectId).catch(() => ({ items: [] as Release[] })),
             boardStore.loadDashboardStats(props.projectId),
             boardStore.loadProjectActivities(props.projectId),
             boardStore.loadDependencyGraph(props.projectId, { depth: 2 }),
@@ -143,6 +145,7 @@ const loadStats = async () => {
             boardStore.loadCapacitySettings(props.projectId),
             loadFlowHealth(),
         ]);
+        releases.value = relRes.items;
         if (!selectedSprintId.value && boardStore.sprints.length > 0) {
             selectedSprintId.value = boardStore.sprints[0]!.id;
         }
@@ -733,6 +736,49 @@ watch(selectedSprintId, reloadForecast);
                             :title="`${day.day}: ${day.count} tickets`"
                         ></div>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Releases Panel -->
+        <section
+            v-if="releases.length > 0"
+            data-testid="dashboard.releases_section"
+            class="rounded-2xl border border-border bg-card/80 p-5 shadow-sm"
+        >
+            <p class="text-[10px] uppercase tracking-[0.2em] font-semibold text-muted-foreground mb-4">
+                Releases
+            </p>
+            <div class="space-y-3">
+                <div
+                    v-for="rel in releases.filter(r => r.status !== 'archived')"
+                    :key="rel.id"
+                    class="flex items-center gap-3"
+                >
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-sm font-medium truncate">{{ rel.name }}</span>
+                            <span v-if="rel.version" class="text-xs text-muted-foreground">{{ rel.version }}</span>
+                            <span
+                                class="rounded-full px-2 py-0.5 text-[10px] font-semibold border"
+                                :class="{
+                                    'bg-blue-500/15 text-blue-300 border-blue-500/25': rel.status === 'planned',
+                                    'bg-amber-500/15 text-amber-300 border-amber-500/25': rel.status === 'in_progress',
+                                    'bg-emerald-500/15 text-emerald-300 border-emerald-500/25': rel.status === 'released',
+                                }"
+                            >{{ rel.status }}</span>
+                        </div>
+                        <div class="h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                                class="h-full rounded-full transition-all"
+                                :class="rel.status === 'released' ? 'bg-emerald-500' : 'bg-primary'"
+                                :style="{ width: rel.ticketCount > 0 ? Math.round((rel.closedTicketCount / rel.ticketCount) * 100) + '%' : (rel.status === 'released' ? '100%' : '0%') }"
+                            ></div>
+                        </div>
+                    </div>
+                    <span class="text-xs text-muted-foreground tabular-nums shrink-0">
+                        {{ rel.closedTicketCount }}/{{ rel.ticketCount }}
+                    </span>
                 </div>
             </div>
         </section>

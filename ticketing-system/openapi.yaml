@@ -21,6 +21,7 @@ tags:
   - name: ai-triage
   - name: admin
   - name: custom-fields
+  - name: releases
 
 security:
   - sessionAuth: []
@@ -1753,6 +1754,176 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /projects/{projectId}/releases:
+    get:
+      summary: List releases for a project
+      operationId: listReleases
+      tags: [releases]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Release list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseListResponse"
+    post:
+      summary: Create a release
+      operationId: createRelease
+      tags: [releases]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseCreateRequest"
+      responses:
+        "201":
+          description: Release created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Release"
+
+  /projects/{projectId}/releases/{releaseId}:
+    get:
+      summary: Get a release
+      operationId: getRelease
+      tags: [releases]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Release
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Release"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      summary: Update a release
+      operationId: updateRelease
+      tags: [releases]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseUpdateRequest"
+      responses:
+        "200":
+          description: Updated release
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Release"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete a release
+      operationId: deleteRelease
+      tags: [releases]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/releases/{releaseId}/export:
+    get:
+      summary: Export release notes
+      operationId: exportRelease
+      tags: [releases]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: releaseId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [markdown, json]
+            default: markdown
+      responses:
+        "200":
+          description: Exported release notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseExportResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /projects/{projectId}/automation/rules:
     get:
       summary: List automation rules
@@ -3412,6 +3583,10 @@ components:
           type: string
           format: date-time
           nullable: true
+        releaseId:
+          type: string
+          format: uuid
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -3608,6 +3783,10 @@ components:
         position:
           type: number
           format: float
+        releaseId:
+          type: string
+          format: uuid
+          nullable: true
 
     IncidentTimelineItemType:
       type: string
@@ -5141,6 +5320,111 @@ components:
           items:
             $ref: "#/components/schemas/CustomFieldValueInput"
       required: [values]
+
+    ReleaseStatus:
+      type: string
+      enum: [planned, in_progress, released, archived]
+
+    Release:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ReleaseStatus"
+        targetDate:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        ticketCount:
+          type: integer
+          description: Total tickets linked to this release
+        closedTicketCount:
+          type: integer
+          description: Closed tickets linked to this release
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, name, status, ticketCount, closedTicketCount, createdAt, updatedAt]
+
+    ReleaseListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Release"
+      required: [items]
+
+    ReleaseCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ReleaseStatus"
+        targetDate:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required: [name]
+
+    ReleaseUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ReleaseStatus"
+        targetDate:
+          type: string
+          format: date
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    ReleaseExportResponse:
+      type: object
+      properties:
+        releaseId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        version:
+          type: string
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ReleaseStatus"
+        content:
+          type: string
+          description: Rendered markdown or JSON string depending on format
+      required: [releaseId, name, status, content]
 
     ErrorResponse:
       type: object

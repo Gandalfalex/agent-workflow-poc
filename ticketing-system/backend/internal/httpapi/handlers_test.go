@@ -857,6 +857,30 @@ func (f *fakeStore) GetStateTicketCount(ctx context.Context, stateID uuid.UUID) 
 	return 0, nil
 }
 
+func (f *fakeStore) ListReleases(ctx context.Context, projectID uuid.UUID) ([]store.Release, error) {
+	return []store.Release{}, nil
+}
+
+func (f *fakeStore) GetRelease(ctx context.Context, id, projectID uuid.UUID) (store.Release, error) {
+	return store.Release{}, store.ErrReleaseNotFound
+}
+
+func (f *fakeStore) CreateRelease(ctx context.Context, projectID uuid.UUID, input store.ReleaseCreateInput) (store.Release, error) {
+	return store.Release{}, nil
+}
+
+func (f *fakeStore) UpdateRelease(ctx context.Context, id, projectID uuid.UUID, input store.ReleaseUpdateInput) (store.Release, error) {
+	return store.Release{}, store.ErrReleaseNotFound
+}
+
+func (f *fakeStore) DeleteRelease(ctx context.Context, id, projectID uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeStore) GetReleaseTickets(ctx context.Context, releaseID uuid.UUID) ([]store.ReleaseTicket, error) {
+	return []store.ReleaseTicket{}, nil
+}
+
 type fakeAuth struct {
 	loginUser  auth.User
 	loginToken auth.TokenSet

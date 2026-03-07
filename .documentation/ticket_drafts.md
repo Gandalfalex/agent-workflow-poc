@@ -830,7 +830,7 @@ CREATE INDEX ON ticket_locks (expires_at);
 ### TKT-031: WIP Limits and Flow Health Insights
 - **Priority:** `P1`
 - **Type:** `feature`
-- **Status:** `Todo`
+- **Status:** `Completed` (March 7, 2026)
 - **Problem:** Teams can overload columns without feedback, increasing cycle time and context switching.
 - **Scope:**
   - Add per-workflow-state WIP limit settings.
@@ -846,7 +846,7 @@ CREATE INDEX ON ticket_locks (expires_at);
 ### TKT-032: Release and Version Management
 - **Priority:** `P1-P2`
 - **Type:** `feature`
-- **Status:** `Todo`
+- **Status:** `Completed` (March 7, 2026)
 - **Problem:** Planning and delivery are disconnected; teams cannot package tickets into releasable versions with clear notes.
 - **Scope:**
   - Add release entities (`name`, `version`, `status`, `targetDate`, `notes`).

@@ -49,6 +49,7 @@ type Ticket struct {
 	// SlaStatus and SlaBreachAt are computed in-process from SLA policies, not stored.
 	SlaStatus   *string
 	SlaBreachAt *time.Time
+	ReleaseID   *uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -97,6 +98,8 @@ type TicketUpdateInput struct {
 	TimeEstimate        *int
 	DueDate             *time.Time
 	ClearDueDate        bool
+	ReleaseID           *uuid.UUID
+	ClearReleaseID      bool
 }
 
 func (s *Store) ListTickets(ctx context.Context, filter TicketFilter) ([]Ticket, int, error) {
@@ -327,6 +330,11 @@ func (s *Store) UpdateTicket(ctx context.Context, id uuid.UUID, input TicketUpda
 		} else if input.DueDate != nil {
 			updates = append(updates, fmt.Sprintf("due_date = %s", arg(*input.DueDate)))
 		}
+		if input.ClearReleaseID {
+			updates = append(updates, "release_id = NULL")
+		} else if input.ReleaseID != nil {
+			updates = append(updates, fmt.Sprintf("release_id = %s", arg(*input.ReleaseID)))
+		}
 
 		position := input.Position
 		if position == nil && input.StateID != nil && newState != currentState {
@@ -443,6 +451,7 @@ func scanTicket(row pgx.Row) (Ticket, error) {
 		&ticket.AssigneeName,
 		&ticket.IncidentCommanderName,
 		&ticket.DueDate,
+		&ticket.ReleaseID,
 	)
 	return ticket, err
 }

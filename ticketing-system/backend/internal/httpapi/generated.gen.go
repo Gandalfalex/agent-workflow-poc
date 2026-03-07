@@ -86,6 +86,14 @@ const (
 	Viewer      ProjectRole = "viewer"
 )
 
+// Defines values for ReleaseStatus.
+const (
+	ReleaseStatusArchived   ReleaseStatus = "archived"
+	ReleaseStatusInProgress ReleaseStatus = "in_progress"
+	ReleaseStatusPlanned    ReleaseStatus = "planned"
+	ReleaseStatusReleased   ReleaseStatus = "released"
+)
+
 // Defines values for SlaStatus.
 const (
 	AtRisk   SlaStatus = "at_risk"
@@ -95,10 +103,10 @@ const (
 
 // Defines values for SprintStatus.
 const (
-	Active    SprintStatus = "active"
-	Completed SprintStatus = "completed"
-	Pending   SprintStatus = "pending"
-	Planned   SprintStatus = "planned"
+	SprintStatusActive    SprintStatus = "active"
+	SprintStatusCompleted SprintStatus = "completed"
+	SprintStatusPending   SprintStatus = "pending"
+	SprintStatusPlanned   SprintStatus = "planned"
 )
 
 // Defines values for TicketIncidentSeverity.
@@ -137,10 +145,16 @@ const (
 	GetPortfolioStatsParamsFormatJson GetPortfolioStatsParamsFormat = "json"
 )
 
+// Defines values for ExportReleaseParamsFormat.
+const (
+	ExportReleaseParamsFormatJson     ExportReleaseParamsFormat = "json"
+	ExportReleaseParamsFormatMarkdown ExportReleaseParamsFormat = "markdown"
+)
+
 // Defines values for ExportProjectReportingSnapshotParamsFormat.
 const (
-	ExportProjectReportingSnapshotParamsFormatCsv  ExportProjectReportingSnapshotParamsFormat = "csv"
-	ExportProjectReportingSnapshotParamsFormatJson ExportProjectReportingSnapshotParamsFormat = "json"
+	Csv  ExportProjectReportingSnapshotParamsFormat = "csv"
+	Json ExportProjectReportingSnapshotParamsFormat = "json"
 )
 
 // AdminUserCreateRequest defines model for AdminUserCreateRequest.
@@ -852,6 +866,60 @@ type ProjectUpdateRequest struct {
 	Name                      *string `json:"name,omitempty"`
 }
 
+// Release defines model for Release.
+type Release struct {
+	// ClosedTicketCount Closed tickets linked to this release
+	ClosedTicketCount int                 `json:"closedTicketCount"`
+	CreatedAt         time.Time           `json:"createdAt"`
+	Id                openapi_types.UUID  `json:"id"`
+	Name              string              `json:"name"`
+	Notes             *string             `json:"notes"`
+	ProjectId         openapi_types.UUID  `json:"projectId"`
+	Status            ReleaseStatus       `json:"status"`
+	TargetDate        *openapi_types.Date `json:"targetDate"`
+
+	// TicketCount Total tickets linked to this release
+	TicketCount int       `json:"ticketCount"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	Version     *string   `json:"version"`
+}
+
+// ReleaseCreateRequest defines model for ReleaseCreateRequest.
+type ReleaseCreateRequest struct {
+	Name       string              `json:"name"`
+	Notes      *string             `json:"notes"`
+	Status     *ReleaseStatus      `json:"status,omitempty"`
+	TargetDate *openapi_types.Date `json:"targetDate"`
+	Version    *string             `json:"version"`
+}
+
+// ReleaseExportResponse defines model for ReleaseExportResponse.
+type ReleaseExportResponse struct {
+	// Content Rendered markdown or JSON string depending on format
+	Content   string             `json:"content"`
+	Name      string             `json:"name"`
+	ReleaseId openapi_types.UUID `json:"releaseId"`
+	Status    ReleaseStatus      `json:"status"`
+	Version   *string            `json:"version"`
+}
+
+// ReleaseListResponse defines model for ReleaseListResponse.
+type ReleaseListResponse struct {
+	Items []Release `json:"items"`
+}
+
+// ReleaseStatus defines model for ReleaseStatus.
+type ReleaseStatus string
+
+// ReleaseUpdateRequest defines model for ReleaseUpdateRequest.
+type ReleaseUpdateRequest struct {
+	Name       *string             `json:"name,omitempty"`
+	Notes      *string             `json:"notes"`
+	Status     *ReleaseStatus      `json:"status,omitempty"`
+	TargetDate *openapi_types.Date `json:"targetDate"`
+	Version    *string             `json:"version"`
+}
+
 // SlaPolicyEntry SLA target durations for a specific priority+type combination.
 type SlaPolicyEntry struct {
 	// AtRiskThresholdPct Percentage of completion window at which ticket becomes at_risk (default 80).
@@ -1014,14 +1082,15 @@ type Ticket struct {
 	ProjectId openapi_types.UUID `json:"projectId"`
 
 	// ProjectKey 4-character uppercase alphanumeric project key.
-	ProjectKey  ProjectKey         `json:"projectKey"`
-	SlaBreachAt *time.Time         `json:"slaBreachAt"`
-	SlaStatus   *SlaStatus         `json:"slaStatus,omitempty"`
-	State       *WorkflowState     `json:"state,omitempty"`
-	StateId     openapi_types.UUID `json:"stateId"`
-	Story       *Story             `json:"story,omitempty"`
-	StoryId     openapi_types.UUID `json:"storyId"`
-	StoryPoints *int               `json:"storyPoints"`
+	ProjectKey  ProjectKey          `json:"projectKey"`
+	ReleaseId   *openapi_types.UUID `json:"releaseId"`
+	SlaBreachAt *time.Time          `json:"slaBreachAt"`
+	SlaStatus   *SlaStatus          `json:"slaStatus,omitempty"`
+	State       *WorkflowState      `json:"state,omitempty"`
+	StateId     openapi_types.UUID  `json:"stateId"`
+	Story       *Story              `json:"story,omitempty"`
+	StoryId     openapi_types.UUID  `json:"storyId"`
+	StoryPoints *int                `json:"storyPoints"`
 
 	// TimeEstimate Estimated effort in minutes
 	TimeEstimate *int `json:"timeEstimate"`
@@ -1178,6 +1247,7 @@ type TicketUpdateRequest struct {
 	IncidentSeverity    *TicketIncidentSeverity `json:"incidentSeverity,omitempty"`
 	Position            *float32                `json:"position,omitempty"`
 	Priority            *TicketPriority         `json:"priority,omitempty"`
+	ReleaseId           *openapi_types.UUID     `json:"releaseId"`
 	StateId             *openapi_types.UUID     `json:"stateId,omitempty"`
 	StoryId             *openapi_types.UUID     `json:"storyId,omitempty"`
 	StoryPoints         *int                    `json:"storyPoints"`
@@ -1378,6 +1448,14 @@ type ListNotificationsParams struct {
 	UnreadOnly *bool `form:"unreadOnly,omitempty" json:"unreadOnly,omitempty"`
 }
 
+// ExportReleaseParams defines parameters for ExportRelease.
+type ExportReleaseParams struct {
+	Format *ExportReleaseParamsFormat `form:"format,omitempty" json:"format,omitempty"`
+}
+
+// ExportReleaseParamsFormat defines parameters for ExportRelease.
+type ExportReleaseParamsFormat string
+
 // ExportProjectReportingSnapshotParams defines parameters for ExportProjectReportingSnapshot.
 type ExportProjectReportingSnapshotParams struct {
 	From   *openapi_types.Date                         `form:"from,omitempty" json:"from,omitempty"`
@@ -1483,6 +1561,12 @@ type UpdateNotificationPreferencesJSONRequestBody = NotificationPreferencesUpdat
 
 // UpsertPresenceJSONRequestBody defines body for UpsertPresence for application/json ContentType.
 type UpsertPresenceJSONRequestBody = PresenceUpsertRequest
+
+// CreateReleaseJSONRequestBody defines body for CreateRelease for application/json ContentType.
+type CreateReleaseJSONRequestBody = ReleaseCreateRequest
+
+// UpdateReleaseJSONRequestBody defines body for UpdateRelease for application/json ContentType.
+type UpdateReleaseJSONRequestBody = ReleaseUpdateRequest
 
 // UpdateSlaPoliciesJSONRequestBody defines body for UpdateSlaPolicies for application/json ContentType.
 type UpdateSlaPoliciesJSONRequestBody = SlaPolicyUpdateRequest
@@ -1720,6 +1804,24 @@ type ServerInterface interface {
 	// Upsert current user presence in a project
 	// (POST /projects/{projectId}/presence)
 	UpsertPresence(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// List releases for a project
+	// (GET /projects/{projectId}/releases)
+	ListReleases(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Create a release
+	// (POST /projects/{projectId}/releases)
+	CreateRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Delete a release
+	// (DELETE /projects/{projectId}/releases/{releaseId})
+	DeleteRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID)
+	// Get a release
+	// (GET /projects/{projectId}/releases/{releaseId})
+	GetRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID)
+	// Update a release
+	// (PATCH /projects/{projectId}/releases/{releaseId})
+	UpdateRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID)
+	// Export release notes
+	// (GET /projects/{projectId}/releases/{releaseId}/export)
+	ExportRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID, params ExportReleaseParams)
 	// Export project reporting snapshot
 	// (GET /projects/{projectId}/reporting/export)
 	ExportProjectReportingSnapshot(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, params ExportProjectReportingSnapshotParams)
@@ -2239,6 +2341,42 @@ func (_ Unimplemented) MarkNotificationRead(w http.ResponseWriter, r *http.Reque
 // Upsert current user presence in a project
 // (POST /projects/{projectId}/presence)
 func (_ Unimplemented) UpsertPresence(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List releases for a project
+// (GET /projects/{projectId}/releases)
+func (_ Unimplemented) ListReleases(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a release
+// (POST /projects/{projectId}/releases)
+func (_ Unimplemented) CreateRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete a release
+// (DELETE /projects/{projectId}/releases/{releaseId})
+func (_ Unimplemented) DeleteRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a release
+// (GET /projects/{projectId}/releases/{releaseId})
+func (_ Unimplemented) GetRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update a release
+// (PATCH /projects/{projectId}/releases/{releaseId})
+func (_ Unimplemented) UpdateRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Export release notes
+// (GET /projects/{projectId}/releases/{releaseId}/export)
+func (_ Unimplemented) ExportRelease(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, releaseId openapi_types.UUID, params ExportReleaseParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4500,6 +4638,239 @@ func (siw *ServerInterfaceWrapper) UpsertPresence(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpsertPresence(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListReleases operation middleware
+func (siw *ServerInterfaceWrapper) ListReleases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListReleases(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRelease operation middleware
+func (siw *ServerInterfaceWrapper) CreateRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRelease(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteRelease operation middleware
+func (siw *ServerInterfaceWrapper) DeleteRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "releaseId" -------------
+	var releaseId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "releaseId", chi.URLParam(r, "releaseId"), &releaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "releaseId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteRelease(w, r, projectId, releaseId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRelease operation middleware
+func (siw *ServerInterfaceWrapper) GetRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "releaseId" -------------
+	var releaseId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "releaseId", chi.URLParam(r, "releaseId"), &releaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "releaseId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRelease(w, r, projectId, releaseId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateRelease operation middleware
+func (siw *ServerInterfaceWrapper) UpdateRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "releaseId" -------------
+	var releaseId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "releaseId", chi.URLParam(r, "releaseId"), &releaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "releaseId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateRelease(w, r, projectId, releaseId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportRelease operation middleware
+func (siw *ServerInterfaceWrapper) ExportRelease(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "releaseId" -------------
+	var releaseId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "releaseId", chi.URLParam(r, "releaseId"), &releaseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "releaseId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ExportReleaseParams
+
+	// ------------- Optional query parameter "format" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "format", r.URL.Query(), &params.Format)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "format", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportRelease(w, r, projectId, releaseId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6779,6 +7150,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/presence", wrapper.UpsertPresence)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/releases", wrapper.ListReleases)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/releases", wrapper.CreateRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/releases/{releaseId}", wrapper.DeleteRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/releases/{releaseId}", wrapper.GetRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/projects/{projectId}/releases/{releaseId}", wrapper.UpdateRelease)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/releases/{releaseId}/export", wrapper.ExportRelease)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/reporting/export", wrapper.ExportProjectReportingSnapshot)

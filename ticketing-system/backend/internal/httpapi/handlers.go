@@ -134,6 +134,12 @@ type Store interface {
 	ReleaseTicketLock(ctx context.Context, ticketID, userID uuid.UUID) error
 	GetFlowHealthStats(ctx context.Context, projectID uuid.UUID) (store.FlowHealthStats, error)
 	GetStateTicketCount(ctx context.Context, stateID uuid.UUID) (int, error)
+	ListReleases(ctx context.Context, projectID uuid.UUID) ([]store.Release, error)
+	GetRelease(ctx context.Context, id, projectID uuid.UUID) (store.Release, error)
+	CreateRelease(ctx context.Context, projectID uuid.UUID, input store.ReleaseCreateInput) (store.Release, error)
+	UpdateRelease(ctx context.Context, id, projectID uuid.UUID, input store.ReleaseUpdateInput) (store.Release, error)
+	DeleteRelease(ctx context.Context, id, projectID uuid.UUID) error
+	GetReleaseTickets(ctx context.Context, releaseID uuid.UUID) ([]store.ReleaseTicket, error)
 	ListCustomFields(ctx context.Context, projectID uuid.UUID) ([]store.CustomFieldDefinition, error)
 	GetCustomField(ctx context.Context, id, projectID uuid.UUID) (store.CustomFieldDefinition, error)
 	CreateCustomField(ctx context.Context, projectID uuid.UUID, input store.CustomFieldCreateInput) (store.CustomFieldDefinition, error)
@@ -1260,6 +1266,14 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 			input.ClearDueDate = true
 		} else {
 			input.DueDate = req.DueDate
+		}
+	}
+	if req.ReleaseId != nil {
+		if *req.ReleaseId == (uuid.UUID{}) {
+			input.ClearReleaseID = true
+		} else {
+			id := uuid.UUID(*req.ReleaseId)
+			input.ReleaseID = &id
 		}
 	}
 

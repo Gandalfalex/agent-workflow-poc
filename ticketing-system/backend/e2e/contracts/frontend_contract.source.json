@@ -230,7 +230,18 @@
     "settings.custom_fields_item": "settings.custom_fields_item",
     "ticket.custom_fields_section": "ticket.custom_fields_section",
     "ticket.custom_fields_save_button": "ticket.custom_fields_save_button",
-    "new-ticket.custom_fields_section": "new-ticket.custom_fields_section"
+    "new-ticket.custom_fields_section": "new-ticket.custom_fields_section",
+    "settings.releases_tab": "settings.releases_tab",
+    "settings.releases_view": "settings.releases_view",
+    "settings.releases_add_button": "settings.releases_add_button",
+    "settings.releases_form": "settings.releases_form",
+    "settings.releases_name_input": "settings.releases_name_input",
+    "settings.releases_status_select": "settings.releases_status_select",
+    "settings.releases_save_button": "settings.releases_save_button",
+    "settings.releases_list": "settings.releases_list",
+    "settings.releases_item": "settings.releases_item",
+    "ticket.release_selector": "ticket.release_selector",
+    "dashboard.releases_section": "dashboard.releases_section"
   },
   "flows": {
     "smoke_login_screen": {

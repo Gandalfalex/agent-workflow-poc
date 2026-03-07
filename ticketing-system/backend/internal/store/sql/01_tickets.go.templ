@@ -10,7 +10,8 @@ COALESCE(blockers.blocked_by_count, 0) AS blocked_by_count,
 (COALESCE(blockers.blocked_by_count, 0) > 0) AS is_blocked,
 u.name,
 cu.name,
-t.due_date
+t.due_date,
+t.release_id
 {{end}}
 
 {{define "ticket_select_joins"}}

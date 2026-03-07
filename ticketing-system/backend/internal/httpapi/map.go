@@ -115,6 +115,7 @@ func mapTicket(ticket store.Ticket) ticketResponse {
 		DueDate:             ticket.DueDate,
 		SlaStatus:           (*SlaStatus)(ticket.SlaStatus),
 		SlaBreachAt:         ticket.SlaBreachAt,
+		ReleaseId:           (*openapi_types.UUID)(ticket.ReleaseID),
 		CreatedAt:           ticket.CreatedAt,
 		UpdatedAt:           ticket.UpdatedAt,
 	}

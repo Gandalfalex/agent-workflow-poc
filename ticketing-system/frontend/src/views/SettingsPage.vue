@@ -9,17 +9,22 @@ import { useSessionStore } from "@/stores/session";
 import {
     createAdminUser,
     createCustomField,
+    createRelease,
     deleteCustomField,
+    deleteRelease,
     exportProjectReportingSnapshot,
+    exportRelease,
     getProjectAiTriageSettings,
     getSlaPolicies,
     listCustomFields,
     listProjectCapacitySettings,
+    listReleases,
     replaceProjectCapacitySettings,
     syncUsersFromIdentityProvider,
     updateCustomField,
     updateProject,
     updateProjectAiTriageSettings,
+    updateRelease,
     updateSlaPolicies,
 } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -32,6 +37,8 @@ import type {
     CustomFieldTypeSchema,
     Group,
     ProjectRole,
+    Release,
+    ReleaseStatus,
     ReportingExportFormat,
     SlaPolicyEntry,
     WebhookDelivery,
@@ -50,7 +57,7 @@ const sessionStore = useSessionStore();
 const { t } = useI18n();
 
 const settingsTab = ref<
-    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation" | "sla" | "custom-fields"
+    "projects" | "users" | "webhooks" | "workflow" | "reporting" | "sprints" | "audit" | "automation" | "sla" | "custom-fields" | "releases"
 >(
     "projects",
 );
@@ -264,6 +271,106 @@ async function saveSlaPolicies() {
         // ignore
     } finally {
         slaSaving.value = false;
+    }
+}
+
+// Releases tab state
+const releases = ref<Release[]>([]);
+const releasesLoading = ref(false);
+const releaseError = ref("");
+const showReleaseForm = ref(false);
+const editingReleaseId = ref<string | null>(null);
+const releaseForm = ref<{
+    name: string;
+    version: string;
+    status: ReleaseStatus;
+    targetDate: string;
+    notes: string;
+}>({ name: "", version: "", status: "planned", targetDate: "", notes: "" });
+
+async function loadReleases() {
+    if (!selectedProjectId.value) return;
+    releasesLoading.value = true;
+    try {
+        const res = await listReleases(selectedProjectId.value);
+        releases.value = res.items;
+    } catch {
+        // ignore
+    } finally {
+        releasesLoading.value = false;
+    }
+}
+
+function resetReleaseForm() {
+    releaseForm.value = { name: "", version: "", status: "planned", targetDate: "", notes: "" };
+    editingReleaseId.value = null;
+    showReleaseForm.value = false;
+    releaseError.value = "";
+}
+
+function startEditRelease(r: Release) {
+    releaseForm.value = {
+        name: r.name,
+        version: r.version ?? "",
+        status: r.status,
+        targetDate: r.targetDate ?? "",
+        notes: r.notes ?? "",
+    };
+    editingReleaseId.value = r.id;
+    showReleaseForm.value = true;
+    releaseError.value = "";
+}
+
+async function saveRelease() {
+    if (!selectedProjectId.value || !releaseForm.value.name.trim()) {
+        releaseError.value = "Name is required.";
+        return;
+    }
+    releaseError.value = "";
+    const data = {
+        name: releaseForm.value.name.trim(),
+        version: releaseForm.value.version || undefined,
+        status: releaseForm.value.status,
+        targetDate: releaseForm.value.targetDate || undefined,
+        notes: releaseForm.value.notes || undefined,
+    };
+    try {
+        if (editingReleaseId.value) {
+            await updateRelease(selectedProjectId.value, editingReleaseId.value, data);
+        } else {
+            await createRelease(selectedProjectId.value, data);
+        }
+        resetReleaseForm();
+        await loadReleases();
+    } catch {
+        releaseError.value = "Failed to save release.";
+    }
+}
+
+async function deleteReleaseById(id: string) {
+    if (!selectedProjectId.value) return;
+    if (!window.confirm("Delete this release? Tickets will be unlinked.")) return;
+    try {
+        await deleteRelease(selectedProjectId.value, id);
+        await loadReleases();
+    } catch {
+        // ignore
+    }
+}
+
+async function exportReleaseNotes(id: string, format: "markdown" | "json") {
+    if (!selectedProjectId.value) return;
+    try {
+        const res = await exportRelease(selectedProjectId.value, id, format);
+        const blob = new Blob([res.content], { type: format === "json" ? "application/json" : "text/markdown" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `release-${res.name.replace(/\s+/g, "-")}.${format === "json" ? "json" : "md"}`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch {
+        // ignore
     }
 }
 
@@ -1367,6 +1474,15 @@ watch(selectedGroupId, async () => {
                 @click="settingsTab = 'custom-fields'; loadCustomFields()"
             >
                 Custom Fields
+            </Button>
+            <Button
+                data-testid="settings.releases_tab"
+                variant="ghost"
+                size="sm"
+                :disabled="settingsTab === 'releases'"
+                @click="settingsTab = 'releases'; loadReleases()"
+            >
+                Releases
             </Button>
         </div>
     </section>
@@ -3286,6 +3402,153 @@ watch(selectedGroupId, async () => {
                     >Delete</Button>
                 </div>
             </div>
+        </div>
+    </section>
+
+    <!-- Releases tab -->
+    <section
+        v-if="settingsTab === 'releases'"
+        data-testid="settings.releases_view"
+        class="rounded-3xl border border-border bg-card/80 p-6 shadow-sm"
+    >
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">Settings</p>
+                <h2 class="mt-1 text-xl font-semibold">Releases</h2>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Create and manage release versions. Link tickets to releases and export release notes.
+                </p>
+            </div>
+            <Button
+                data-testid="settings.releases_add_button"
+                size="sm"
+                @click="showReleaseForm = !showReleaseForm; editingReleaseId = null; resetReleaseForm(); showReleaseForm = true"
+            >
+                + New Release
+            </Button>
+        </div>
+
+        <!-- Create/Edit form -->
+        <div
+            v-if="showReleaseForm"
+            data-testid="settings.releases_form"
+            class="mb-6 rounded-2xl border border-border bg-muted/30 p-4 space-y-3"
+        >
+            <h3 class="text-sm font-semibold">{{ editingReleaseId ? "Edit Release" : "New Release" }}</h3>
+
+            <div v-if="releaseError" class="text-xs text-destructive">{{ releaseError }}</div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="mb-1 block text-xs text-muted-foreground">Name *</label>
+                    <input
+                        data-testid="settings.releases_name_input"
+                        v-model="releaseForm.name"
+                        type="text"
+                        placeholder="v1.2.0"
+                        class="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs text-muted-foreground">Version</label>
+                    <input
+                        v-model="releaseForm.version"
+                        type="text"
+                        placeholder="1.2.0"
+                        class="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs text-muted-foreground">Status</label>
+                    <select
+                        data-testid="settings.releases_status_select"
+                        v-model="releaseForm.status"
+                        class="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="planned">Planned</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="released">Released</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs text-muted-foreground">Target Date</label>
+                    <input
+                        v-model="releaseForm.targetDate"
+                        type="date"
+                        class="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                </div>
+            </div>
+            <div>
+                <label class="mb-1 block text-xs text-muted-foreground">Notes</label>
+                <textarea
+                    v-model="releaseForm.notes"
+                    rows="3"
+                    placeholder="Optional release notes..."
+                    class="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+            </div>
+            <div class="flex gap-2">
+                <Button
+                    data-testid="settings.releases_save_button"
+                    size="sm"
+                    @click="saveRelease"
+                >
+                    {{ editingReleaseId ? "Update" : "Create" }}
+                </Button>
+                <Button variant="ghost" size="sm" @click="resetReleaseForm">Cancel</Button>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div v-if="releasesLoading" class="text-sm text-muted-foreground">Loading releases...</div>
+
+        <!-- List -->
+        <div v-else-if="releases.length > 0" data-testid="settings.releases_list" class="space-y-3">
+            <div
+                v-for="r in releases"
+                :key="r.id"
+                data-testid="settings.releases_item"
+                class="flex items-center justify-between rounded-xl border border-border bg-background px-4 py-3"
+            >
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <span class="font-medium text-sm">{{ r.name }}</span>
+                        <span v-if="r.version" class="text-xs text-muted-foreground">{{ r.version }}</span>
+                        <span
+                            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                            :class="{
+                                'bg-muted text-muted-foreground': r.status === 'planned',
+                                'bg-blue-500/15 text-blue-500': r.status === 'in_progress',
+                                'bg-emerald-500/15 text-emerald-600': r.status === 'released',
+                                'bg-zinc-500/15 text-zinc-500': r.status === 'archived',
+                            }"
+                        >
+                            {{ r.status.replace("_", " ") }}
+                        </span>
+                    </div>
+                    <div class="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{{ r.closedTicketCount }}/{{ r.ticketCount }} tickets closed</span>
+                        <span v-if="r.targetDate">Target: {{ r.targetDate }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 ml-4">
+                    <Button variant="ghost" size="sm" @click="exportReleaseNotes(r.id, 'markdown')" title="Export Markdown">↓ MD</Button>
+                    <Button variant="ghost" size="sm" @click="exportReleaseNotes(r.id, 'json')" title="Export JSON">↓ JSON</Button>
+                    <Button variant="ghost" size="sm" @click="startEditRelease(r)">Edit</Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        class="text-destructive hover:text-destructive"
+                        @click="deleteReleaseById(r.id)"
+                    >Delete</Button>
+                </div>
+            </div>
+        </div>
+
+        <div v-else-if="!releasesLoading" class="text-sm text-muted-foreground">
+            No releases yet. Create one to start tracking versions.
         </div>
     </section>
 </template>

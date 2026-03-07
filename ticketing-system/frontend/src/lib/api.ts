@@ -191,6 +191,12 @@ export type FlowHealthStats = components["schemas"]["FlowHealthStats"];
 export type FlowHealthWipStat = components["schemas"]["FlowHealthWipStat"];
 export type CycleTimePercentiles = components["schemas"]["CycleTimePercentiles"];
 export type ThroughputDay = components["schemas"]["ThroughputDay"];
+export type ReleaseStatus = components["schemas"]["ReleaseStatus"];
+export type Release = components["schemas"]["Release"];
+export type ReleaseListResponse = components["schemas"]["ReleaseListResponse"];
+export type ReleaseCreateRequest = components["schemas"]["ReleaseCreateRequest"];
+export type ReleaseUpdateRequest = components["schemas"]["ReleaseUpdateRequest"];
+export type ReleaseExportResponse = components["schemas"]["ReleaseExportResponse"];
 
 // Live Collaboration types (not in generated schema)
 export type TicketLock = {
@@ -1374,4 +1380,55 @@ export async function getFlowHealth(
 ): Promise<FlowHealthStats> {
   const id = resolveProjectId(projectId);
   return request<FlowHealthStats>(`/projects/${id}/flow-health`);
+}
+
+export async function listReleases(
+  projectId: string | undefined,
+): Promise<ReleaseListResponse> {
+  const id = resolveProjectId(projectId);
+  return request<ReleaseListResponse>(`/projects/${id}/releases`);
+}
+
+export async function createRelease(
+  projectId: string | undefined,
+  data: ReleaseCreateRequest,
+): Promise<Release> {
+  const id = resolveProjectId(projectId);
+  return request<Release>(`/projects/${id}/releases`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRelease(
+  projectId: string | undefined,
+  releaseId: string,
+  data: ReleaseUpdateRequest,
+): Promise<Release> {
+  const id = resolveProjectId(projectId);
+  return request<Release>(`/projects/${id}/releases/${releaseId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRelease(
+  projectId: string | undefined,
+  releaseId: string,
+): Promise<void> {
+  const id = resolveProjectId(projectId);
+  return request<void>(`/projects/${id}/releases/${releaseId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function exportRelease(
+  projectId: string | undefined,
+  releaseId: string,
+  format: "markdown" | "json" = "markdown",
+): Promise<ReleaseExportResponse> {
+  const id = resolveProjectId(projectId);
+  return request<ReleaseExportResponse>(
+    `/projects/${id}/releases/${releaseId}/export?format=${format}`,
+  );
 }

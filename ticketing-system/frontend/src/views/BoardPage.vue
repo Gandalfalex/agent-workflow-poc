@@ -24,6 +24,7 @@ import {
     createAiTriageSuggestion,
     getProjectAiTriageSettings,
     getTicketIncidentPostmortem,
+    listReleases,
     listTicketIncidentTimeline,
     recordAiTriageSuggestionDecision,
     setTicketCustomFieldValues,
@@ -38,6 +39,7 @@ import type {
     CustomFieldValueInput,
     DependencyRelationType,
     IncidentTimelineItem,
+    Release,
     SprintCompleteRequest,
     TicketPriority,
     TicketIncidentSeverity,
@@ -91,6 +93,8 @@ const showFilterPanel = ref(false);
 const showShortcutHelp = ref(false);
 const showPresetEditor = ref(false);
 const selectedTicket = ref<TicketResponse | null>(null);
+const projectReleases = ref<Release[]>([]);
+const selectedReleaseId = ref<string | null>(null);
 const ticketEditor = ref({
     title: "",
     description: "",
@@ -501,6 +505,7 @@ const openTicket = async (ticket: TicketResponse) => {
             toast.warning(`${name} is editing this ticket — opened in read-only mode`);
         }
     }
+    selectedReleaseId.value = ticket.releaseId ?? null;
     ticketEditor.value = {
         title: ticket.title,
         description: ticket.description || "",
@@ -526,6 +531,10 @@ const openTicket = async (ticket: TicketResponse) => {
         try {
             if (stories.value.length === 0 && props.projectId) {
                 await boardStore.loadStories(props.projectId);
+            }
+            if (projectReleases.value.length === 0 && props.projectId) {
+                const relRes = await listReleases(props.projectId);
+                projectReleases.value = relRes.items;
             }
             await boardStore.loadTicketComments(ticket.id);
             await boardStore.loadTicketActivities(ticket.id);
@@ -648,6 +657,7 @@ const saveTicket = async () => {
                 : undefined,
         storyPoints: ticketEditor.value.storyPoints,
         timeEstimate: ticketEditor.value.timeEstimate,
+        releaseId: selectedReleaseId.value,
     };
 
     try {
@@ -1770,7 +1780,10 @@ watch(
         :ticket-id="selectedTicket?.id || ''"
         :read-only="ticketReadOnly"
         :lock-conflict="lockConflict"
+        :releases="projectReleases"
+        :selected-release-id="selectedReleaseId"
         @update:editor="updateTicketEditor"
+        @update:selectedReleaseId="selectedReleaseId = $event"
         @update:commentDraft="updateCommentDraft"
         @update:dependencyRelationDraft="(value) => (dependencyRelationDraft = value)"
         @update:dependencyTicketIdDraft="(value) => (dependencyTicketIdDraft = value)"

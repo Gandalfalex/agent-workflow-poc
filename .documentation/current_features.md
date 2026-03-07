@@ -276,3 +276,17 @@ Snapshot date: March 7, 2026
 - Access control: `GET /flow-health` accessible to viewers+.
 - E2E contract: 3 new selectors (`board.wip_badge`, `dashboard.flow_health`, `dashboard.wip_stat_row`; 205 total).
 - E2E tests: WIP limit persisted on workflow update, flow health API returns valid structure, enforcement blocks second move, viewer access (`wip_flow_health_test.go`).
+
+## Release and Version Management (TKT-032)
+- `releases` table: id, project_id, name, version, status (`planned`|`in_progress`|`released`|`archived`), target_date, notes, ticket_count, closed_ticket_count.
+- Migration `028_releases.sql`: creates `releases` table, adds `release_id` FK to `tickets`.
+- Full CRUD: `GET/POST /projects/{projectId}/releases`, `GET/PATCH/DELETE /projects/{projectId}/releases/{releaseId}`.
+- Export endpoint: `GET /projects/{projectId}/releases/{releaseId}/export?format=markdown|json` — generates changelog content from linked tickets grouped by type.
+- Ticket linking: `releaseId` added to `TicketUpdateRequest`; `PATCH /tickets/{id}` accepts null to clear or UUID to set.
+- Store: `ListReleases`, `GetRelease`, `CreateRelease`, `UpdateRelease`, `DeleteRelease`, `GetReleaseTickets` (sql template `22_releases.go.templ`).
+- Frontend — SettingsPage: new "Releases" tab for creating, editing, deleting releases and exporting changelogs.
+- Frontend — TicketModal: release selector dropdown (links/unlinks ticket to a release, shown when project has releases).
+- Frontend — DashboardPage: Releases section shows active (non-archived) releases with progress bars and status badges.
+- Access control: read for viewers+, write/delete for contributors+.
+- E2E contract: 12 new selectors (216 total).
+- E2E tests: full CRUD, export (markdown + JSON), ticket linking and export verification, viewer access (`release_test.go`).
