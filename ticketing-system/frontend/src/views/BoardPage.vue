@@ -595,7 +595,7 @@ const addDependencySubmit = async () => {
                     rootTicketId: selectedTicket.value.id,
                     depth: 2,
                 }),
-                boardStore.loadBoard(props.projectId),
+                boardStore.refreshBoardSilent(props.projectId),
                 boardStore.loadDashboardStats(props.projectId),
             ]);
         }
@@ -621,7 +621,7 @@ const deleteDependencySubmit = async (dependencyId: string) => {
                     rootTicketId: selectedTicket.value.id,
                     depth: 2,
                 }),
-                boardStore.loadBoard(props.projectId),
+                boardStore.refreshBoardSilent(props.projectId),
                 boardStore.loadDashboardStats(props.projectId),
             ]);
         }

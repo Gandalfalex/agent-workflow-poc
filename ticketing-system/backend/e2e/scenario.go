@@ -232,7 +232,7 @@ func (s *Scenario) WhenINavigateToSettings() *Scenario {
 
 func (s *Scenario) WhenIOpenWorkflowTab() *Scenario {
 	return s.When("I open the workflow tab", func(s *Scenario) error {
-		return s.harness.page.GetByText("Workflow").Click()
+		return s.harness.page.Locator("[data-testid=\"settings.workflow_tab\"]").Click()
 	})
 }
 

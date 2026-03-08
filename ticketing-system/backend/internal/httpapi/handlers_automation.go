@@ -51,6 +51,7 @@ func (h *API) CreateAutomationRule(w http.ResponseWriter, r *http.Request, proje
 		TriggerEvent:      req.TriggerEvent,
 		TriggerConditions: conds,
 		Actions:           mapSlice(req.Actions, mapActionFromAPI),
+		Graph:             mapAutomationGraphToStore(req.Graph),
 	})
 	if handleDBErrorWithCode(w, r, err, "automation rule", "automation_rule_create", "automation_rule_create_failed") {
 		return
@@ -101,6 +102,10 @@ func (h *API) UpdateAutomationRule(w http.ResponseWriter, r *http.Request, proje
 	if req.Actions != nil {
 		input.Actions = mapSlice(*req.Actions, mapActionFromAPI)
 		input.HasActions = true
+	}
+	if req.Graph != nil {
+		input.Graph = mapAutomationGraphToStore(req.Graph)
+		input.HasGraph = true
 	}
 
 	rule, err := h.store.UpdateAutomationRule(r.Context(), ruleUUID, projectUUID, input)

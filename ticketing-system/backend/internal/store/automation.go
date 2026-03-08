@@ -16,6 +16,31 @@ type AutomationAction struct {
 	Params map[string]string `json:"params"`
 }
 
+type AutomationGraphNodePosition struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type AutomationGraphNode struct {
+	ID       string                      `json:"id"`
+	Type     string                      `json:"type"` // "trigger", "action", "branch"
+	Position AutomationGraphNodePosition `json:"position"`
+	Data     map[string]any              `json:"data"`
+}
+
+type AutomationGraphEdge struct {
+	ID           string  `json:"id"`
+	Source       string  `json:"source"`
+	SourceHandle *string `json:"sourceHandle,omitempty"`
+	Target       string  `json:"target"`
+	TargetHandle *string `json:"targetHandle,omitempty"`
+}
+
+type AutomationGraph struct {
+	Nodes []AutomationGraphNode `json:"nodes"`
+	Edges []AutomationGraphEdge `json:"edges"`
+}
+
 type AutomationRule struct {
 	ID                 uuid.UUID
 	ProjectID          uuid.UUID
@@ -24,6 +49,7 @@ type AutomationRule struct {
 	TriggerEvent       string
 	TriggerConditions  map[string]string
 	Actions            []AutomationAction
+	Graph              *AutomationGraph
 	ExecutionCount     int
 	LastExecutedAt     *time.Time
 	CreatedAt          time.Time
@@ -36,6 +62,7 @@ type AutomationRuleCreateInput struct {
 	TriggerEvent      string
 	TriggerConditions map[string]string
 	Actions           []AutomationAction
+	Graph             *AutomationGraph
 }
 
 type AutomationRuleUpdateInput struct {
@@ -45,6 +72,8 @@ type AutomationRuleUpdateInput struct {
 	TriggerConditions map[string]string
 	Actions           []AutomationAction
 	HasActions        bool
+	Graph             *AutomationGraph
+	HasGraph          bool
 }
 
 type AutomationActionResult struct {
@@ -85,10 +114,14 @@ func (s *Store) GetAutomationRule(ctx context.Context, id, projectID uuid.UUID) 
 func (s *Store) CreateAutomationRule(ctx context.Context, projectID uuid.UUID, input AutomationRuleCreateInput) (AutomationRule, error) {
 	condJSON, _ := json.Marshal(input.TriggerConditions)
 	actJSON, _ := json.Marshal(input.Actions)
+	var graphJSON []byte
+	if input.Graph != nil {
+		graphJSON, _ = json.Marshal(input.Graph)
+	}
 
 	var id uuid.UUID
 	if err := s.db.QueryRow(ctx, mustSQL("automation_rules_insert", nil),
-		projectID, input.Name, input.Enabled, input.TriggerEvent, condJSON, actJSON,
+		projectID, input.Name, input.Enabled, input.TriggerEvent, condJSON, actJSON, graphJSON,
 	).Scan(&id); err != nil {
 		return AutomationRule{}, err
 	}
@@ -119,6 +152,13 @@ func (s *Store) UpdateAutomationRule(ctx context.Context, id, projectID uuid.UUI
 	if input.HasActions {
 		actJSON, _ := json.Marshal(input.Actions)
 		updates = append(updates, "actions = "+arg(actJSON))
+	}
+	if input.HasGraph {
+		var graphJSON []byte
+		if input.Graph != nil {
+			graphJSON, _ = json.Marshal(input.Graph)
+		}
+		updates = append(updates, "graph = "+arg(graphJSON))
 	}
 
 	args = append(args, id, projectID)
@@ -156,7 +196,7 @@ func (s *Store) ListAutomationExecutions(ctx context.Context, ruleID uuid.UUID) 
 
 func scanAutomationRule(row pgx.Row) (AutomationRule, error) {
 	var r AutomationRule
-	var condRaw, actRaw []byte
+	var condRaw, actRaw, graphRaw []byte
 	if err := row.Scan(
 		&r.ID,
 		&r.ProjectID,
@@ -169,6 +209,7 @@ func scanAutomationRule(row pgx.Row) (AutomationRule, error) {
 		&r.LastExecutedAt,
 		&r.CreatedAt,
 		&r.UpdatedAt,
+		&graphRaw,
 	); err != nil {
 		return r, err
 	}
@@ -183,6 +224,12 @@ func scanAutomationRule(row pgx.Row) (AutomationRule, error) {
 	}
 	if r.Actions == nil {
 		r.Actions = []AutomationAction{}
+	}
+	if len(graphRaw) > 0 {
+		var g AutomationGraph
+		if err := json.Unmarshal(graphRaw, &g); err == nil {
+			r.Graph = &g
+		}
 	}
 	return r, nil
 }

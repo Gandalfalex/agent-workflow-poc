@@ -73,10 +73,19 @@ func matchConditions(conditions map[string]string, extra map[string]string) bool
 }
 
 func (e *Engine) executeRule(ctx context.Context, rule store.AutomationRule, ticket store.Ticket, event string) {
-	results := make([]store.AutomationActionResult, 0, len(rule.Actions))
-	for _, action := range rule.Actions {
-		result := e.executeAction(ctx, rule.ProjectID, action, ticket)
-		results = append(results, result)
+	var results []store.AutomationActionResult
+	if rule.Graph != nil {
+		var err error
+		results, err = e.executeRuleGraph(ctx, rule.ProjectID, rule.Graph, ticket, map[string]string{})
+		if err != nil {
+			log.Printf("automation: graph execution for rule %s: %v", rule.ID, err)
+		}
+	} else {
+		results = make([]store.AutomationActionResult, 0, len(rule.Actions))
+		for _, action := range rule.Actions {
+			result := e.executeAction(ctx, rule.ProjectID, action, ticket)
+			results = append(results, result)
+		}
 	}
 
 	if err := e.store.CreateAutomationExecution(ctx, store.AutomationExecutionCreateInput{
@@ -154,4 +163,118 @@ func expandTemplate(tmpl string, ticket store.Ticket) string {
 		"{{ticket.title}}", ticket.Title,
 	)
 	return r.Replace(tmpl)
+}
+
+func (e *Engine) executeRuleGraph(ctx context.Context, projectID uuid.UUID, graph *store.AutomationGraph, ticket store.Ticket, extra map[string]string) ([]store.AutomationActionResult, error) {
+	results := []store.AutomationActionResult{}
+
+	// Build adjacency map: "nodeId" or "nodeId:handle" -> []targetNodeID
+	edgeMap := map[string][]string{}
+	for _, edge := range graph.Edges {
+		key := edge.Source
+		if edge.SourceHandle != nil && *edge.SourceHandle != "" {
+			key = edge.Source + ":" + *edge.SourceHandle
+		}
+		edgeMap[key] = append(edgeMap[key], edge.Target)
+	}
+
+	// Build node map
+	nodeMap := map[string]*store.AutomationGraphNode{}
+	for i := range graph.Nodes {
+		nodeMap[graph.Nodes[i].ID] = &graph.Nodes[i]
+	}
+
+	// Find trigger node
+	var startID string
+	for _, node := range graph.Nodes {
+		if node.Type == "trigger" {
+			startID = node.ID
+			break
+		}
+	}
+	if startID == "" {
+		return results, nil
+	}
+
+	// BFS traversal
+	queue := []string{startID}
+	visited := map[string]bool{}
+	for len(queue) > 0 {
+		nodeID := queue[0]
+		queue = queue[1:]
+		if visited[nodeID] {
+			continue
+		}
+		visited[nodeID] = true
+
+		node := nodeMap[nodeID]
+		if node == nil {
+			continue
+		}
+
+		switch node.Type {
+		case "trigger":
+			for _, next := range edgeMap[nodeID] {
+				queue = append(queue, next)
+			}
+		case "action":
+			actionType, _ := node.Data["actionType"].(string)
+			params := map[string]string{}
+			if p, ok := node.Data["params"].(map[string]any); ok {
+				for k, v := range p {
+					if s, ok := v.(string); ok {
+						params[k] = s
+					}
+				}
+			}
+			action := store.AutomationAction{Type: actionType, Params: params}
+			result := e.executeAction(ctx, projectID, action, ticket)
+			results = append(results, result)
+			for _, next := range edgeMap[nodeID] {
+				queue = append(queue, next)
+			}
+		case "branch":
+			condField, _ := node.Data["conditionField"].(string)
+			condOp, _ := node.Data["conditionOperator"].(string)
+			condVal, _ := node.Data["conditionValue"].(string)
+			matched := evaluateBranchCondition(condField, condOp, condVal, ticket, extra)
+			handle := "false"
+			if matched {
+				handle = "true"
+			}
+			for _, next := range edgeMap[node.ID+":"+handle] {
+				queue = append(queue, next)
+			}
+		}
+	}
+	return results, nil
+}
+
+func evaluateBranchCondition(field, op, value string, ticket store.Ticket, extra map[string]string) bool {
+	var actual string
+	switch field {
+	case "priority":
+		actual = string(ticket.Priority)
+	case "state_id":
+		actual = ticket.StateID.String()
+	case "assignee_id":
+		if ticket.AssigneeID != nil {
+			actual = ticket.AssigneeID.String()
+		}
+	case "type":
+		actual = string(ticket.Type)
+	default:
+		actual = extra[field]
+	}
+	switch op {
+	case "equals":
+		return actual == value
+	case "not_equals":
+		return actual != value
+	case "is_empty":
+		return actual == "" || actual == "00000000-0000-0000-0000-000000000000"
+	case "is_not_empty":
+		return actual != "" && actual != "00000000-0000-0000-0000-000000000000"
+	}
+	return false
 }

@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { Button } from "@/components/ui/button";
+import AutomationCanvas from "@/components/app/automation/AutomationCanvas.vue";
 import { useAdminStore } from "@/stores/admin";
 import { useAutomationStore } from "@/stores/automation";
 import { useBoardStore } from "@/stores/board";
@@ -54,7 +55,6 @@ import type {
     WebhookResponse,
     WorkflowState,
 } from "@/lib/api";
-import { evaluateRule } from "@/lib/ruleEvaluator";
 
 const props = defineProps<{ projectId: string }>();
 
@@ -114,16 +114,9 @@ const automationForm = ref({
     condFromState: "",
     condToState: "",
     actions: [] as Array<{ type: string; params: Record<string, string> }>,
+    graph: null as import("@/lib/api").AutomationGraph | null,
 });
 
-const automationTriggerEvents = [
-    { value: "ticket.created", label: "Ticket Created" },
-    { value: "ticket.updated", label: "Ticket Updated" },
-    { value: "ticket.state_changed", label: "State Changed" },
-    { value: "ticket.priority_changed", label: "Priority Changed" },
-    { value: "ticket.assigned", label: "Ticket Assigned" },
-    { value: "ticket.deleted", label: "Ticket Deleted" },
-];
 
 const automationActionTypes = [
     { value: "set_state", label: "Set State" },
@@ -133,6 +126,35 @@ const automationActionTypes = [
     { value: "call_webhook", label: "Call Webhook" },
 ];
 
+const actionTypeConfig: Record<string, { icon: string; color: string }> = {
+    set_state:    { icon: "⇒", color: "blue" },
+    set_assignee: { icon: "◎", color: "violet" },
+    set_priority: { icon: "▲", color: "orange" },
+    add_comment:  { icon: "◆", color: "emerald" },
+    call_webhook: { icon: "↗", color: "slate" },
+};
+
+const triggerEventConfig: Record<string, { label: string; icon: string }> = {
+    "ticket.created":          { label: "Ticket Created",    icon: "✦" },
+    "ticket.updated":          { label: "Ticket Updated",    icon: "✎" },
+    "ticket.state_changed":    { label: "State Changed",     icon: "⇒" },
+    "ticket.priority_changed": { label: "Priority Changed",  icon: "▲" },
+    "ticket.assigned":         { label: "Ticket Assigned",   icon: "◎" },
+    "ticket.deleted":          { label: "Ticket Deleted",    icon: "✕" },
+};
+
+
+function ruleActionSummary(action: { type: string; params: Record<string, string> }): string {
+    switch (action.type) {
+        case "set_state":    return stateName(action.params["state_id"] ?? "");
+        case "set_assignee": { const u = userResults.value.find(u => u.id === action.params["assignee_id"]); return u?.name || u?.email || "—"; }
+        case "set_priority": return action.params["priority"] ?? "—";
+        case "add_comment":  return action.params["body"] ? `"${action.params["body"].slice(0, 20)}…"` : "—";
+        case "call_webhook": return "webhook";
+        default: return "";
+    }
+}
+
 function resetAutomationForm() {
     automationForm.value = {
         name: "",
@@ -141,35 +163,16 @@ function resetAutomationForm() {
         condFromState: "",
         condToState: "",
         actions: [],
+        graph: null,
     };
     editingRuleId.value = null;
     showAutomationForm.value = false;
-}
-
-function addAutomationAction() {
-    automationForm.value.actions.push({ type: "set_state", params: { state_id: "" } });
-}
-
-function removeAutomationAction(idx: number) {
-    automationForm.value.actions.splice(idx, 1);
 }
 
 function confirmDeleteRule(projectId: string, ruleId: string) {
     if (window.confirm(t("settings.automation.deleteConfirm"))) {
         automationStore.deleteRule(projectId, ruleId);
     }
-}
-
-function onAutomationActionTypeChange(idx: number) {
-    const type = automationForm.value.actions[idx]!.type;
-    const defaultParams: Record<string, Record<string, string>> = {
-        set_state: { state_id: "" },
-        set_assignee: { assignee_id: "" },
-        set_priority: { priority: "medium" },
-        add_comment: { body: "" },
-        call_webhook: {},
-    };
-    automationForm.value.actions[idx]!.params = { ...(defaultParams[type] || {}) };
 }
 
 async function saveAutomationRule() {
@@ -182,21 +185,27 @@ async function saveAutomationRule() {
         params: a.params,
     }));
 
+    // Extract trigger event from graph trigger node for backward compat display
+    const triggerNode = automationForm.value.graph?.nodes.find((n) => n.type === 'trigger')
+    const triggerEvent = (triggerNode?.data?.['triggerEvent'] as string | undefined) ?? automationForm.value.triggerEvent
+
     if (editingRuleId.value) {
         await automationStore.updateRule(selectedProjectId.value, editingRuleId.value, {
             name: automationForm.value.name,
             enabled: automationForm.value.enabled,
-            triggerEvent: automationForm.value.triggerEvent,
+            triggerEvent,
             triggerConditions: conds,
             actions,
+            graph: automationForm.value.graph ?? undefined,
         });
     } else {
         await automationStore.createRule(selectedProjectId.value, {
             name: automationForm.value.name,
             enabled: automationForm.value.enabled,
-            triggerEvent: automationForm.value.triggerEvent,
+            triggerEvent,
             triggerConditions: conds,
             actions,
+            graph: automationForm.value.graph ?? undefined,
         });
     }
     resetAutomationForm();
@@ -211,6 +220,7 @@ function startEditRule(rule: import("@/lib/api").AutomationRule) {
         condFromState: rule.triggerConditions?.["fromState"] || "",
         condToState: rule.triggerConditions?.["toState"] || "",
         actions: rule.actions.map((a) => ({ type: a.type, params: { ...a.params } })),
+        graph: rule.graph ?? null,
     };
     showAutomationForm.value = true;
 }
@@ -222,6 +232,78 @@ async function toggleRuleExpanded(projectId: string, ruleId: string) {
         expandedRuleId.value = ruleId;
         await automationStore.loadExecutions(projectId, ruleId);
     }
+}
+
+async function toggleRuleEnabled(rule: import("@/lib/api").AutomationRule) {
+    await automationStore.updateRule(selectedProjectId.value, rule.id, { enabled: !rule.enabled });
+}
+
+// Graph validation — every action/branch node must have its required fields filled
+const graphIsValid = computed(() => {
+    const graph = automationForm.value.graph;
+    if (!graph || !graph.nodes) return true; // linear mode, validate elsewhere
+    for (const node of graph.nodes) {
+        const d = node.data as Record<string, any> | undefined;
+        if (!d) continue;
+        if (node.type === 'action') {
+            if (d['actionType'] === 'set_state' && !d['params']?.['state_id']) return false;
+            if (d['actionType'] === 'set_assignee' && !d['params']?.['assignee_id']) return false;
+            if (d['actionType'] === 'add_comment' && !d['params']?.['body']) return false;
+        }
+        if (node.type === 'branch' && (!d['conditionField'] || !d['conditionOperator'])) return false;
+    }
+    return true;
+});
+
+// Rule templates for new-rule onboarding
+const ruleTemplates = [
+    {
+        label: "Auto-comment on state change",
+        icon: "◆",
+        description: "Add a comment whenever a ticket changes state.",
+        graph: {
+            nodes: [
+                { id: 'trigger-1', type: 'trigger', position: { x: 200, y: 50 }, data: { triggerEvent: 'ticket.state_changed', condFromState: '', condToState: '' } },
+                { id: 'action-1', type: 'action', position: { x: 200, y: 220 }, data: { actionType: 'add_comment', params: { body: 'State changed on {{ticket.title}}' } } },
+            ],
+            edges: [{ id: 'e-1', source: 'trigger-1', target: 'action-1' }],
+        },
+    },
+    {
+        label: "Set urgent tickets to high priority",
+        icon: "▲",
+        description: "Branch on priority: urgent → flag for review.",
+        graph: {
+            nodes: [
+                { id: 'trigger-1', type: 'trigger', position: { x: 200, y: 40 }, data: { triggerEvent: 'ticket.created', condFromState: '', condToState: '' } },
+                { id: 'branch-1', type: 'branch', position: { x: 200, y: 200 }, data: { conditionField: 'priority', conditionOperator: 'equals', conditionValue: 'urgent' } },
+                { id: 'action-t', type: 'action', position: { x: 60, y: 380 }, data: { actionType: 'add_comment', params: { body: '🚨 Urgent ticket — needs immediate attention.' } } },
+            ],
+            edges: [
+                { id: 'e-1', source: 'trigger-1', target: 'branch-1' },
+                { id: 'e-2', source: 'branch-1', sourceHandle: 'true', target: 'action-t', label: '✓ true' },
+            ],
+        },
+    },
+    {
+        label: "Notify on ticket assignment",
+        icon: "◎",
+        description: "Comment when a ticket gets assigned.",
+        graph: {
+            nodes: [
+                { id: 'trigger-1', type: 'trigger', position: { x: 200, y: 50 }, data: { triggerEvent: 'ticket.assigned', condFromState: '', condToState: '' } },
+                { id: 'action-1', type: 'action', position: { x: 200, y: 220 }, data: { actionType: 'add_comment', params: { body: 'Ticket assigned to {{ticket.assignee}}.' } } },
+            ],
+            edges: [{ id: 'e-1', source: 'trigger-1', target: 'action-1' }],
+        },
+    },
+];
+
+function applyTemplate(tpl: (typeof ruleTemplates)[number]) {
+    automationForm.value.graph = tpl.graph as import("@/lib/api").AutomationGraph;
+    automationForm.value.name = automationForm.value.name || tpl.label;
+    automationForm.value.triggerEvent = (tpl.graph.nodes[0]?.data as any)?.triggerEvent ?? 'ticket.created';
+    showAutomationForm.value = true;
 }
 
 // Simulator state
@@ -236,16 +318,6 @@ const simulatorActiveEvent = computed<SimulationEventResult | null>(() =>
     simulatorResult.value?.items[simulatorActiveEventIdx.value] ?? null,
 );
 
-const simulatorActiveEval = computed(() => {
-    const ev = simulatorActiveEvent.value;
-    if (!ev) return null;
-    const rule = {
-        triggerEvent: automationForm.value.triggerEvent,
-        triggerConditions: buildAutomationConditions(),
-        actions: automationForm.value.actions.map((a) => ({ type: a.type, params: { ...a.params } })),
-    };
-    return evaluateRule(rule, { eventType: ev.eventType, extra: {} });
-});
 
 let simulatorPlayInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -255,6 +327,8 @@ function buildAutomationConditions(): Record<string, string> {
     if (automationForm.value.condToState) conds["toState"] = automationForm.value.condToState;
     return conds;
 }
+
+const stateName = (id: string) => workflowStates.value.find((s) => s.id === id)?.name ?? id;
 
 async function runSimulation() {
     if (!selectedProjectId.value) return;
@@ -1533,121 +1607,115 @@ watch(selectedGroupId, async () => {
 </script>
 
 <template>
-    <section class="flex flex-wrap items-center justify-between gap-4">
+<div class="flex gap-8 min-h-0">
+    <!-- Settings sidebar -->
+    <aside class="w-48 shrink-0 space-y-6 pt-1">
         <div>
-            <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-                {{ t("settings.title") }}
-            </p>
-            <h2 class="text-2xl font-semibold">{{ t("settings.subtitle") }}</h2>
+            <p class="text-xs uppercase tracking-[0.3em] text-muted-foreground">{{ t("settings.title") }}</p>
+            <h2 class="mt-0.5 text-2xl font-semibold">{{ t("settings.subtitle") }}</h2>
         </div>
-        <div class="flex items-center gap-2">
-            <Button
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'projects'"
-                @click="settingsTab = 'projects'"
-            >
-                {{ t("settings.tab.projects") }}
-            </Button>
-            <Button
-                data-testid="settings.users-tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'users'"
-                @click="settingsTab = 'users'"
-            >
-                {{ t("settings.tab.users") }}
-            </Button>
-            <Button
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'webhooks'"
-                @click="settingsTab = 'webhooks'"
-            >
-                {{ t("settings.tab.webhooks") }}
-            </Button>
-            <Button
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'workflow'"
-                @click="settingsTab = 'workflow'; loadWorkflow()"
-            >
-                {{ t("settings.tab.workflow") }}
-            </Button>
-            <Button
-                data-testid="settings.reporting-tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'reporting'"
-                @click="settingsTab = 'reporting'; loadReporting()"
-            >
-                {{ t("settings.tab.reporting") }}
-            </Button>
-            <Button
-                data-testid="settings.sprints-tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'sprints'"
-                @click="settingsTab = 'sprints'; loadSprintSettings()"
-            >
-                Sprints
-            </Button>
-            <Button
-                data-testid="settings.audit-tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'audit'"
-                @click="settingsTab = 'audit'; adminStore.loadAuditLog()"
-            >
-                {{ t("settings.tab.audit") }}
-            </Button>
-            <Button
-                data-testid="settings.automation_tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'automation'"
-                @click="settingsTab = 'automation'; automationStore.loadRules(selectedProjectId)"
-            >
-                {{ t("settings.tab.automation") }}
-            </Button>
-            <Button
-                data-testid="settings.sla_tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'sla'"
-                @click="settingsTab = 'sla'; loadSlaPolicies()"
-            >
-                SLA
-            </Button>
-            <Button
-                data-testid="settings.custom_fields_tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'custom-fields'"
-                @click="settingsTab = 'custom-fields'; loadCustomFields()"
-            >
-                Custom Fields
-            </Button>
-            <Button
-                data-testid="settings.releases_tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'releases'"
-                @click="settingsTab = 'releases'; loadReleases()"
-            >
-                Releases
-            </Button>
-            <Button
-                data-testid="settings.approvals_tab"
-                variant="ghost"
-                size="sm"
-                :disabled="settingsTab === 'approvals'"
-                @click="settingsTab = 'approvals'; loadApprovalPolicies()"
-            >
-                Approvals
-            </Button>
+
+        <!-- General -->
+        <div>
+            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">General</p>
+            <nav class="flex flex-col gap-0.5">
+                <button
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'projects' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'projects'"
+                >{{ t("settings.tab.projects") }}</button>
+                <button
+                    data-testid="settings.users-tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'users' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'users'"
+                >{{ t("settings.tab.users") }}</button>
+            </nav>
         </div>
-    </section>
+
+        <!-- Workflow -->
+        <div>
+            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Workflow</p>
+            <nav class="flex flex-col gap-0.5">
+                <button
+                    data-testid="settings.workflow_tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'workflow' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'workflow'; loadWorkflow()"
+                >{{ t("settings.tab.workflow") }}</button>
+                <button
+                    data-testid="settings.sla_tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'sla' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'sla'; loadSlaPolicies()"
+                >SLA Policies</button>
+                <button
+                    data-testid="settings.approvals_tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'approvals' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'approvals'; loadApprovalPolicies()"
+                >Approvals</button>
+                <button
+                    data-testid="settings.custom_fields_tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'custom-fields' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'custom-fields'; loadCustomFields()"
+                >Custom Fields</button>
+            </nav>
+        </div>
+
+        <!-- Automation -->
+        <div>
+            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Automation</p>
+            <nav class="flex flex-col gap-0.5">
+                <button
+                    data-testid="settings.automation_tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'automation' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'automation'; automationStore.loadRules(selectedProjectId); loadWorkflow(); adminStore.searchUsers('')"
+                >Rules</button>
+                <button
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'webhooks' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'webhooks'"
+                >{{ t("settings.tab.webhooks") }}</button>
+            </nav>
+        </div>
+
+        <!-- Reporting -->
+        <div>
+            <p class="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Reporting</p>
+            <nav class="flex flex-col gap-0.5">
+                <button
+                    data-testid="settings.reporting-tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'reporting' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'reporting'; loadReporting()"
+                >{{ t("settings.tab.reporting") }}</button>
+                <button
+                    data-testid="settings.sprints-tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'sprints' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'sprints'; loadSprintSettings()"
+                >Sprints</button>
+                <button
+                    data-testid="settings.releases_tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'releases' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'releases'; loadReleases()"
+                >Releases</button>
+                <button
+                    data-testid="settings.audit-tab"
+                    class="w-full rounded-lg px-3 py-1.5 text-left text-sm transition-colors"
+                    :class="settingsTab === 'audit' ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'"
+                    @click="settingsTab = 'audit'; adminStore.loadAuditLog()"
+                >{{ t("settings.tab.audit") }}</button>
+            </nav>
+        </div>
+    </aside>
+
+    <!-- Main content -->
+    <div class="flex-1 min-w-0 space-y-4">
 
     <section
         v-if="actionNotice"
@@ -3183,78 +3251,38 @@ watch(selectedGroupId, async () => {
             </Button>
         </div>
 
-        <!-- Rule builder form -->
-        <div v-if="showAutomationForm" class="mt-6 rounded-2xl border border-border bg-muted/30 p-4 space-y-4">
-            <div>
-                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.name") }}</label>
+        <!-- Pipeline rule builder -->
+        <div v-if="showAutomationForm" class="mt-6 space-y-0">
+
+            <!-- Rule name + meta bar -->
+            <div class="mb-4 flex items-center gap-3">
                 <input
                     v-model="automationForm.name"
                     data-testid="automation.rule_name_input"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    placeholder="Rule name"
+                    class="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Rule name…"
                 />
+                <label class="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
+                    <input type="checkbox" v-model="automationForm.enabled" class="h-4 w-4 rounded" />
+                    Enabled
+                </label>
             </div>
-            <div>
-                <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.event") }}</label>
-                <select
-                    v-model="automationForm.triggerEvent"
-                    class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                    <option v-for="ev in automationTriggerEvents" :key="ev.value" :value="ev.value">{{ ev.label }}</option>
-                </select>
-            </div>
-            <div v-if="automationForm.triggerEvent === 'ticket.state_changed'" class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.condFromState") }}</label>
-                    <input v-model="automationForm.condFromState" class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" placeholder="UUID (optional)" />
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-muted-foreground mb-1">{{ t("settings.automation.condToState") }}</label>
-                    <input v-model="automationForm.condToState" class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" placeholder="UUID (optional)" />
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <input type="checkbox" v-model="automationForm.enabled" class="h-4 w-4" id="automation-enabled" />
-                <label for="automation-enabled" class="text-sm">{{ t("settings.automation.enabled") }}</label>
-            </div>
-            <div>
-                <p class="text-xs font-medium text-muted-foreground mb-2">{{ t("settings.automation.actions") }}</p>
-                <div v-for="(action, idx) in automationForm.actions" :key="idx" class="mb-2 rounded-lg border border-border bg-background p-3 space-y-2">
-                    <div class="flex items-center gap-2">
-                        <select
-                            v-model="action.type"
-                            class="flex-1 rounded-lg border border-border bg-background px-2 py-1 text-sm"
-                            @change="onAutomationActionTypeChange(idx)"
-                        >
-                            <option v-for="at in automationActionTypes" :key="at.value" :value="at.value">{{ at.label }}</option>
-                        </select>
-                        <button class="text-xs text-destructive hover:underline" @click="removeAutomationAction(idx)">{{ t("settings.automation.removeAction") }}</button>
-                    </div>
-                    <div v-if="action.type === 'set_state'">
-                        <input v-model="action.params['state_id']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs" placeholder="State UUID" />
-                    </div>
-                    <div v-else-if="action.type === 'set_assignee'">
-                        <input v-model="action.params['assignee_id']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs" placeholder="Assignee UUID" />
-                    </div>
-                    <div v-else-if="action.type === 'set_priority'">
-                        <select v-model="action.params['priority']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs">
-                            <option value="low">Low</option>
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="urgent">Urgent</option>
-                        </select>
-                    </div>
-                    <div v-else-if="action.type === 'add_comment'">
-                        <input v-model="action.params['body']" class="w-full rounded border border-border bg-muted px-2 py-1 text-xs" placeholder="Comment body (supports {{ticket.key}}, {{ticket.title}})" />
-                    </div>
-                </div>
-                <button class="text-xs text-primary hover:underline" @click="addAutomationAction">{{ t("settings.automation.addAction") }}</button>
-            </div>
-            <div class="flex gap-2 pt-2">
+
+            <!-- Graph canvas -->
+            <AutomationCanvas
+                v-model="automationForm.graph"
+                :workflow-states="workflowStates"
+                :users="userResults.filter(u => u.email).map(u => ({ ...u, email: u.email! }))"
+                :show-validation="true"
+                :simulator-event="simulatorActiveEvent"
+            />
+
+            <!-- Footer actions -->
+            <div class="mt-4 flex items-center gap-2">
                 <Button
                     data-testid="automation.rule_save_button"
                     size="sm"
-                    :disabled="!automationForm.name || !automationForm.triggerEvent"
+                    :disabled="!automationForm.name || !automationForm.triggerEvent || !graphIsValid"
                     @click="saveAutomationRule"
                 >
                     {{ t("settings.automation.save") }}
@@ -3306,49 +3334,51 @@ watch(selectedGroupId, async () => {
             <div v-else-if="simulatorRunning" class="text-xs text-muted-foreground">Running simulation…</div>
             <div v-else-if="simulatorError" class="text-xs text-destructive">{{ simulatorError }}</div>
 
-            <!-- Rule graph (static) -->
+            <!-- Rule graph -->
             <div
                 v-if="simulatorResult"
                 data-testid="automation.rule_graph"
                 class="flex items-start gap-2 overflow-x-auto pb-1"
             >
                 <!-- Trigger node -->
-                <div class="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-xs text-center min-w-[100px]"
-                     :class="simulatorActiveEvent ? 'border-blue-500 bg-blue-500/10' : ''">
+                <div class="shrink-0 rounded-lg border px-3 py-2 text-xs text-center min-w-[100px]"
+                     :class="simulatorActiveEvent ? 'border-blue-500 bg-blue-500/10' : 'border-border bg-background'">
                     <div class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Trigger</div>
                     <div class="font-mono font-medium">{{ automationForm.triggerEvent }}</div>
                 </div>
                 <div class="self-center text-muted-foreground shrink-0">→</div>
-                <!-- Condition nodes -->
-                <template v-if="simulatorActiveEval && simulatorActiveEval.conditionResults.length">
+                <!-- Conditions node (shown when state conditions exist) -->
+                <template v-if="automationForm.condFromState || automationForm.condToState">
                     <div
-                        v-for="cond in simulatorActiveEval.conditionResults"
-                        :key="cond.key"
-                        class="shrink-0 rounded-lg border px-3 py-2 text-xs min-w-[110px]"
-                        :class="cond.passed ? 'border-green-500 bg-green-500/10' : 'border-red-500 bg-red-500/10'"
+                        class="shrink-0 rounded-lg border px-3 py-2 text-xs min-w-[130px]"
+                        :class="simulatorActiveEvent
+                            ? (simulatorActiveEvent.matched ? 'border-green-500 bg-green-500/10' : 'border-red-500 bg-red-500/10')
+                            : 'border-border bg-background'"
                     >
-                        <div class="text-[10px] text-muted-foreground mb-0.5">{{ cond.key }}</div>
-                        <div class="font-mono text-[10px]">{{ cond.expectedValue }}</div>
-                        <div class="text-[10px] mt-0.5" :class="cond.passed ? 'text-green-600' : 'text-red-500'">
-                            {{ cond.passed ? '✓' : `✗ got "${cond.actualValue}"` }}
+                        <div class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Conditions</div>
+                        <div v-if="automationForm.condFromState" class="font-mono text-[10px] text-muted-foreground">from: {{ stateName(automationForm.condFromState) }}</div>
+                        <div v-if="automationForm.condToState" class="font-mono text-[10px] text-muted-foreground">to: {{ stateName(automationForm.condToState) }}</div>
+                        <div v-if="simulatorActiveEvent" class="text-[10px] mt-1"
+                             :class="simulatorActiveEvent.matched ? 'text-green-600' : 'text-red-500'">
+                            {{ simulatorActiveEvent.matched ? '✓ passed' : `✗ ${simulatorActiveEvent.failureReason || 'no match'}` }}
                         </div>
                     </div>
                     <div class="self-center text-muted-foreground shrink-0">→</div>
                 </template>
-                <!-- Action nodes -->
+                <!-- Action nodes (use backend predictedActions) -->
                 <div
                     v-for="(action, i) in automationForm.actions"
                     :key="i"
                     class="shrink-0 rounded-lg border px-3 py-2 text-xs min-w-[100px]"
-                    :class="simulatorActiveEval?.matched
-                        ? (simulatorActiveEval.predictedActions[i]?.wouldSucceed ? 'border-green-500 bg-green-500/10' : 'border-amber-500 bg-amber-500/10')
-                        : 'border-border opacity-40'"
+                    :class="simulatorActiveEvent?.matched
+                        ? (simulatorActiveEvent.predictedActions[i]?.wouldSucceed ? 'border-green-500 bg-green-500/10' : 'border-amber-500 bg-amber-500/10')
+                        : 'border-border bg-background opacity-40'"
                 >
-                    <div class="text-[10px] text-muted-foreground mb-0.5">Action</div>
+                    <div class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Action</div>
                     <div class="font-medium">{{ action.type }}</div>
-                    <div v-if="simulatorActiveEval?.matched && simulatorActiveEval.predictedActions[i]" class="text-[10px] mt-0.5"
-                         :class="simulatorActiveEval.predictedActions[i]!.wouldSucceed ? 'text-green-600' : 'text-amber-600'">
-                        {{ simulatorActiveEval.predictedActions[i]!.wouldSucceed ? '✓ would fire' : `⚠ ${simulatorActiveEval.predictedActions[i]!.failureReason}` }}
+                    <div v-if="simulatorActiveEvent?.matched && simulatorActiveEvent.predictedActions[i]" class="text-[10px] mt-0.5"
+                         :class="simulatorActiveEvent.predictedActions[i]!.wouldSucceed ? 'text-green-600' : 'text-amber-600'">
+                        {{ simulatorActiveEvent.predictedActions[i]!.wouldSucceed ? '✓ would fire' : `⚠ ${simulatorActiveEvent.predictedActions[i]!.failureReason}` }}
                     </div>
                 </div>
             </div>
@@ -3409,40 +3439,97 @@ watch(selectedGroupId, async () => {
 
         <!-- Rule list -->
         <div v-if="automationStore.loading && !automationStore.rules.length" class="mt-6 text-sm text-muted-foreground">Loading...</div>
-        <div v-else-if="!automationStore.rules.length && !showAutomationForm" class="mt-6 text-sm text-muted-foreground">{{ t("settings.automation.empty") }}</div>
+        <div v-else-if="!automationStore.rules.length && !showAutomationForm" class="mt-6 space-y-3">
+            <p class="text-xs text-muted-foreground">No rules yet. Start from a template or create from scratch.</p>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button
+                    v-for="tpl in ruleTemplates"
+                    :key="tpl.label"
+                    class="group rounded-xl border border-border bg-muted/20 p-4 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                    @click="applyTemplate(tpl)"
+                >
+                    <div class="mb-2 flex items-center gap-2">
+                        <span class="text-base">{{ tpl.icon }}</span>
+                        <span class="text-xs font-semibold">{{ tpl.label }}</span>
+                    </div>
+                    <p class="text-[11px] text-muted-foreground">{{ tpl.description }}</p>
+                </button>
+            </div>
+        </div>
         <div
             v-else
             data-testid="automation.rule_list"
-            class="mt-4 space-y-2"
+            class="mt-6 space-y-2"
         >
             <div
                 v-for="rule in automationStore.rules"
                 :key="rule.id"
-                class="rounded-2xl border border-border bg-background/60 p-4"
+                class="rounded-2xl border border-border bg-background/60 overflow-hidden transition hover:border-border/80"
+                :class="!rule.enabled ? 'opacity-60' : ''"
             >
-                <div class="flex items-start justify-between gap-2">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium text-sm">{{ rule.name }}</span>
-                            <span v-if="!rule.enabled" class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">Disabled</span>
-                        </div>
-                        <span class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground mt-1 inline-block">{{ rule.triggerEvent }}</span>
-                        <span class="ml-2 text-xs text-muted-foreground">{{ rule.executionCount }} runs</span>
-                    </div>
-                    <div class="flex items-center gap-1 shrink-0">
-                        <button class="text-xs text-primary hover:underline" @click="startEditRule(rule)">Edit</button>
-                        <button class="text-xs text-muted-foreground hover:underline" @click="toggleRuleExpanded(selectedProjectId, rule.id)">
-                            {{ expandedRuleId === rule.id ? "▲ Hide" : "▼ History" }}
-                        </button>
-                        <button
-                            class="text-xs text-destructive hover:underline"
-                            @click="confirmDeleteRule(selectedProjectId, rule.id)"
-                        >Delete</button>
-                    </div>
+                <!-- Header row -->
+                <div class="flex items-center gap-3 px-4 pt-4 pb-3">
+                    <span class="font-medium text-sm">{{ rule.name }}</span>
+                    <!-- Inline toggle -->
+                    <button
+                        class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors"
+                        :class="rule.enabled ? 'bg-primary' : 'bg-muted-foreground/30'"
+                        :title="rule.enabled ? 'Disable rule' : 'Enable rule'"
+                        @click.stop="toggleRuleEnabled(rule)"
+                    >
+                        <span
+                            class="pointer-events-none block h-3 w-3 rounded-full bg-white shadow transition-transform"
+                            :class="rule.enabled ? 'translate-x-3.5' : 'translate-x-0.5'"
+                        />
+                    </button>
+                    <span class="ml-auto text-xs text-muted-foreground">{{ rule.executionCount }} runs</span>
+                    <button class="text-xs text-primary hover:underline" @click="startEditRule(rule)">Edit</button>
+                    <button class="text-xs text-muted-foreground hover:underline" @click="toggleRuleExpanded(selectedProjectId, rule.id)">
+                        {{ expandedRuleId === rule.id ? "▲" : "▼ History" }}
+                    </button>
+                    <button class="text-xs text-destructive/60 hover:text-destructive" @click="confirmDeleteRule(selectedProjectId, rule.id)">✕</button>
                 </div>
 
-                <!-- Execution history -->
-                <div v-if="expandedRuleId === rule.id" class="mt-3 border-t border-border pt-3">
+                <!-- Mini pipeline visualisation -->
+                <div class="flex items-center gap-1.5 overflow-x-auto px-4 pb-4 text-xs">
+                    <!-- Trigger pill -->
+                    <div class="flex shrink-0 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5">
+                        <span class="text-primary">{{ triggerEventConfig[rule.triggerEvent]?.icon ?? '⚡' }}</span>
+                        <span class="font-medium text-primary/80">{{ triggerEventConfig[rule.triggerEvent]?.label ?? rule.triggerEvent }}</span>
+                    </div>
+
+                    <!-- Condition pill -->
+                    <template v-if="rule.triggerConditions?.['fromState'] || rule.triggerConditions?.['toState']">
+                        <span class="shrink-0 text-muted-foreground/40">→</span>
+                        <div class="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
+                            <span v-if="rule.triggerConditions['fromState']">{{ stateName(rule.triggerConditions['fromState']) }}</span>
+                            <span v-if="rule.triggerConditions['fromState'] && rule.triggerConditions['toState']" class="text-muted-foreground/50">→</span>
+                            <span v-if="rule.triggerConditions['toState']">{{ stateName(rule.triggerConditions['toState']) }}</span>
+                        </div>
+                    </template>
+
+                    <!-- Action pills -->
+                    <template v-for="(action, i) in rule.actions" :key="i">
+                        <span class="shrink-0 text-muted-foreground/40">→</span>
+                        <div
+                            class="flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5"
+                            :class="[
+                                action.type === 'set_state'    ? 'border-blue-500/30 bg-blue-500/5 text-blue-600 dark:text-blue-400'       : '',
+                                action.type === 'set_assignee' ? 'border-violet-500/30 bg-violet-500/5 text-violet-600 dark:text-violet-400': '',
+                                action.type === 'set_priority' ? 'border-orange-500/30 bg-orange-500/5 text-orange-600 dark:text-orange-400': '',
+                                action.type === 'add_comment'  ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400':'',
+                                action.type === 'call_webhook' ? 'border-slate-500/30 bg-slate-500/5 text-slate-500'                        : '',
+                            ]"
+                        >
+                            <span>{{ actionTypeConfig[action.type]?.icon }}</span>
+                            <span class="font-medium">{{ automationActionTypes.find(t => t.value === action.type)?.label }}</span>
+                            <span v-if="ruleActionSummary(action)" class="text-current/60">{{ ruleActionSummary(action) }}</span>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Execution history (expanded) -->
+                <div v-if="expandedRuleId === rule.id" class="border-t border-border px-4 py-3">
                     <p class="text-xs font-medium text-muted-foreground mb-2">{{ t("settings.automation.executions") }}</p>
                     <div v-if="!automationStore.executionsByRule[rule.id]?.length" class="text-xs text-muted-foreground">{{ t("settings.automation.executionEmpty") }}</div>
                     <div v-else class="space-y-1">
@@ -3957,4 +4044,7 @@ watch(selectedGroupId, async () => {
             No approval gates configured. Add a gate to require approval before sensitive state transitions.
         </div>
     </section>
+
+    </div><!-- /main content -->
+</div><!-- /settings flex layout -->
 </template>

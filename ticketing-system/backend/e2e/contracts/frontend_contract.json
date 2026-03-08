@@ -36,7 +36,10 @@
     }
   },
   "selectors": {
+    "automation.add_action_node": "[data-testid=\"automation.add_action_node\"]",
+    "automation.add_branch_node": "[data-testid=\"automation.add_branch_node\"]",
     "automation.add_rule_button": "[data-testid=\"automation.add_rule_button\"]",
+    "automation.canvas": "[data-testid=\"automation.canvas\"]",
     "automation.rule_graph": "[data-testid=\"automation.rule_graph\"]",
     "automation.rule_list": "[data-testid=\"automation.rule_list\"]",
     "automation.rule_name_input": "[data-testid=\"automation.rule_name_input\"]",
@@ -190,6 +193,7 @@
     "settings.sprint_duration_input": "[data-testid=\"settings.sprint_duration_input\"]",
     "settings.sprints_tab": "[data-testid=\"settings.sprints-tab\"]",
     "settings.sprints_view": "[data-testid=\"settings.sprints-view\"]",
+    "settings.workflow_tab": "[data-testid=\"settings.workflow_tab\"]",
     "sprint.active_section": "[data-testid=\"sprint.active-section\"]",
     "sprint.complete_button": "[data-testid=\"sprint.complete-button\"]",
     "sprint.complete_cancel_button": "[data-testid=\"sprint.complete-cancel-button\"]",

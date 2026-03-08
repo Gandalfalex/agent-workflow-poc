@@ -648,6 +648,67 @@ func mapAutomationActionResult(r store.AutomationActionResult) AutomationActionR
 	return out
 }
 
+func mapAutomationGraphToStore(g *AutomationGraph) *store.AutomationGraph {
+	if g == nil {
+		return nil
+	}
+	nodes := make([]store.AutomationGraphNode, len(g.Nodes))
+	for i, n := range g.Nodes {
+		nodes[i] = store.AutomationGraphNode{
+			ID:   n.Id,
+			Type: string(n.Type),
+			Position: store.AutomationGraphNodePosition{
+				X: float64(n.Position.X),
+				Y: float64(n.Position.Y),
+			},
+			Data: map[string]any(n.Data),
+		}
+	}
+	edges := make([]store.AutomationGraphEdge, len(g.Edges))
+	for i, e := range g.Edges {
+		edges[i] = store.AutomationGraphEdge{
+			ID:           e.Id,
+			Source:       e.Source,
+			SourceHandle: e.SourceHandle,
+			Target:       e.Target,
+			TargetHandle: e.TargetHandle,
+		}
+	}
+	return &store.AutomationGraph{Nodes: nodes, Edges: edges}
+}
+
+func mapAutomationGraphFromStore(g *store.AutomationGraph) *AutomationGraph {
+	if g == nil {
+		return nil
+	}
+	nodes := make([]AutomationGraphNode, len(g.Nodes))
+	for i, n := range g.Nodes {
+		nodes[i] = AutomationGraphNode{
+			Id:   n.ID,
+			Type: AutomationGraphNodeType(n.Type),
+			Position: struct {
+				X float32 `json:"x"`
+				Y float32 `json:"y"`
+			}{
+				X: float32(n.Position.X),
+				Y: float32(n.Position.Y),
+			},
+			Data: AutomationGraphNodeData(n.Data),
+		}
+	}
+	edges := make([]AutomationGraphEdge, len(g.Edges))
+	for i, e := range g.Edges {
+		edges[i] = AutomationGraphEdge{
+			Id:           e.ID,
+			Source:       e.Source,
+			SourceHandle: e.SourceHandle,
+			Target:       e.Target,
+			TargetHandle: e.TargetHandle,
+		}
+	}
+	return &AutomationGraph{Nodes: nodes, Edges: edges}
+}
+
 func mapAutomationRule(r store.AutomationRule) automationRuleResponse {
 	return automationRuleResponse{
 		Id:                toOpenapiUUID(r.ID),
@@ -657,6 +718,7 @@ func mapAutomationRule(r store.AutomationRule) automationRuleResponse {
 		TriggerEvent:      r.TriggerEvent,
 		TriggerConditions: r.TriggerConditions,
 		Actions:           mapSlice(r.Actions, mapAutomationAction),
+		Graph:             mapAutomationGraphFromStore(r.Graph),
 		ExecutionCount:    r.ExecutionCount,
 		LastExecutedAt:    r.LastExecutedAt,
 		CreatedAt:         r.CreatedAt,

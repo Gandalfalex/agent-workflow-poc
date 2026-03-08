@@ -405,6 +405,16 @@ export const useBoardStore = defineStore("board", {
       }
       this.loading = false;
     },
+    /** Refresh board data in the background without flipping the loading state. */
+    async refreshBoardSilent(projectId: string) {
+      try {
+        const board = await getBoard(projectId);
+        this.states = board.states;
+        this.tickets = board.tickets;
+      } catch {
+        // Silently ignore — board stays with current data
+      }
+    },
     async initializeWorkflow(projectId: string, states: WorkflowStateInput[]) {
       if (this.workflowSetupBusy) return;
       this.workflowSetupBusy = true;
@@ -941,11 +951,27 @@ export const useBoardStore = defineStore("board", {
         }
         return updated;
       }
-      const updated = await updateTicket(id, payload);
+      // Optimistic update: apply locally before the server responds
+      const original = this.tickets.find((t) => t.id === id);
       this.tickets = this.tickets.map((ticket) =>
-        ticket.id === updated.id ? updated : ticket,
+        ticket.id === id ? { ...ticket, ...payload } : ticket,
       );
-      return updated;
+      try {
+        const updated = await updateTicket(id, payload);
+        // Confirm with full server response (picks up computed fields)
+        this.tickets = this.tickets.map((ticket) =>
+          ticket.id === updated.id ? updated : ticket,
+        );
+        return updated;
+      } catch (err) {
+        // Roll back to original on error
+        if (original) {
+          this.tickets = this.tickets.map((ticket) =>
+            ticket.id === id ? original : ticket,
+          );
+        }
+        throw err;
+      }
     },
     async removeTicket(id: string) {
       this.errorMessage = "";

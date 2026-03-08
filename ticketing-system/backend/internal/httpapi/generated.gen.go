@@ -52,6 +52,13 @@ const (
 	ApprovalStatusRejected  ApprovalStatus = "rejected"
 )
 
+// Defines values for AutomationGraphNodeType.
+const (
+	Action  AutomationGraphNodeType = "action"
+	Branch  AutomationGraphNodeType = "branch"
+	Trigger AutomationGraphNodeType = "trigger"
+)
+
 // Defines values for BulkTicketAction.
 const (
 	BulkTicketActionAssign      BulkTicketAction = "assign"
@@ -432,12 +439,46 @@ type AutomationExecutionListResponse struct {
 	Items []AutomationExecution `json:"items"`
 }
 
+// AutomationGraph defines model for AutomationGraph.
+type AutomationGraph struct {
+	Edges []AutomationGraphEdge `json:"edges"`
+	Nodes []AutomationGraphNode `json:"nodes"`
+}
+
+// AutomationGraphEdge defines model for AutomationGraphEdge.
+type AutomationGraphEdge struct {
+	Id           string  `json:"id"`
+	Source       string  `json:"source"`
+	SourceHandle *string `json:"sourceHandle"`
+	Target       string  `json:"target"`
+	TargetHandle *string `json:"targetHandle"`
+}
+
+// AutomationGraphNode defines model for AutomationGraphNode.
+type AutomationGraphNode struct {
+	// Data Node-type-specific configuration
+	Data     AutomationGraphNodeData `json:"data"`
+	Id       string                  `json:"id"`
+	Position struct {
+		X float32 `json:"x"`
+		Y float32 `json:"y"`
+	} `json:"position"`
+	Type AutomationGraphNodeType `json:"type"`
+}
+
+// AutomationGraphNodeData Node-type-specific configuration
+type AutomationGraphNodeData map[string]interface{}
+
+// AutomationGraphNodeType defines model for AutomationGraphNodeType.
+type AutomationGraphNodeType string
+
 // AutomationRule defines model for AutomationRule.
 type AutomationRule struct {
 	Actions           []AutomationAction `json:"actions"`
 	CreatedAt         time.Time          `json:"createdAt"`
 	Enabled           bool               `json:"enabled"`
 	ExecutionCount    int                `json:"executionCount"`
+	Graph             *AutomationGraph   `json:"graph,omitempty"`
 	Id                openapi_types.UUID `json:"id"`
 	LastExecutedAt    *time.Time         `json:"lastExecutedAt"`
 	Name              string             `json:"name"`
@@ -451,6 +492,7 @@ type AutomationRule struct {
 type AutomationRuleCreateRequest struct {
 	Actions           []AutomationAction `json:"actions"`
 	Enabled           *bool              `json:"enabled,omitempty"`
+	Graph             *AutomationGraph   `json:"graph,omitempty"`
 	Name              string             `json:"name"`
 	TriggerConditions *map[string]string `json:"triggerConditions,omitempty"`
 	TriggerEvent      string             `json:"triggerEvent"`
@@ -465,6 +507,7 @@ type AutomationRuleListResponse struct {
 type AutomationRuleUpdateRequest struct {
 	Actions           *[]AutomationAction `json:"actions,omitempty"`
 	Enabled           *bool               `json:"enabled,omitempty"`
+	Graph             *AutomationGraph    `json:"graph,omitempty"`
 	Name              *string             `json:"name,omitempty"`
 	TriggerConditions *map[string]string  `json:"triggerConditions,omitempty"`
 	TriggerEvent      *string             `json:"triggerEvent,omitempty"`

@@ -164,31 +164,37 @@ const formatTitleForDisplay = (title: string) => {
             <button
                 data-testid="board.ticket-quick-move-button"
                 type="button"
-                class="rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-40"
-                :title="t('board.view.quickMove')"
+                class="group/move relative rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground disabled:opacity-40"
                 :disabled="!props.nextStateId"
                 @click.stop="props.onQuickMoveNext(props.ticket, props.nextStateId)"
             >
                 →
+                <span class="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded border border-border bg-popover px-2 py-1 text-[10px] font-normal text-foreground shadow-md opacity-0 transition-opacity group-hover/move:opacity-100 z-50">
+                    {{ t('board.view.quickMove') }}
+                </span>
             </button>
             <button
                 data-testid="board.ticket-quick-priority-button"
                 type="button"
-                class="rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
-                :title="t('board.view.quickPriority')"
+                class="group/prio relative rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
                 @click.stop="props.onQuickCyclePriority(props.ticket)"
             >
                 P
+                <span class="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded border border-border bg-popover px-2 py-1 text-[10px] font-normal text-foreground shadow-md opacity-0 transition-opacity group-hover/prio:opacity-100 z-50">
+                    {{ t('board.view.quickPriority') }}
+                </span>
             </button>
             <button
                 v-if="props.canQuickAssignToMe"
                 data-testid="board.ticket-quick-assign-button"
                 type="button"
-                class="rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
-                :title="t('board.view.quickAssignMe')"
+                class="group/assign relative rounded border border-border bg-background/90 px-1.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-foreground hover:text-foreground"
                 @click.stop="props.onQuickAssignToMe(props.ticket)"
             >
                 @
+                <span class="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded border border-border bg-popover px-2 py-1 text-[10px] font-normal text-foreground shadow-md opacity-0 transition-opacity group-hover/assign:opacity-100 z-50">
+                    {{ t('board.view.quickAssignMe') }}
+                </span>
             </button>
         </div>
 

@@ -2356,6 +2356,32 @@ export interface components {
             items: components["schemas"]["AuditLogEntry"][];
             total: number;
         };
+        /** @enum {string} */
+        AutomationGraphNodeType: "trigger" | "action" | "branch";
+        /** @description Node-type-specific configuration */
+        AutomationGraphNodeData: {
+            [key: string]: unknown;
+        };
+        AutomationGraphNode: {
+            id: string;
+            type: components["schemas"]["AutomationGraphNodeType"];
+            position: {
+                x: number;
+                y: number;
+            };
+            data: components["schemas"]["AutomationGraphNodeData"];
+        };
+        AutomationGraphEdge: {
+            id: string;
+            source: string;
+            sourceHandle?: string | null;
+            target: string;
+            targetHandle?: string | null;
+        };
+        AutomationGraph: {
+            nodes: components["schemas"]["AutomationGraphNode"][];
+            edges: components["schemas"]["AutomationGraphEdge"][];
+        };
         AutomationActionType: string;
         AutomationAction: {
             type: components["schemas"]["AutomationActionType"];
@@ -2405,6 +2431,7 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+            graph?: components["schemas"]["AutomationGraph"];
         };
         AutomationRuleListResponse: {
             items: components["schemas"]["AutomationRule"][];
@@ -2417,6 +2444,7 @@ export interface components {
             };
             actions: components["schemas"]["AutomationAction"][];
             enabled?: boolean;
+            graph?: components["schemas"]["AutomationGraph"];
         };
         AutomationRuleUpdateRequest: {
             name?: string;
@@ -2426,6 +2454,7 @@ export interface components {
             };
             actions?: components["schemas"]["AutomationAction"][];
             enabled?: boolean;
+            graph?: components["schemas"]["AutomationGraph"];
         };
         SimulationRequest: {
             rule: components["schemas"]["AutomationRuleCreateRequest"];
