@@ -14,37 +14,7 @@ func TestSLAPoliciesAPIGetAndUpdate(t *testing.T) {
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
-
-	// GET default policies (should be empty initially)
-	getResp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("get sla policies: %v", err)
-	}
-	defer getResp.Body.Close()
-	if getResp.StatusCode != 200 {
-		t.Fatalf("expected 200 from GET sla-policies, got %d", getResp.StatusCode)
-	}
-
-	var initial struct {
-		Items []interface{} `json:"items"`
-	}
-	if err := json.NewDecoder(getResp.Body).Decode(&initial); err != nil {
-		t.Fatalf("decode sla policies: %v", err)
-	}
-
-	// PUT policies — one entry for urgent bugs
-	putBody := `{"items":[{"priority":"urgent","ticketType":"bug","firstResponseHours":2,"completionHours":8,"atRiskThresholdPct":75}]}`
-	putResp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), strings.NewReader(putBody))
-	if err != nil {
-		t.Fatalf("put sla policies: %v", err)
-	}
-	defer putResp.Body.Close()
-	if putResp.StatusCode != 200 {
-		t.Fatalf("expected 200 from PUT sla-policies, got %d", putResp.StatusCode)
-	}
 
 	var updated struct {
 		Items []struct {
@@ -55,34 +25,63 @@ func TestSLAPoliciesAPIGetAndUpdate(t *testing.T) {
 			AtRiskThresholdPct int    `json:"atRiskThresholdPct"`
 		} `json:"items"`
 	}
-	if err := json.NewDecoder(putResp.Body).Decode(&updated); err != nil {
-		t.Fatalf("decode updated sla policies: %v", err)
-	}
-	if len(updated.Items) != 1 {
-		t.Fatalf("expected 1 SLA policy, got %d", len(updated.Items))
-	}
-	p := updated.Items[0]
-	if p.Priority != "urgent" || p.TicketType != "bug" || p.FirstResponseHours != 2 || p.CompletionHours != 8 {
-		t.Fatalf("unexpected policy values: %+v", p)
-	}
 
-	// GET again — should return the saved policy
-	getResp2, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("get sla policies after update: %v", err)
-	}
-	defer getResp2.Body.Close()
-	var afterUpdate struct {
-		Items []struct {
-			Priority string `json:"priority"`
-		} `json:"items"`
-	}
-	if err := json.NewDecoder(getResp2.Body).Decode(&afterUpdate); err != nil {
-		t.Fatalf("decode after update: %v", err)
-	}
-	if len(afterUpdate.Items) != 1 || afterUpdate.Items[0].Priority != "urgent" {
-		t.Fatalf("expected 1 urgent policy after GET, got %d items", len(afterUpdate.Items))
-	}
+	scenario.
+		Given("the project has no SLA policies configured", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("get sla policies: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 from GET sla-policies, got %d", resp.StatusCode)
+			}
+			var initial struct {
+				Items []interface{} `json:"items"`
+			}
+			return json.NewDecoder(resp.Body).Decode(&initial)
+		}).
+		When("I PUT an SLA policy for urgent bugs with 2h first response and 8h completion", func(s *Scenario) error {
+			body := `{"items":[{"priority":"urgent","ticketType":"bug","firstResponseHours":2,"completionHours":8,"atRiskThresholdPct":75}]}`
+			resp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("put sla policies: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 from PUT sla-policies, got %d", resp.StatusCode)
+			}
+			return json.NewDecoder(resp.Body).Decode(&updated)
+		}).
+		Then("the response contains exactly one policy with the correct values", func(s *Scenario) error {
+			if len(updated.Items) != 1 {
+				return fmt.Errorf("expected 1 SLA policy, got %d", len(updated.Items))
+			}
+			p := updated.Items[0]
+			if p.Priority != "urgent" || p.TicketType != "bug" || p.FirstResponseHours != 2 || p.CompletionHours != 8 {
+				return fmt.Errorf("unexpected policy values: %+v", p)
+			}
+			return nil
+		}).
+		And("a subsequent GET returns the saved policy", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("get sla policies after update: %w", err)
+			}
+			defer resp.Body.Close()
+			var afterUpdate struct {
+				Items []struct {
+					Priority string `json:"priority"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&afterUpdate); err != nil {
+				return fmt.Errorf("decode after update: %w", err)
+			}
+			if len(afterUpdate.Items) != 1 || afterUpdate.Items[0].Priority != "urgent" {
+				return fmt.Errorf("expected 1 urgent policy after GET, got %d items", len(afterUpdate.Items))
+			}
+			return nil
+		})
 }
 
 func TestSLAStatusAppearsOnBoardTicket(t *testing.T) {
@@ -90,71 +89,64 @@ func TestSLAStatusAppearsOnBoardTicket(t *testing.T) {
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	// Set an SLA policy for high/feature with very short completion time
-	// so the ticket is immediately at_risk or breached
-	putBody := `{"items":[{"priority":"high","ticketType":"feature","firstResponseHours":1,"completionHours":1,"atRiskThresholdPct":50}]}`
-	putResp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), strings.NewReader(putBody))
-	if err != nil {
-		t.Fatalf("put sla policies: %v", err)
-	}
-	defer putResp.Body.Close()
-	if putResp.StatusCode != 200 {
-		t.Fatalf("expected 200 from PUT sla-policies, got %d", putResp.StatusCode)
-	}
-
-	// Create a ticket with high priority / feature type; it will immediately be at_risk (1h completion)
-	ticketBody := fmt.Sprintf(`{"title":"SLA test ticket","type":"feature","priority":"high","storyId":"%s"}`, seed.StoryID)
-	tResp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), strings.NewReader(ticketBody))
-	if err != nil {
-		t.Fatalf("create ticket: %v", err)
-	}
-	defer tResp.Body.Close()
-	if tResp.StatusCode != 201 {
-		t.Fatalf("expected 201 creating ticket, got %d", tResp.StatusCode)
-	}
-
-	// Verify GET /tickets returns slaStatus field
-	listResp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("list tickets: %v", err)
-	}
-	defer listResp.Body.Close()
-	if listResp.StatusCode != 200 {
-		t.Fatalf("expected 200 listing tickets, got %d", listResp.StatusCode)
-	}
-
-	var ticketList struct {
-		Items []struct {
-			Title     string  `json:"title"`
-			SlaStatus *string `json:"slaStatus"`
-		} `json:"items"`
-	}
-	if err := json.NewDecoder(listResp.Body).Decode(&ticketList); err != nil {
-		t.Fatalf("decode ticket list: %v", err)
-	}
-
-	found := false
-	for _, tk := range ticketList.Items {
-		if tk.Title == "SLA test ticket" {
-			found = true
-			if tk.SlaStatus == nil {
-				t.Fatalf("expected slaStatus to be non-nil for SLA test ticket")
+	scenario.
+		Given("an SLA policy exists for high/feature with 1h completion at 50% at-risk threshold", func(s *Scenario) error {
+			body := `{"items":[{"priority":"high","ticketType":"feature","firstResponseHours":1,"completionHours":1,"atRiskThresholdPct":50}]}`
+			resp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("put sla policies: %w", err)
 			}
-			// Ticket was just created and policy completionHours=1 at 50% threshold
-			// so it should be at_risk or breached immediately
-			if *tk.SlaStatus != "at_risk" && *tk.SlaStatus != "breached" && *tk.SlaStatus != "on_track" {
-				t.Fatalf("unexpected slaStatus value: %q", *tk.SlaStatus)
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 from PUT sla-policies, got %d", resp.StatusCode)
 			}
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("SLA test ticket not found in list")
-	}
+			return nil
+		}).
+		When("I create a high-priority feature ticket", func(s *Scenario) error {
+			body := fmt.Sprintf(`{"title":"SLA test ticket","type":"feature","priority":"high","storyId":"%s"}`, seed.StoryID)
+			resp, err := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("create ticket: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 201 {
+				return fmt.Errorf("expected 201 creating ticket, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the ticket list includes a non-nil slaStatus for the new ticket", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("list tickets: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 listing tickets, got %d", resp.StatusCode)
+			}
+			var ticketList struct {
+				Items []struct {
+					Title     string  `json:"title"`
+					SlaStatus *string `json:"slaStatus"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&ticketList); err != nil {
+				return fmt.Errorf("decode ticket list: %w", err)
+			}
+			for _, tk := range ticketList.Items {
+				if tk.Title == "SLA test ticket" {
+					if tk.SlaStatus == nil {
+						return fmt.Errorf("expected slaStatus to be non-nil for SLA test ticket")
+					}
+					if *tk.SlaStatus != "at_risk" && *tk.SlaStatus != "breached" && *tk.SlaStatus != "on_track" {
+						return fmt.Errorf("unexpected slaStatus value: %q", *tk.SlaStatus)
+					}
+					return nil
+				}
+			}
+			return fmt.Errorf("SLA test ticket not found in list")
+		})
 }
 
 func TestSLAUIShowsSLATab(t *testing.T) {
@@ -181,17 +173,22 @@ func TestSLAViewerCannotUpdatePolicies(t *testing.T) {
 
 	scenario := NewScenario(t, WithViewerUser())
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	putBody := `{"items":[{"priority":"low","ticketType":"feature","firstResponseHours":48,"completionHours":120,"atRiskThresholdPct":80}]}`
-	resp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), strings.NewReader(putBody))
-	if err != nil {
-		t.Fatalf("put sla policies as viewer: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for viewer on PUT sla-policies, got %d", resp.StatusCode)
-	}
+	scenario.
+		When("a viewer attempts to PUT SLA policies", func(s *Scenario) error {
+			body := `{"items":[{"priority":"low","ticketType":"feature","firstResponseHours":48,"completionHours":120,"atRiskThresholdPct":80}]}`
+			resp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/projects/%s/sla-policies", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("put sla policies as viewer: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 403 {
+				return fmt.Errorf("expected 403 for viewer on PUT sla-policies, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the request is rejected with 403", func(s *Scenario) error {
+			return nil
+		})
 }

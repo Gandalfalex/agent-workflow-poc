@@ -38,7 +38,7 @@ func TestReportingTabAndExportEndpoints(t *testing.T) {
 		AndISeeSelectorKey("reporting.export_json_button").
 		AndISeeSelectorKey("reporting.export_csv_button").
 		AndISeeSelectorKey("reporting.throughput_list").
-		Then("the reporting summary and export endpoints return data", func(s *Scenario) error {
+		When("I request the reporting summary API", func(s *Scenario) error {
 			to := time.Now().UTC().Format("2006-01-02")
 			from := time.Now().UTC().AddDate(0, 0, -13).Format("2006-01-02")
 
@@ -69,6 +69,11 @@ func TestReportingTabAndExportEndpoints(t *testing.T) {
 			if len(summary.ThroughputByDay) == 0 {
 				return fmt.Errorf("expected throughput rows in summary")
 			}
+			return nil
+		}).
+		Then("the JSON export endpoint returns a valid document", func(s *Scenario) error {
+			to := time.Now().UTC().Format("2006-01-02")
+			from := time.Now().UTC().AddDate(0, 0, -13).Format("2006-01-02")
 
 			jsonPath := fmt.Sprintf("/projects/%s/reporting/export?from=%s&to=%s&format=json", seed.ProjectID, from, to)
 			jsonResp, err := s.Harness().APIRequest(http.MethodGet, jsonPath, nil)
@@ -99,6 +104,11 @@ func TestReportingTabAndExportEndpoints(t *testing.T) {
 			if exported.Summary.From == "" || exported.Summary.To == "" {
 				return fmt.Errorf("export json missing summary range")
 			}
+			return nil
+		}).
+		And("the CSV export endpoint returns a valid document with expected columns", func(s *Scenario) error {
+			to := time.Now().UTC().Format("2006-01-02")
+			from := time.Now().UTC().AddDate(0, 0, -13).Format("2006-01-02")
 
 			csvPath := fmt.Sprintf("/projects/%s/reporting/export?from=%s&to=%s&format=csv", seed.ProjectID, from, to)
 			csvResp, err := s.Harness().APIRequest(http.MethodGet, csvPath, nil)
@@ -123,7 +133,6 @@ func TestReportingTabAndExportEndpoints(t *testing.T) {
 			if !strings.Contains(text, "throughput_by_day") {
 				return fmt.Errorf("csv body missing throughput rows")
 			}
-
 			return nil
 		})
 }

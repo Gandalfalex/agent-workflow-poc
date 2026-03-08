@@ -50,7 +50,6 @@ func TestWebhookFiresOnTicketStateChange(t *testing.T) {
 
 	title := fmt.Sprintf("Webhook State Ticket %d", time.Now().UnixNano())
 
-	// Create ticket via UI first
 	scenario.
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
@@ -62,13 +61,11 @@ func TestWebhookFiresOnTicketStateChange(t *testing.T) {
 		ThenISeeSelectorKey("new_ticket.modal").
 		WhenIFillKey("new_ticket.title_input", title).
 		WhenIClickKey("new_ticket.create_button").
-		ThenISeeText(title)
-
-	// Reset capture to only track state change
-	capture.Reset()
-
-	// Open ticket and change state
-	scenario.
+		ThenISeeText(title).
+		When("I reset the webhook capture to track only state changes", func(s *Scenario) error {
+			capture.Reset()
+			return nil
+		}).
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
 		WhenISelectOptionByValueKey("ticket.state_select", seed.InProgressID).

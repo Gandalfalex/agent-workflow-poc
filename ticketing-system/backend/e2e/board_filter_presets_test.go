@@ -41,8 +41,8 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 	presetName := fmt.Sprintf("Preset %d", time.Now().UnixNano())
 	renamedPreset := fmt.Sprintf("Renamed %d", time.Now().UnixNano())
 
-	presetID := ""
-	shareToken := ""
+	var presetID string
+	var shareToken string
 
 	scenario.
 		GivenAppIsRunning().
@@ -56,7 +56,7 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 		WhenIClickKey("board.preset_open_editor_button").
 		WhenIFillKey("board.preset_name_input", presetName).
 		WhenIClickKey("board.preset_save_button").
-		Then("preset saved via API", func(s *Scenario) error {
+		Then("preset is saved with correct filters via API", func(s *Scenario) error {
 			list, err := waitForPresetByName(s.Harness(), seed.ProjectID, presetName, 5*time.Second)
 			if err != nil {
 				return err
@@ -72,9 +72,6 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 				return fmt.Errorf("preset %q not found after save", presetName)
 			}
 			presetID = preset.ID
-			if preset.Name != presetName {
-				return fmt.Errorf("expected preset name %q, got %q", presetName, preset.Name)
-			}
 			if preset.Filters.Priority == nil || *preset.Filters.Priority != "high" {
 				return fmt.Errorf("expected priority high in saved preset")
 			}
@@ -88,7 +85,7 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 		When("I apply the saved preset", func(s *Scenario) error {
 			return s.Harness().SelectOptionByValueKey("board.preset_select", presetID)
 		}).
-		Then("saved preset reapplies board filters", func(s *Scenario) error {
+		Then("saved preset reapplies the board filters", func(s *Scenario) error {
 			priority, err := inputValueByKey(s.Harness(), "board.filter_priority_select")
 			if err != nil {
 				return err
@@ -120,10 +117,10 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 		}).
 		WhenIClickKey("board.preset_share_button").
 		ThenURLContains("/projects/"+seed.ProjectID+"/board?share=").
-		Then("share token is present in URL", func(s *Scenario) error {
+		And("share token is captured from URL", func(s *Scenario) error {
 			parsed, err := url.Parse(s.Harness().page.URL())
 			if err != nil {
-				return err
+				return fmt.Errorf("parse URL: %w", err)
 			}
 			shareToken = strings.TrimSpace(parsed.Query().Get("share"))
 			if shareToken == "" {
@@ -131,7 +128,7 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 			}
 			return nil
 		}).
-		Then("shared token resolves preset via API", func(s *Scenario) error {
+		And("shared token resolves the preset with correct filters via API", func(s *Scenario) error {
 			preset, err := getSharedBoardFilterPreset(s.Harness(), seed.ProjectID, shareToken)
 			if err != nil {
 				return err
@@ -179,7 +176,7 @@ func TestBoardFilterPresetFlow(t *testing.T) {
 			return nil
 		}).
 		WhenIClickKey("board.preset_delete_button").
-		Then("preset delete persists via API", func(s *Scenario) error {
+		Then("preset is absent from the API list after delete", func(s *Scenario) error {
 			list, err := waitForPresetDeletion(s.Harness(), seed.ProjectID, presetID, 5*time.Second)
 			if err != nil {
 				return err

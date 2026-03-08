@@ -66,6 +66,22 @@ docker compose -f docker-compose.prod.yaml ps
 ./scripts/sync-keycloak-users.sh localhost
 ```
 
+## Worktree Deployer
+
+Manual worktree deployments now live under [infra/worktree-deployer/README.md](/Users/ich/projects/coding-agent-workflow/infra/worktree-deployer/README.md).
+
+Use that project when you want to:
+- deploy a worktree into its own isolated app container
+- provision a dedicated database and database role for that worktree
+- expose a worktree under its own path on the same base host, for example `/abc`
+
+Routing model:
+- production stays fixed at `/ticketing`
+- each worktree is published under `/<worktree-slug>`
+- all routes share the same base host and shared Traefik instance
+
+The older shadow-routing notes below are retained for reference, but the worktree deployer is the supported V1 path.
+
 ## Deploying Shadow/Feature Versions
 
 The shadowing proxy can mirror traffic to multiple versions for comparison. Here's how to deploy a new feature version:

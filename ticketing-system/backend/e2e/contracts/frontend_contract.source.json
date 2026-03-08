@@ -250,7 +250,15 @@
     "settings.approvals_item": "settings.approvals_item",
     "ticket.approval_banner": "ticket.approval_banner",
     "ticket.approve_button": "ticket.approve_button",
-    "ticket.reject_button": "ticket.reject_button"
+    "ticket.reject_button": "ticket.reject_button",
+    "automation.simulate_button": "automation.simulate_button",
+    "automation.simulator_panel": "automation.simulator_panel",
+    "automation.rule_graph": "automation.rule_graph",
+    "automation.timeline": "automation.timeline",
+    "automation.timeline_event": "automation.timeline_event",
+    "automation.timeline_play_button": "automation.timeline_play_button",
+    "automation.summary_bar": "automation.summary_bar",
+    "automation.ticket_context": "automation.ticket_context"
   },
   "flows": {
     "smoke_login_screen": {

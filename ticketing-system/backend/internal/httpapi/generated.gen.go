@@ -120,6 +120,12 @@ const (
 	ReleaseStatusReleased   ReleaseStatus = "released"
 )
 
+// Defines values for SimulationRequestLookbackDays.
+const (
+	N30 SimulationRequestLookbackDays = 30
+	N7  SimulationRequestLookbackDays = 7
+)
+
 // Defines values for SlaStatus.
 const (
 	AtRisk   SlaStatus = "at_risk"
@@ -1035,6 +1041,58 @@ type ReleaseUpdateRequest struct {
 	Version    *string             `json:"version"`
 }
 
+// SimulatedActionOutcome defines model for SimulatedActionOutcome.
+type SimulatedActionOutcome struct {
+	FailureReason *string           `json:"failureReason"`
+	Params        map[string]string `json:"params"`
+	Type          string            `json:"type"`
+	WouldSucceed  bool              `json:"wouldSucceed"`
+}
+
+// SimulationEventResult defines model for SimulationEventResult.
+type SimulationEventResult struct {
+	EventTimestamp   time.Time                `json:"eventTimestamp"`
+	EventType        string                   `json:"eventType"`
+	FailureReason    *string                  `json:"failureReason"`
+	Matched          bool                     `json:"matched"`
+	PredictedActions []SimulatedActionOutcome `json:"predictedActions"`
+	TicketId         openapi_types.UUID       `json:"ticketId"`
+	TicketKey        string                   `json:"ticketKey"`
+}
+
+// SimulationRequest defines model for SimulationRequest.
+type SimulationRequest struct {
+	LookbackDays SimulationRequestLookbackDays `json:"lookbackDays"`
+	Rule         AutomationRuleCreateRequest   `json:"rule"`
+}
+
+// SimulationRequestLookbackDays defines model for SimulationRequest.LookbackDays.
+type SimulationRequestLookbackDays int
+
+// SimulationRunListResponse defines model for SimulationRunListResponse.
+type SimulationRunListResponse struct {
+	Items []SimulationRunSummary `json:"items"`
+}
+
+// SimulationRunResponse defines model for SimulationRunResponse.
+type SimulationRunResponse struct {
+	Items []SimulationEventResult `json:"items"`
+	Run   SimulationRunSummary    `json:"run"`
+	Total int                     `json:"total"`
+}
+
+// SimulationRunSummary defines model for SimulationRunSummary.
+type SimulationRunSummary struct {
+	CreatedAt    time.Time           `json:"createdAt"`
+	FailureCount int                 `json:"failureCount"`
+	Id           openapi_types.UUID  `json:"id"`
+	LookbackDays int                 `json:"lookbackDays"`
+	MatchedCount int                 `json:"matchedCount"`
+	ProjectId    openapi_types.UUID  `json:"projectId"`
+	RuleId       *openapi_types.UUID `json:"ruleId"`
+	TotalEvents  int                 `json:"totalEvents"`
+}
+
 // SlaPolicyEntry SLA target durations for a specific priority+type combination.
 type SlaPolicyEntry struct {
 	// AtRiskThresholdPct Percentage of completion window at which ticket becomes at_risk (default 80).
@@ -1551,6 +1609,12 @@ type ListProjectActivitiesParams struct {
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetSimulationRunParams defines parameters for GetSimulationRun.
+type GetSimulationRunParams struct {
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // GetProjectDependencyGraphParams defines parameters for GetProjectDependencyGraph.
 type GetProjectDependencyGraphParams struct {
 	RootTicketId *openapi_types.UUID `form:"rootTicketId,omitempty" json:"rootTicketId,omitempty"`
@@ -1652,6 +1716,9 @@ type CreateAutomationRuleJSONRequestBody = AutomationRuleCreateRequest
 
 // UpdateAutomationRuleJSONRequestBody defines body for UpdateAutomationRule for application/json ContentType.
 type UpdateAutomationRuleJSONRequestBody = AutomationRuleUpdateRequest
+
+// SimulateAutomationRuleJSONRequestBody defines body for SimulateAutomationRule for application/json ContentType.
+type SimulateAutomationRuleJSONRequestBody = SimulationRequest
 
 // CreateBoardFilterPresetJSONRequestBody defines body for CreateBoardFilterPreset for application/json ContentType.
 type CreateBoardFilterPresetJSONRequestBody = BoardFilterPresetCreateRequest
@@ -1853,6 +1920,15 @@ type ServerInterface interface {
 	// List automation executions for a rule
 	// (GET /projects/{projectId}/automation/rules/{ruleId}/executions)
 	ListAutomationExecutions(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID)
+	// Run a dry-run simulation of a rule against historical events
+	// (POST /projects/{projectId}/automation/simulate)
+	SimulateAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// List past simulation runs for a project
+	// (GET /projects/{projectId}/automation/simulation-runs)
+	ListSimulationRuns(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
+	// Get results for a specific simulation run
+	// (GET /projects/{projectId}/automation/simulation-runs/{runId})
+	GetSimulationRun(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, runId openapi_types.UUID, params GetSimulationRunParams)
 	// Kanban board snapshot
 	// (GET /projects/{projectId}/board)
 	GetBoard(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID)
@@ -2330,6 +2406,24 @@ func (_ Unimplemented) UpdateAutomationRule(w http.ResponseWriter, r *http.Reque
 // List automation executions for a rule
 // (GET /projects/{projectId}/automation/rules/{ruleId}/executions)
 func (_ Unimplemented) ListAutomationExecutions(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, ruleId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Run a dry-run simulation of a rule against historical events
+// (POST /projects/{projectId}/automation/simulate)
+func (_ Unimplemented) SimulateAutomationRule(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List past simulation runs for a project
+// (GET /projects/{projectId}/automation/simulation-runs)
+func (_ Unimplemented) ListSimulationRuns(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get results for a specific simulation run
+// (GET /projects/{projectId}/automation/simulation-runs/{runId})
+func (_ Unimplemented) GetSimulationRun(w http.ResponseWriter, r *http.Request, projectId openapi_types.UUID, runId openapi_types.UUID, params GetSimulationRunParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3922,6 +4016,127 @@ func (siw *ServerInterfaceWrapper) ListAutomationExecutions(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAutomationExecutions(w, r, projectId, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SimulateAutomationRule operation middleware
+func (siw *ServerInterfaceWrapper) SimulateAutomationRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SimulateAutomationRule(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSimulationRuns operation middleware
+func (siw *ServerInterfaceWrapper) ListSimulationRuns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSimulationRuns(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSimulationRun operation middleware
+func (siw *ServerInterfaceWrapper) GetSimulationRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "runId" -------------
+	var runId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "runId", chi.URLParam(r, "runId"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "runId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, SessionAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSimulationRunParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSimulationRun(w, r, projectId, runId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7417,6 +7632,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/automation/rules/{ruleId}/executions", wrapper.ListAutomationExecutions)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/automation/simulate", wrapper.SimulateAutomationRule)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/automation/simulation-runs", wrapper.ListSimulationRuns)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/automation/simulation-runs/{runId}", wrapper.GetSimulationRun)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/board", wrapper.GetBoard)

@@ -1,0 +1,63 @@
+http:
+  routers:
+    # n8n - /n8n/* (highest priority)
+    n8n:
+      rule: "Host(`t123abcdefg.mooo.com`) && PathPrefix(`/n8n`)"
+      service: n8n
+      middlewares:
+        - n8n-slash
+        - n8n-stripprefix
+      priority: 200
+      tls:
+        certResolver: le
+
+    # Keycloak - /realms and /resources
+    keycloak:
+      rule: "Host(`t123abcdefg.mooo.com`) && (PathPrefix(`/realms`) || PathPrefix(`/resources`))"
+      service: keycloak
+      priority: 100
+      tls:
+        certResolver: le
+
+    # Production ticketing - fixed under /ticketing
+    ticketing:
+      rule: "Host(`t123abcdefg.mooo.com`) && PathPrefix(`/ticketing`)"
+      service: ticketing
+      middlewares:
+        - ticketing-stripprefix
+      priority: 50
+      tls:
+        certResolver: le
+
+  middlewares:
+    n8n-slash:
+      redirectRegex:
+        regex: "^(https?)://([^/]+)/n8n$"
+        replacement: "${1}://${2}/n8n/"
+        permanent: true
+
+    n8n-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/n8n"
+
+    ticketing-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/ticketing"
+
+  services:
+    n8n:
+      loadBalancer:
+        servers:
+          - url: "http://n8n:5678"
+
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: "http://keycloak:8080"
+
+    ticketing:
+      loadBalancer:
+        servers:
+          - url: "http://ticketing-api-prod:8080"

@@ -880,19 +880,179 @@ CREATE INDEX ON ticket_locks (expires_at);
 ### TKT-034: Automation Rule Simulator and Dry-Run Replay
 - **Priority:** `P2`
 - **Type:** `feature`
-- **Status:** `Todo`
-- **Problem:** Rule mistakes are risky; users need confidence before enabling automations in production.
-- **Scope:**
-  - Add simulation mode for rules without mutating live tickets.
-  - Replay selected historical events (for example last 7/30 days) against draft rules.
-  - Show predicted action outcomes and failure reasons.
-  - Add "compare result" diff view for each affected ticket.
-  - Store simulation runs for later review.
-- **Acceptance Criteria:**
-  - Users can run simulation from rule editor before saving/enabling.
-  - Simulation output includes matched event count and per-action success/failure prediction.
-  - No ticket mutations occur during dry-run.
-  - API exposes simulation results with pagination for large runs.
+- **Status:** `Completed (March 8, 2026)`
+- **Problem:** Rule mistakes are risky; users need confidence before enabling automations in production. There is no way to preview what a rule would do against real historical data without enabling it live.
+
+---
+
+#### Background
+
+The existing automation engine (`internal/automation/engine.go`) evaluates rules via `Fire(event, ticket, extra)`. Rules consist of a `triggerEvent`, `triggerConditions` (key/value AND/OR checks against the `extra` map), and one or more `actions` (assign, state change, comment, webhook). The audit log records past events with actor, resource, action, and details.
+
+The simulator replays recent audit log events against a rule definition without mutating any tickets. The interactive frontend mirrors the backend condition logic client-side to enable step-by-step animation without round-trips.
+
+---
+
+#### Scope
+
+**Backend**
+
+- New endpoint: `POST /projects/{projectId}/automation-rules/simulate`
+  - Accepts: rule definition (draft — no `id` required), `lookbackDays` (7 or 30)
+  - Queries audit log for events matching the rule's `triggerEvent` within the window
+  - For each event, fetches the current ticket state (best-effort — not point-in-time)
+  - Returns paginated list of simulation results (matched/unmatched, per-action outcome, failure reason)
+  - Stores the run in `simulation_runs` + `simulation_results` tables for later review
+- New endpoint: `GET /projects/{projectId}/simulation-runs` — list past runs
+- New endpoint: `GET /projects/{projectId}/simulation-runs/{runId}` — paginated results for a run
+- Engine: add a pure `EvaluateRule(rule, event, ticket, extra) SimulationResult` function (no DB writes, no goroutine) that the simulate handler calls synchronously
+- No mutations during simulation — `UpdateTicket`, `CreateComment`, webhooks are never called
+
+**`simulation_runs` table**
+```sql
+id uuid PK, project_id uuid FK, rule_id uuid nullable FK,
+rule_snapshot jsonb,   -- full rule definition at time of simulation
+lookback_days int,
+total_events int,      -- events scanned
+matched_count int,
+failure_count int,
+created_at timestamptz
+```
+
+**`simulation_results` table**
+```sql
+id uuid PK, run_id uuid FK,
+ticket_id uuid FK,
+event_type text,
+event_timestamp timestamptz,
+matched bool,
+failure_reason text nullable,
+predicted_actions jsonb   -- [{type, params, wouldSucceed, failureReason}]
+```
+
+---
+
+**Frontend — Interactive Simulator Panel**
+
+Inspired by the Stately/XState simulator. Embedded in the automation rule editor (Settings → Automation → rule edit view). Opened via a "Simulate" button; renders as a side panel or bottom drawer alongside the rule form.
+
+**1. Rule graph (static)**
+- Renders the current rule definition as a small flowchart: `Trigger` → `Conditions` (AND/OR nodes) → `Actions`
+- Nodes are styled as cards with icons; edges connect them
+- No interaction, just a visual summary of the rule's structure
+
+**2. Event timeline (scrubber)**
+- Horizontal timeline showing the N historical events returned by the backend for this lookback window
+- Each event is a dot on the timeline, labelled with date + ticket key
+- Unmatched events shown as grey dots; matched events as coloured dots
+- Click or arrow-key to step through events one at a time
+- Play/pause button to auto-advance with a configurable delay (e.g. 300 ms/step)
+
+**3. Live evaluation highlighting**
+- As each event is selected:
+  - Trigger node lights up (green) — event type matched
+  - Each condition node evaluates against the event's `extra` context and turns green (pass) or red (fail) with the evaluated value shown inline (e.g. `priority = "high" ✓`)
+  - If all conditions pass: action nodes light up with "would fire" label and predicted outcome (e.g. `→ Assign to Alice`, `→ Move to In Review`)
+  - If any condition fails: evaluation stops at the failing node; failing reason shown (e.g. `assigneeId not set`)
+  - Transitions/edges animate along the evaluation path
+
+**4. Ticket context panel**
+- Sidebar card showing the ticket involved in the active event: title, current state, assignee, priority, type
+- Highlights the fields referenced by conditions
+
+**5. Aggregate summary bar**
+- Shown above the timeline: `Scanned 47 events · 12 matched · 3 predicted failures`
+- Matched/failure counts update as the backend results load
+- Links to full paginated results table below the graph (for runs with many matches)
+
+**6. Client-side condition evaluator**
+- A small TypeScript module that mirrors `matchConditions` from the Go engine
+- Takes the rule's `triggerConditions` + event `extra` map and returns per-condition pass/fail results
+- Drives the real-time highlighting without a round-trip per step
+- Backend `simulate` endpoint validates correctness of the client logic on batch runs
+
+---
+
+#### API shapes (OpenAPI additions)
+
+```yaml
+SimulationRequest:
+  properties:
+    rule: { $ref: '#/components/schemas/AutomationRuleInput' }
+    lookbackDays: { type: integer, enum: [7, 30] }
+
+SimulationEventResult:
+  properties:
+    ticketId: string
+    ticketKey: string
+    eventType: string
+    eventTimestamp: string (date-time)
+    matched: boolean
+    failureReason: string (nullable)
+    predictedActions:
+      type: array
+      items:
+        properties:
+          type: string
+          params: object
+          wouldSucceed: boolean
+          failureReason: string (nullable)
+
+SimulationRunSummary:
+  properties:
+    id: string
+    ruleId: string (nullable)
+    lookbackDays: integer
+    totalEvents: integer
+    matchedCount: integer
+    failureCount: integer
+    createdAt: string (date-time)
+
+SimulationRunResponse:
+  properties:
+    run: SimulationRunSummary
+    items: array of SimulationEventResult
+    total: integer
+```
+
+---
+
+#### Frontend contract additions (selectors)
+
+```
+settings.automation_simulate_button
+settings.automation_simulator_panel
+settings.automation_rule_graph
+settings.automation_timeline
+settings.automation_timeline_event
+settings.automation_timeline_play_button
+settings.automation_summary_bar
+settings.automation_ticket_context
+settings.automation_simulation_runs_list
+settings.automation_simulation_run_item
+```
+
+---
+
+#### E2E Tests
+
+- `TestSimulateRuleNoMutation` — run simulation, verify no ticket state changes
+- `TestSimulateRuleMatchedEvents` — rule with known-matching historical events returns correct matched count
+- `TestSimulateRuleConditionFailure` — rule with impossible condition returns 0 matches, failure reasons populated
+- `TestSimulationRunPersisted` — run is retrievable via GET simulation-runs after completion
+- `TestSimulateRuleDraft` — simulate an unsaved (no `id`) rule definition works correctly
+
+---
+
+#### Acceptance Criteria
+
+- "Simulate" button available in rule editor before saving or enabling
+- Running simulation produces paginated results with per-event match status and predicted actions
+- No ticket mutations occur during any simulation run
+- Client-side evaluator produces identical pass/fail results to backend for all test cases
+- Step-through UI highlights trigger, condition, and action nodes as each event is selected
+- Simulation runs are stored and retrievable for audit/review
+- E2E covers no-mutation guarantee, match accuracy, and draft-rule simulation
 
 ### TKT-035: Shared Operational Views by Team Role
 - **Priority:** `P2`

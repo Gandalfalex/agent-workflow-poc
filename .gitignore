@@ -103,6 +103,8 @@ __pycache__/
 # Project specific
 .claude/
 *.swp
+infra/worktree-deployer/state/deployments/*.env
+infra/worktree-deployer/state/deployments/*.json
 -e
 # Compiled binaries (architecture-specific)
 bin/

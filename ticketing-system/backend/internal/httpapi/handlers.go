@@ -157,6 +157,13 @@ type Store interface {
 	AddApprovalDecision(ctx context.Context, requestID, approverID uuid.UUID, approverName, decision string, reason *string) (*store.ApprovalDecision, error)
 	UpdateApprovalRequestStatus(ctx context.Context, requestID uuid.UUID, status string, approvedCount int) (*store.ApprovalRequest, error)
 	HasDuplicateApprovalDecision(ctx context.Context, requestID, approverID uuid.UUID) (bool, error)
+
+	CreateSimulationRun(ctx context.Context, input store.SimulationRunCreateInput) (store.SimulationRun, error)
+	ListSimulationRuns(ctx context.Context, projectID uuid.UUID) ([]store.SimulationRun, error)
+	GetSimulationRun(ctx context.Context, id, projectID uuid.UUID) (store.SimulationRun, error)
+	CreateSimulationResult(ctx context.Context, input store.SimulationResultCreateInput) error
+	ListSimulationResults(ctx context.Context, runID uuid.UUID, limit, offset int) ([]store.SimulationResult, int, error)
+	GetSimulationEvents(ctx context.Context, projectID uuid.UUID, triggerEvent string, lookbackDays int) ([]store.SimulationEvent, error)
 }
 
 type Authenticator interface {

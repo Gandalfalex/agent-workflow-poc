@@ -1007,6 +1007,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/automation/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run a dry-run simulation of a rule against historical events */
+        post: operations["simulateAutomationRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/automation/simulation-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List past simulation runs for a project */
+        get: operations["listSimulationRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/automation/simulation-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get results for a specific simulation run */
+        get: operations["getSimulationRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/capacity-settings": {
         parameters: {
             query?: never;
@@ -2375,6 +2426,52 @@ export interface components {
             };
             actions?: components["schemas"]["AutomationAction"][];
             enabled?: boolean;
+        };
+        SimulationRequest: {
+            rule: components["schemas"]["AutomationRuleCreateRequest"];
+            /** @enum {integer} */
+            lookbackDays: 7 | 30;
+        };
+        SimulatedActionOutcome: {
+            type: string;
+            params: {
+                [key: string]: string;
+            };
+            wouldSucceed: boolean;
+            failureReason?: string | null;
+        };
+        SimulationEventResult: {
+            /** Format: uuid */
+            ticketId: string;
+            ticketKey: string;
+            eventType: string;
+            /** Format: date-time */
+            eventTimestamp: string;
+            matched: boolean;
+            failureReason?: string | null;
+            predictedActions: components["schemas"]["SimulatedActionOutcome"][];
+        };
+        SimulationRunSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            /** Format: uuid */
+            ruleId?: string | null;
+            lookbackDays: number;
+            totalEvents: number;
+            matchedCount: number;
+            failureCount: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        SimulationRunResponse: {
+            run: components["schemas"]["SimulationRunSummary"];
+            items: components["schemas"]["SimulationEventResult"][];
+            total: number;
+        };
+        SimulationRunListResponse: {
+            items: components["schemas"]["SimulationRunSummary"][];
         };
         PortfolioTotals: {
             totalProjects: number;
@@ -5004,6 +5101,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutomationExecutionListResponse"];
+                };
+            };
+        };
+    };
+    simulateAutomationRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulationRequest"];
+            };
+        };
+        responses: {
+            /** @description Simulation results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationRunResponse"];
+                };
+            };
+        };
+    };
+    listSimulationRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Simulation runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationRunListResponse"];
+                };
+            };
+        };
+    };
+    getSimulationRun: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                projectId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Simulation run with paginated results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationRunResponse"];
                 };
             };
         };

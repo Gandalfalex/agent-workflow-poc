@@ -11,6 +11,20 @@ import (
 	"ticketing-system/backend/internal/store"
 )
 
+// seedCommentTicket creates a ticket directly via the store for comment tests.
+func seedCommentTicket(s *Scenario, projectID, storyID, backlogID uuid.UUID, title string) error {
+	_, err := s.Harness().Store().CreateTicket(s.Harness().Context(), projectID, store.TicketCreateInput{
+		Title:   title,
+		Type:    "feature",
+		StoryID: storyID,
+		StateID: &backlogID,
+	})
+	if err != nil {
+		return fmt.Errorf("seed ticket: %w", err)
+	}
+	return nil
+}
+
 func TestMultipleCommentsOnTicketDisplayInOrder(t *testing.T) {
 	t.Parallel()
 
@@ -18,8 +32,6 @@ func TestMultipleCommentsOnTicketDisplayInOrder(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
@@ -31,17 +43,10 @@ func TestMultipleCommentsOnTicketDisplayInOrder(t *testing.T) {
 	comment2 := fmt.Sprintf("Second comment %d", ts)
 	comment3 := fmt.Sprintf("Third comment %d", ts)
 
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   title,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
 	scenario.
+		Given("a ticket exists for multi-comment testing", func(s *Scenario) error {
+			return seedCommentTicket(s, projectID, storyID, backlogID, title)
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
@@ -51,19 +56,15 @@ func TestMultipleCommentsOnTicketDisplayInOrder(t *testing.T) {
 		ThenISeeText(title).
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
-		// Add first comment
 		WhenIFillKey("ticket.comment_input", comment1).
 		WhenIClickKey("ticket.post_comment_button").
 		ThenISeeText(comment1).
-		// Add second comment
 		WhenIFillKey("ticket.comment_input", comment2).
 		WhenIClickKey("ticket.post_comment_button").
 		ThenISeeText(comment2).
-		// Add third comment
 		WhenIFillKey("ticket.comment_input", comment3).
 		WhenIClickKey("ticket.post_comment_button").
 		ThenISeeText(comment3).
-		// All three should be visible
 		AndISeeText(comment1).
 		AndISeeText(comment2).
 		AndISeeText(comment3)
@@ -76,8 +77,6 @@ func TestCommentWithSpecialCharacters(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
@@ -85,20 +84,12 @@ func TestCommentWithSpecialCharacters(t *testing.T) {
 
 	ts := time.Now().UnixNano()
 	title := fmt.Sprintf("Special Chars Ticket %d", ts)
-	// Markdown comment with bold, code, and HTML-like content
 	markdownComment := "**bold text** and `inline code` and <script>alert('xss')</script>"
 
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   title,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
 	scenario.
+		Given("a ticket exists for special-character comment testing", func(s *Scenario) error {
+			return seedCommentTicket(s, projectID, storyID, backlogID, title)
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
@@ -108,13 +99,9 @@ func TestCommentWithSpecialCharacters(t *testing.T) {
 		ThenISeeText(title).
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
-		// Post the markdown comment
 		WhenIFillKey("ticket.comment_input", markdownComment).
 		WhenIClickKey("ticket.post_comment_button").
-		// The bold text should render (visible text without markdown syntax)
 		ThenISeeText("bold text").
-		// inline code should be visible
 		AndISeeText("inline code").
-		// The script tag should NOT execute - just verify the board is still functional
 		AndISeeSelectorKey("ticket.modal")
 }

@@ -2215,6 +2215,86 @@ paths:
               schema:
                 $ref: "#/components/schemas/AutomationExecutionListResponse"
 
+  /projects/{projectId}/automation/simulate:
+    post:
+      summary: Run a dry-run simulation of a rule against historical events
+      operationId: simulateAutomationRule
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulationRequest"
+      responses:
+        "200":
+          description: Simulation results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationRunResponse"
+
+  /projects/{projectId}/automation/simulation-runs:
+    get:
+      summary: List past simulation runs for a project
+      operationId: listSimulationRuns
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Simulation runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationRunListResponse"
+
+  /projects/{projectId}/automation/simulation-runs/{runId}:
+    get:
+      summary: Get results for a specific simulation run
+      operationId: getSimulationRun
+      tags: [automation]
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: runId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Simulation run with paginated results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationRunResponse"
+
   /projects/{projectId}/capacity-settings:
     get:
       summary: List project capacity settings
@@ -5051,6 +5131,104 @@ components:
             $ref: "#/components/schemas/AutomationAction"
         enabled:
           type: boolean
+
+    SimulationRequest:
+      type: object
+      properties:
+        rule:
+          $ref: "#/components/schemas/AutomationRuleCreateRequest"
+        lookbackDays:
+          type: integer
+          enum: [7, 30]
+      required: [rule, lookbackDays]
+
+    SimulatedActionOutcome:
+      type: object
+      properties:
+        type:
+          type: string
+        params:
+          type: object
+          additionalProperties:
+            type: string
+        wouldSucceed:
+          type: boolean
+        failureReason:
+          type: string
+          nullable: true
+      required: [type, params, wouldSucceed]
+
+    SimulationEventResult:
+      type: object
+      properties:
+        ticketId:
+          type: string
+          format: uuid
+        ticketKey:
+          type: string
+        eventType:
+          type: string
+        eventTimestamp:
+          type: string
+          format: date-time
+        matched:
+          type: boolean
+        failureReason:
+          type: string
+          nullable: true
+        predictedActions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimulatedActionOutcome"
+      required: [ticketId, ticketKey, eventType, eventTimestamp, matched, predictedActions]
+
+    SimulationRunSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        ruleId:
+          type: string
+          format: uuid
+          nullable: true
+        lookbackDays:
+          type: integer
+        totalEvents:
+          type: integer
+        matchedCount:
+          type: integer
+        failureCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, projectId, lookbackDays, totalEvents, matchedCount, failureCount, createdAt]
+
+    SimulationRunResponse:
+      type: object
+      properties:
+        run:
+          $ref: "#/components/schemas/SimulationRunSummary"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimulationEventResult"
+        total:
+          type: integer
+      required: [run, items, total]
+
+    SimulationRunListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimulationRunSummary"
+      required: [items]
 
     PortfolioTotals:
       type: object

@@ -1,0 +1,35 @@
+services:
+  ticketing-app:
+    build:
+      context: ${WORKTREE_TICKETING_ROOT}
+      dockerfile: backend/Dockerfile
+      args:
+        BASE_PATH: /ticketing
+        VITE_API_BASE: /ticketing/rest/v1
+    container_name: ${CONTAINER_NAME}
+    environment:
+      PORT: "8080"
+      BASE_PATH: "/"
+      DATABASE_URL: ${DATABASE_URL}
+      KEYCLOAK_BASE_URL: ${KEYCLOAK_BASE_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_API_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_API_ADMIN_PASSWORD}
+      COOKIE_SECURE: "true"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+    ports:
+      - "${DEBUG_PORT}:8080"
+    networks:
+      - shared
+    restart: unless-stopped
+
+networks:
+  shared:
+    external: true
+    name: ${PREVIEW_SHARED_NETWORK}

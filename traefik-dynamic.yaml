@@ -1,3 +1,6 @@
+# Legacy reference copy.
+# The production stack now loads Traefik dynamic config from:
+# infra/worktree-deployer/state/traefik/00-base.yaml
 http:
   routers:
     # n8n - /n8n/* (highest priority)
@@ -19,7 +22,7 @@ http:
       tls:
         certResolver: le
 
-    # Ticketing - /ticketing/* (with prefix stripping)
+    # Production ticketing - fixed under /ticketing
     ticketing:
       rule: "Host(`t123abcdefg.mooo.com`) && PathPrefix(`/ticketing`)"
       service: ticketing

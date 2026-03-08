@@ -1,0 +1,7 @@
+interface:
+  display_name: "Worktree Preview Ops"
+  short_description: "Operate path-based worktree deploys on the shared host"
+  default_prompt: "Use $worktree-preview-ops to create, update, validate, or destroy a worktree deployment under /<slug> while production stays on /ticketing."
+
+policy:
+  allow_implicit_invocation: true

@@ -11,6 +11,30 @@ import (
 	"ticketing-system/backend/internal/store"
 )
 
+func seedPrefilledTicket(s *Scenario, projectID, storyID, stateID uuid.UUID, title, ticketType, priority string) error {
+	_, err := s.Harness().Store().CreateTicket(s.Harness().Context(), projectID, store.TicketCreateInput{
+		Title:    title,
+		Type:     ticketType,
+		StoryID:  storyID,
+		StateID:  &stateID,
+		Priority: priority,
+	})
+	if err != nil {
+		return fmt.Errorf("seed ticket %q: %w", title, err)
+	}
+	return nil
+}
+
+func navigateToBoard(s *Scenario, projectID string) *Scenario {
+	return s.
+		GivenAppIsRunning().
+		WhenIGoToRoute("home").
+		WhenILogInAs("AdminUser", "admin123").
+		WhenISelectProjectByID(projectID).
+		ThenURLContains("/projects/" + projectID + "/board").
+		WhenIClickRefresh()
+}
+
 func TestBoardDisplaysPreseededTickets(t *testing.T) {
 	t.Parallel()
 
@@ -18,10 +42,7 @@ func TestBoardDisplaysPreseededTickets(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
-	// Pre-seed tickets directly into the database
 	storyID := uuid.MustParse(seed.StoryID)
 	projectID := uuid.MustParse(seed.ProjectID)
 	backlogID := uuid.MustParse(seed.BacklogID)
@@ -32,26 +53,17 @@ func TestBoardDisplaysPreseededTickets(t *testing.T) {
 		fmt.Sprintf("Preseeded Gamma %d", time.Now().UnixNano()),
 	}
 
-	for _, title := range ticketTitles {
-		_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-			Title:   title,
-			Type:    "feature",
-			StoryID: storyID,
-			StateID: &backlogID,
-		})
-		if err != nil {
-			t.Fatalf("seed ticket %q: %v", title, err)
-		}
-	}
-
-	// Navigate to the board and verify all pre-seeded tickets are displayed
 	scenario.
-		GivenAppIsRunning().
-		WhenIGoToRoute("home").
-		WhenILogInAs("AdminUser", "admin123").
-		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
-		WhenIClickRefresh().
+		Given("three tickets are pre-seeded directly into the database", func(s *Scenario) error {
+			for _, title := range ticketTitles {
+				if err := seedPrefilledTicket(s, projectID, storyID, backlogID, title, "feature", ""); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+
+	navigateToBoard(scenario, seed.ProjectID).
 		ThenISeeText(ticketTitles[0]).
 		AndISeeText(ticketTitles[1]).
 		AndISeeText(ticketTitles[2])
@@ -64,8 +76,6 @@ func TestBoardShowsTicketsInCorrectStates(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	storyID := uuid.MustParse(seed.StoryID)
 	projectID := uuid.MustParse(seed.ProjectID)
@@ -78,45 +88,18 @@ func TestBoardShowsTicketsInCorrectStates(t *testing.T) {
 	inProgressTicket := fmt.Sprintf("WIP Task %d", ts)
 	doneTicket := fmt.Sprintf("Completed Task %d", ts)
 
-	// Seed one ticket in each state
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   backlogTicket,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed backlog ticket: %v", err)
-	}
-
-	_, err = st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   inProgressTicket,
-		Type:    "bug",
-		StoryID: storyID,
-		StateID: &inProgressID,
-	})
-	if err != nil {
-		t.Fatalf("seed in-progress ticket: %v", err)
-	}
-
-	_, err = st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   doneTicket,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &doneID,
-	})
-	if err != nil {
-		t.Fatalf("seed done ticket: %v", err)
-	}
-
-	// Navigate to board and verify all tickets and column headers
 	scenario.
-		GivenAppIsRunning().
-		WhenIGoToRoute("home").
-		WhenILogInAs("AdminUser", "admin123").
-		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
-		WhenIClickRefresh().
+		Given("one ticket is seeded in each workflow state", func(s *Scenario) error {
+			if err := seedPrefilledTicket(s, projectID, storyID, backlogID, backlogTicket, "feature", ""); err != nil {
+				return err
+			}
+			if err := seedPrefilledTicket(s, projectID, storyID, inProgressID, inProgressTicket, "bug", ""); err != nil {
+				return err
+			}
+			return seedPrefilledTicket(s, projectID, storyID, doneID, doneTicket, "feature", "")
+		})
+
+	navigateToBoard(scenario, seed.ProjectID).
 		ThenISeeText(backlogTicket).
 		AndISeeText(inProgressTicket).
 		AndISeeText(doneTicket)
@@ -135,83 +118,73 @@ func TestBoardWithMultipleStoriesAndTickets(t *testing.T) {
 	projectID := uuid.MustParse(seed.ProjectID)
 	backlogID := uuid.MustParse(seed.BacklogID)
 	inProgressID := uuid.MustParse(seed.InProgressID)
+	defaultStoryID := uuid.MustParse(seed.StoryID)
 
 	ts := time.Now().UnixNano()
 
-	// Create a second story
-	story2, err := st.CreateStory(ctx, projectID, store.StoryCreateInput{
-		Title: fmt.Sprintf("Backend Work %d", ts),
-	})
-	if err != nil {
-		t.Fatalf("create second story: %v", err)
-	}
+	var (
+		story2Title   string
+		story3Title   string
+		defaultTicket = fmt.Sprintf("Default Story Ticket %d", ts)
+		story2Ticket1 = fmt.Sprintf("API Endpoint %d", ts)
+		story2Ticket2 = fmt.Sprintf("Database Migration %d", ts)
+		story3Ticket  = fmt.Sprintf("UI Component %d", ts)
+	)
 
-	// Create a third story
-	story3, err := st.CreateStory(ctx, projectID, store.StoryCreateInput{
-		Title: fmt.Sprintf("Frontend Work %d", ts),
-	})
-	if err != nil {
-		t.Fatalf("create third story: %v", err)
-	}
-
-	// Seed tickets for default E2E Story
-	defaultStoryID := uuid.MustParse(seed.StoryID)
-	defaultTicket := fmt.Sprintf("Default Story Ticket %d", ts)
-	if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   defaultTicket,
-		Type:    "feature",
-		StoryID: defaultStoryID,
-		StateID: &backlogID,
-	}); err != nil {
-		t.Fatalf("seed default story ticket: %v", err)
-	}
-
-	// Seed tickets for story 2
-	story2Ticket1 := fmt.Sprintf("API Endpoint %d", ts)
-	story2Ticket2 := fmt.Sprintf("Database Migration %d", ts)
-	if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:    story2Ticket1,
-		Type:     "feature",
-		StoryID:  story2.ID,
-		StateID:  &backlogID,
-		Priority: "high",
-	}); err != nil {
-		t.Fatalf("seed story2 ticket 1: %v", err)
-	}
-	if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:    story2Ticket2,
-		Type:     "feature",
-		StoryID:  story2.ID,
-		StateID:  &inProgressID,
-		Priority: "urgent",
-	}); err != nil {
-		t.Fatalf("seed story2 ticket 2: %v", err)
-	}
-
-	// Seed tickets for story 3
-	story3Ticket := fmt.Sprintf("UI Component %d", ts)
-	if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   story3Ticket,
-		Type:    "bug",
-		StoryID: story3.ID,
-		StateID: &backlogID,
-	}); err != nil {
-		t.Fatalf("seed story3 ticket: %v", err)
-	}
-
-	// Navigate to board and verify everything
 	scenario.
-		GivenAppIsRunning().
-		WhenIGoToRoute("home").
-		WhenILogInAs("AdminUser", "admin123").
-		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
-		WhenIClickRefresh().
-		// All three stories should be visible
+		Given("two additional stories with tickets are seeded into the project", func(s *Scenario) error {
+			story2, err := st.CreateStory(ctx, projectID, store.StoryCreateInput{
+				Title: fmt.Sprintf("Backend Work %d", ts),
+			})
+			if err != nil {
+				return fmt.Errorf("create second story: %w", err)
+			}
+			story2Title = story2.Title
+
+			story3, err := st.CreateStory(ctx, projectID, store.StoryCreateInput{
+				Title: fmt.Sprintf("Frontend Work %d", ts),
+			})
+			if err != nil {
+				return fmt.Errorf("create third story: %w", err)
+			}
+			story3Title = story3.Title
+
+			if err := seedPrefilledTicket(s, projectID, defaultStoryID, backlogID, defaultTicket, "feature", ""); err != nil {
+				return err
+			}
+			if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:    story2Ticket1,
+				Type:     "feature",
+				StoryID:  story2.ID,
+				StateID:  &backlogID,
+				Priority: "high",
+			}); err != nil {
+				return fmt.Errorf("seed story2 ticket 1: %w", err)
+			}
+			if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:    story2Ticket2,
+				Type:     "feature",
+				StoryID:  story2.ID,
+				StateID:  &inProgressID,
+				Priority: "urgent",
+			}); err != nil {
+				return fmt.Errorf("seed story2 ticket 2: %w", err)
+			}
+			if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:   story3Ticket,
+				Type:    "bug",
+				StoryID: story3.ID,
+				StateID: &backlogID,
+			}); err != nil {
+				return fmt.Errorf("seed story3 ticket: %w", err)
+			}
+			return nil
+		})
+
+	navigateToBoard(scenario, seed.ProjectID).
 		ThenISeeText("E2E Story").
-		AndISeeText(story2.Title).
-		AndISeeText(story3.Title).
-		// All tickets should be visible
+		AndISeeText(story2Title).
+		AndISeeText(story3Title).
 		AndISeeText(defaultTicket).
 		AndISeeText(story2Ticket1).
 		AndISeeText(story2Ticket2).
@@ -225,8 +198,6 @@ func TestBoardWithManyTicketsShowsAllPrioritiesAndTypes(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
@@ -234,7 +205,6 @@ func TestBoardWithManyTicketsShowsAllPrioritiesAndTypes(t *testing.T) {
 
 	ts := time.Now().UnixNano()
 
-	// Create tickets with every combination of type and priority
 	tickets := []struct {
 		title    string
 		tickType string
@@ -250,28 +220,18 @@ func TestBoardWithManyTicketsShowsAllPrioritiesAndTypes(t *testing.T) {
 		{fmt.Sprintf("Urgent Bug %d", ts), "bug", "urgent"},
 	}
 
-	for _, tc := range tickets {
-		_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-			Title:    tc.title,
-			Type:     tc.tickType,
-			StoryID:  storyID,
-			StateID:  &backlogID,
-			Priority: tc.priority,
-		})
-		if err != nil {
-			t.Fatalf("seed ticket %q: %v", tc.title, err)
-		}
-	}
-
-	// Navigate to board and verify all tickets are visible
 	scenario.
-		GivenAppIsRunning().
-		WhenIGoToRoute("home").
-		WhenILogInAs("AdminUser", "admin123").
-		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
-		// Double refresh: first settles any stale DEMO project load, second ensures clean E2E data
-		WhenIClickRefresh().
+		Given("tickets covering every combination of type and priority are seeded", func(s *Scenario) error {
+			for _, tc := range tickets {
+				if err := seedPrefilledTicket(s, projectID, storyID, backlogID, tc.title, tc.tickType, tc.priority); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+
+	// Double refresh: first settles any stale DEMO project load, second ensures clean E2E data
+	navigateToBoard(scenario, seed.ProjectID).
 		WhenIWait(1).
 		WhenIClickRefresh()
 
@@ -299,37 +259,24 @@ func TestBoardWithAssignedTickets(t *testing.T) {
 	assignedTitle := fmt.Sprintf("Owned Ticket %d", ts)
 	unassignedTitle := fmt.Sprintf("No-Owner Ticket %d", ts)
 
-	// Create an assigned ticket
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:      assignedTitle,
-		Type:       "feature",
-		StoryID:    storyID,
-		StateID:    &backlogID,
-		AssigneeID: &userID,
-	})
-	if err != nil {
-		t.Fatalf("seed assigned ticket: %v", err)
-	}
-
-	// Create an unassigned ticket
-	_, err = st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   unassignedTitle,
-		Type:    "bug",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed unassigned ticket: %v", err)
-	}
-
-	// Navigate to board and verify both tickets are visible
 	scenario.
-		GivenAppIsRunning().
-		WhenIGoToRoute("home").
-		WhenILogInAs("AdminUser", "admin123").
-		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
-		WhenIClickRefresh().
+		Given("an assigned and an unassigned ticket are seeded", func(s *Scenario) error {
+			if _, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:      assignedTitle,
+				Type:       "feature",
+				StoryID:    storyID,
+				StateID:    &backlogID,
+				AssigneeID: &userID,
+			}); err != nil {
+				return fmt.Errorf("seed assigned ticket: %w", err)
+			}
+			if err := seedPrefilledTicket(s, projectID, storyID, backlogID, unassignedTitle, "bug", ""); err != nil {
+				return err
+			}
+			return nil
+		})
+
+	navigateToBoard(scenario, seed.ProjectID).
 		ThenISeeText(assignedTitle).
 		AndISeeText(unassignedTitle)
 }

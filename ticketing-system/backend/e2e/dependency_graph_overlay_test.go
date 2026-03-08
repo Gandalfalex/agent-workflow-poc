@@ -19,49 +19,61 @@ func TestDependencyGraphOverlayNodeClickOpensTicket(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
-	projectID := uuid.MustParse(seed.ProjectID)
-	storyID := uuid.MustParse(seed.StoryID)
-	backlogID := uuid.MustParse(seed.BacklogID)
 
-	ticketA, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   fmt.Sprintf("Graph Source %d", time.Now().UnixNano()),
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket A: %v", err)
-	}
-	ticketB, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   fmt.Sprintf("Graph Target %d", time.Now().UnixNano()),
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket B: %v", err)
-	}
+	var ticketATitle, ticketAID string
+	var ticketBTitle, ticketBID string
 
 	scenario.
+		Given("two tickets A and B are seeded in backlog", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+			storyID := uuid.MustParse(seed.StoryID)
+			backlogID := uuid.MustParse(seed.BacklogID)
+
+			ts := time.Now().UnixNano()
+			ticketA, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:   fmt.Sprintf("Graph Source %d", ts),
+				Type:    "feature",
+				StoryID: storyID,
+				StateID: &backlogID,
+			})
+			if err != nil {
+				return fmt.Errorf("seed ticket A: %w", err)
+			}
+			ticketATitle = ticketA.Title
+			ticketAID = ticketA.ID.String()
+
+			ticketB, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:   fmt.Sprintf("Graph Target %d", ts),
+				Type:    "feature",
+				StoryID: storyID,
+				StateID: &backlogID,
+			})
+			if err != nil {
+				return fmt.Errorf("seed ticket B: %w", err)
+			}
+			ticketBTitle = ticketB.Title
+			ticketBID = ticketB.ID.String()
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
 		ThenURLContains("/projects/"+seed.ProjectID+"/board").
-		Then("dependency is created", func(s *Scenario) error {
-			return apiCreateDependencyExpect(s.Harness(), ticketA.ID.String(), ticketB.ID.String(), "blocks", http.StatusCreated, "")
+		Then("dependency A→B is created via the API", func(s *Scenario) error {
+			return apiCreateDependencyExpect(s.Harness(), ticketAID, ticketBID, "blocks", http.StatusCreated, "")
 		}).
 		WhenIClickRefresh().
-		ThenISeeText(ticketA.Title).
-		WhenIClickTicketByText(ticketA.Title).
+		ThenISeeText(ticketATitle).
+		WhenIClickTicketByText(ticketATitle).
 		ThenISeeSelectorKey("ticket.modal").
 		ThenISeeSelectorKey("ticket.dependency_graph_open_button").
 		WhenIClickKey("ticket.dependency_graph_open_button").
 		ThenISeeSelectorKey("ticket.dependency_graph_overlay").
-		When("I click target ticket node in graph", func(s *Scenario) error {
-			selector := fmt.Sprintf("[data-testid=\"ticket.dependency-graph-node-%s\"]", ticketB.ID.String())
+		When("I click the target ticket node in the dependency graph", func(s *Scenario) error {
+			selector := fmt.Sprintf("[data-testid=\"ticket.dependency-graph-node-%s\"]", ticketBID)
 			result, err := s.Harness().page.Evaluate(`(sel) => {
 				const node = document.querySelector(sel);
 				if (!node) return false;
@@ -77,7 +89,7 @@ func TestDependencyGraphOverlayNodeClickOpensTicket(t *testing.T) {
 			}
 			return nil
 		}).
-		Then("ticket modal switches to dependency ticket", func(s *Scenario) error {
+		Then("the ticket modal switches to show the dependency ticket", func(s *Scenario) error {
 			input := s.Harness().page.Locator("[data-testid=\"ticket.title-input\"]")
 			if err := input.WaitFor(); err != nil {
 				return err
@@ -86,8 +98,8 @@ func TestDependencyGraphOverlayNodeClickOpensTicket(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if value != ticketB.Title {
-				return fmt.Errorf("expected title input %q, got %q", ticketB.Title, value)
+			if value != ticketBTitle {
+				return fmt.Errorf("expected title input %q, got %q", ticketBTitle, value)
 			}
 			return nil
 		})

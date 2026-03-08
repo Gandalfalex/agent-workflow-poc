@@ -17,20 +17,7 @@ func TestCustomFieldsAPICreateAndList(t *testing.T) {
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
-
-	// Create a text custom field
-	body := fmt.Sprintf(`{"name":"customer_tier","label":"Customer Tier","fieldType":"text","required":false}`)
-	resp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("create custom field: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 201 {
-		t.Fatalf("expected 201 creating custom field, got %d", resp.StatusCode)
-	}
 
 	var created struct {
 		ID        string `json:"id"`
@@ -39,46 +26,54 @@ func TestCustomFieldsAPICreateAndList(t *testing.T) {
 		FieldType string `json:"fieldType"`
 		Required  bool   `json:"required"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		t.Fatalf("decode created field: %v", err)
-	}
-	if created.Name != "customer_tier" {
-		t.Fatalf("expected name customer_tier, got %s", created.Name)
-	}
-	if created.FieldType != "text" {
-		t.Fatalf("expected fieldType text, got %s", created.FieldType)
-	}
 
-	// List custom fields
-	listResp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("list custom fields: %v", err)
-	}
-	defer listResp.Body.Close()
-	if listResp.StatusCode != 200 {
-		t.Fatalf("expected 200 listing custom fields, got %d", listResp.StatusCode)
-	}
-
-	var list struct {
-		Items []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		} `json:"items"`
-	}
-	if err := json.NewDecoder(listResp.Body).Decode(&list); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-
-	found := false
-	for _, f := range list.Items {
-		if f.Name == "customer_tier" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected customer_tier in custom fields list, got %d items", len(list.Items))
-	}
+	scenario.
+		When("I create a text custom field named customer_tier", func(s *Scenario) error {
+			body := `{"name":"customer_tier","label":"Customer Tier","fieldType":"text","required":false}`
+			resp, err := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("create custom field: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 201 {
+				return fmt.Errorf("expected 201 creating custom field, got %d", resp.StatusCode)
+			}
+			return json.NewDecoder(resp.Body).Decode(&created)
+		}).
+		Then("the created field has name customer_tier and fieldType text", func(s *Scenario) error {
+			if created.Name != "customer_tier" {
+				return fmt.Errorf("expected name customer_tier, got %s", created.Name)
+			}
+			if created.FieldType != "text" {
+				return fmt.Errorf("expected fieldType text, got %s", created.FieldType)
+			}
+			return nil
+		}).
+		And("the field appears in the custom fields list", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("list custom fields: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 listing custom fields, got %d", resp.StatusCode)
+			}
+			var list struct {
+				Items []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+				return fmt.Errorf("decode list: %w", err)
+			}
+			for _, f := range list.Items {
+				if f.Name == "customer_tier" {
+					return nil
+				}
+			}
+			return fmt.Errorf("expected customer_tier in custom fields list, got %d items", len(list.Items))
+		})
 }
 
 func TestCustomFieldsTicketValues(t *testing.T) {
@@ -86,86 +81,87 @@ func TestCustomFieldsTicketValues(t *testing.T) {
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
-	st := h.Store()
-	ctx := h.Context()
 
-	// Create a ticket to attach values to
-	projectID := uuid.MustParse(seed.ProjectID)
-	storyID := uuid.MustParse(seed.StoryID)
-	backlogID := uuid.MustParse(seed.BacklogID)
-	ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   "Custom Field Value Test Ticket",
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("create ticket: %v", err)
-	}
-	ticketID := ticket.ID.String()
+	var ticketID string
+	var cfID string
 
-	// Create a custom field
-	cfBody := `{"name":"impact_level","label":"Impact Level","fieldType":"enum","options":[{"value":"low","label":"Low"},{"value":"high","label":"High"}]}`
-	cfResp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), strings.NewReader(cfBody))
-	if err != nil {
-		t.Fatalf("create custom field: %v", err)
-	}
-	defer cfResp.Body.Close()
-	if cfResp.StatusCode != 201 {
-		t.Fatalf("expected 201, got %d", cfResp.StatusCode)
-	}
-	var cf struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(cfResp.Body).Decode(&cf); err != nil {
-		t.Fatalf("decode field: %v", err)
-	}
-
-	// Set custom field value on ticket
-	setBody := fmt.Sprintf(`{"values":[{"fieldId":"%s","valueText":"high"}]}`, cf.ID)
-	setResp, err := h.APIRequest("PUT", fmt.Sprintf("/tickets/%s/custom-field-values", ticketID), strings.NewReader(setBody))
-	if err != nil {
-		t.Fatalf("set custom field values: %v", err)
-	}
-	defer setResp.Body.Close()
-	if setResp.StatusCode != 200 {
-		t.Fatalf("expected 200 setting values, got %d", setResp.StatusCode)
-	}
-
-	// Get custom field values
-	getResp, err := h.APIRequest("GET", fmt.Sprintf("/tickets/%s/custom-field-values", ticketID), nil)
-	if err != nil {
-		t.Fatalf("get custom field values: %v", err)
-	}
-	defer getResp.Body.Close()
-	if getResp.StatusCode != 200 {
-		t.Fatalf("expected 200 getting values, got %d", getResp.StatusCode)
-	}
-
-	var values struct {
-		Items []struct {
-			FieldID   string  `json:"fieldId"`
-			FieldName string  `json:"fieldName"`
-			ValueText *string `json:"valueText"`
-		} `json:"items"`
-	}
-	if err := json.NewDecoder(getResp.Body).Decode(&values); err != nil {
-		t.Fatalf("decode values: %v", err)
-	}
-
-	found := false
-	for _, v := range values.Items {
-		if v.FieldID == cf.ID && v.ValueText != nil && *v.ValueText == "high" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected impact_level=high in ticket values, got %d items", len(values.Items))
-	}
+	scenario.
+		Given("a ticket exists in the project", func(s *Scenario) error {
+			projectID := uuid.MustParse(seed.ProjectID)
+			storyID := uuid.MustParse(seed.StoryID)
+			backlogID := uuid.MustParse(seed.BacklogID)
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:   "Custom Field Value Test Ticket",
+				Type:    "feature",
+				StoryID: storyID,
+				StateID: &backlogID,
+			})
+			if err != nil {
+				return fmt.Errorf("create ticket: %w", err)
+			}
+			ticketID = ticket.ID.String()
+			return nil
+		}).
+		And("an enum custom field impact_level exists", func(s *Scenario) error {
+			body := `{"name":"impact_level","label":"Impact Level","fieldType":"enum","options":[{"value":"low","label":"Low"},{"value":"high","label":"High"}]}`
+			resp, err := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("create custom field: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 201 {
+				return fmt.Errorf("expected 201, got %d", resp.StatusCode)
+			}
+			var cf struct {
+				ID string `json:"id"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&cf); err != nil {
+				return fmt.Errorf("decode field: %w", err)
+			}
+			cfID = cf.ID
+			return nil
+		}).
+		When("I set impact_level=high on the ticket", func(s *Scenario) error {
+			body := fmt.Sprintf(`{"values":[{"fieldId":"%s","valueText":"high"}]}`, cfID)
+			resp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/tickets/%s/custom-field-values", ticketID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("set custom field values: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 setting values, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("GET custom-field-values returns impact_level=high for the ticket", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/tickets/%s/custom-field-values", ticketID), nil)
+			if err != nil {
+				return fmt.Errorf("get custom field values: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 getting values, got %d", resp.StatusCode)
+			}
+			var values struct {
+				Items []struct {
+					FieldID   string  `json:"fieldId"`
+					FieldName string  `json:"fieldName"`
+					ValueText *string `json:"valueText"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&values); err != nil {
+				return fmt.Errorf("decode values: %w", err)
+			}
+			for _, v := range values.Items {
+				if v.FieldID == cfID && v.ValueText != nil && *v.ValueText == "high" {
+					return nil
+				}
+			}
+			return fmt.Errorf("expected impact_level=high in ticket values, got %d items", len(values.Items))
+		})
 }
 
 func TestCustomFieldsViewerCanAccess(t *testing.T) {
@@ -173,19 +169,23 @@ func TestCustomFieldsViewerCanAccess(t *testing.T) {
 
 	scenario := NewScenario(t, WithViewerUser())
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	// Viewer can list custom fields
-	resp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("list custom fields as viewer: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for viewer, got %d", resp.StatusCode)
-	}
+	scenario.
+		When("a viewer lists custom fields", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("list custom fields as viewer: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 for viewer, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the request succeeds with 200", func(s *Scenario) error {
+			return nil
+		})
 }
 
 func TestCustomFieldsViewerCannotCreate(t *testing.T) {
@@ -193,20 +193,24 @@ func TestCustomFieldsViewerCannotCreate(t *testing.T) {
 
 	scenario := NewScenario(t, WithViewerUser())
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	// Viewer cannot create custom fields
-	body := `{"name":"restricted_field","label":"Restricted","fieldType":"text"}`
-	resp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("create custom field as viewer: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for viewer create, got %d", resp.StatusCode)
-	}
+	scenario.
+		When("a viewer attempts to create a custom field", func(s *Scenario) error {
+			body := `{"name":"restricted_field","label":"Restricted","fieldType":"text"}`
+			resp, err := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/custom-fields", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("create custom field as viewer: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 403 {
+				return fmt.Errorf("expected 403 for viewer create, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the request is rejected with 403", func(s *Scenario) error {
+			return nil
+		})
 }
 
 func TestCustomFieldsUISettingsTab(t *testing.T) {

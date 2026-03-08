@@ -209,6 +209,13 @@ export type ApprovalRequestListResponse = components["schemas"]["ApprovalRequest
 export type ApprovalDecisionRequest = components["schemas"]["ApprovalDecisionRequest"];
 export type ApprovalRequiredResponse = components["schemas"]["ApprovalRequiredResponse"];
 
+export type SimulationRequest = components["schemas"]["SimulationRequest"];
+export type SimulatedActionOutcome = components["schemas"]["SimulatedActionOutcome"];
+export type SimulationEventResult = components["schemas"]["SimulationEventResult"];
+export type SimulationRunSummary = components["schemas"]["SimulationRunSummary"];
+export type SimulationRunResponse = components["schemas"]["SimulationRunResponse"];
+export type SimulationRunListResponse = components["schemas"]["SimulationRunListResponse"];
+
 // Live Collaboration types (not in generated schema)
 export type TicketLock = {
     ticketId: string;
@@ -1488,4 +1495,29 @@ export async function rejectRequest(
     method: "POST",
     body: data ? JSON.stringify(data) : undefined,
   });
+}
+
+export async function simulateAutomationRule(
+  projectId: string,
+  data: SimulationRequest,
+): Promise<SimulationRunResponse> {
+  return request<SimulationRunResponse>(`/projects/${projectId}/automation/simulate`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listSimulationRuns(projectId: string): Promise<SimulationRunListResponse> {
+  return request<SimulationRunListResponse>(`/projects/${projectId}/automation/simulation-runs`);
+}
+
+export async function getSimulationRun(
+  projectId: string,
+  runId: string,
+  limit = 50,
+  offset = 0,
+): Promise<SimulationRunResponse> {
+  return request<SimulationRunResponse>(
+    `/projects/${projectId}/automation/simulation-runs/${runId}?limit=${limit}&offset=${offset}`,
+  );
 }

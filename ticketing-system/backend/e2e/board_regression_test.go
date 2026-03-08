@@ -23,43 +23,43 @@ func TestTicketStateChangeViaAPIReflectsOnBoard(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
-	projectID := uuid.MustParse(seed.ProjectID)
-	storyID := uuid.MustParse(seed.StoryID)
-	backlogID := uuid.MustParse(seed.BacklogID)
-	inProgressID := uuid.MustParse(seed.InProgressID)
-
-	title := fmt.Sprintf("API State Change %d", time.Now().UnixNano())
-
-	ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   title,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
-	// Move ticket via store API (not UI)
-	_, err = st.UpdateTicket(ctx, ticket.ID, store.TicketUpdateInput{
-		StateID: &inProgressID,
-	})
-	if err != nil {
-		t.Fatalf("update ticket state: %v", err)
-	}
+	var title string
 
 	scenario.
+		Given("a ticket exists and has been moved to In Progress via the store", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+			storyID := uuid.MustParse(seed.StoryID)
+			backlogID := uuid.MustParse(seed.BacklogID)
+			inProgressID := uuid.MustParse(seed.InProgressID)
+
+			title = fmt.Sprintf("API State Change %d", time.Now().UnixNano())
+			ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:   title,
+				Type:    "feature",
+				StoryID: storyID,
+				StateID: &backlogID,
+			})
+			if err != nil {
+				return fmt.Errorf("seed ticket: %w", err)
+			}
+			_, err = st.UpdateTicket(ctx, ticket.ID, store.TicketUpdateInput{
+				StateID: &inProgressID,
+			})
+			if err != nil {
+				return fmt.Errorf("update ticket state: %w", err)
+			}
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
+		ThenURLContains("/projects/"+seed.ProjectID+"/board").
 		WhenIClickRefresh().
 		ThenISeeText(title).
-		// Open the ticket and verify state shows In Progress
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
 		Then("ticket state select shows In Progress", func(s *Scenario) error {
@@ -92,8 +92,8 @@ func TestBoardAutoRefreshesOnLiveEventWithoutManualRefresh(t *testing.T) {
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
-		Then("a ticket is created via API while board is open", func(s *Scenario) error {
+		ThenURLContains("/projects/"+seed.ProjectID+"/board").
+		When("a ticket is created via API while the board is open", func(s *Scenario) error {
 			title, err := apiCreateTicketWithTitle(s.Harness(), seed.ProjectID, seed.StoryID)
 			if err != nil {
 				return err
@@ -136,29 +136,30 @@ func TestStoryWithZeroTicketsDisplaysCorrectly(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
-
-	projectID := uuid.MustParse(seed.ProjectID)
-
-	emptyStoryTitle := fmt.Sprintf("Empty Story %d", time.Now().UnixNano())
-
-	_, err := st.CreateStory(ctx, projectID, store.StoryCreateInput{
-		Title: emptyStoryTitle,
-	})
-	if err != nil {
-		t.Fatalf("create empty story: %v", err)
-	}
+	var emptyStoryTitle string
 
 	scenario.
+		Given("an empty story with no tickets is created via the store", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+
+			emptyStoryTitle = fmt.Sprintf("Empty Story %d", time.Now().UnixNano())
+			_, err := st.CreateStory(ctx, projectID, store.StoryCreateInput{
+				Title: emptyStoryTitle,
+			})
+			if err != nil {
+				return fmt.Errorf("create empty story: %w", err)
+			}
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
+		ThenURLContains("/projects/"+seed.ProjectID+"/board").
 		WhenIClickRefresh().
 		ThenISeeText(emptyStoryTitle).
-		// Board is still functional - add ticket button visible
 		AndISeeSelectorKey("board.add_ticket_button")
 }
 
@@ -169,54 +170,55 @@ func TestBoardHandlesLargeNumberOfTickets(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
-
-	projectID := uuid.MustParse(seed.ProjectID)
-	storyID := uuid.MustParse(seed.StoryID)
-	backlogID := uuid.MustParse(seed.BacklogID)
-	inProgressID := uuid.MustParse(seed.InProgressID)
-	doneID := uuid.MustParse(seed.DoneID)
-
-	ts := time.Now().UnixNano()
-	states := []*uuid.UUID{&backlogID, &inProgressID, &doneID}
-
-	// Pre-seed 25 tickets across 3 states
 	var sampleTitles []string
-	for i := 0; i < 25; i++ {
-		title := fmt.Sprintf("Bulk Ticket %d-%d", ts, i)
-		stateIdx := i % 3
-		_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-			Title:   title,
-			Type:    "feature",
-			StoryID: storyID,
-			StateID: states[stateIdx],
-		})
-		if err != nil {
-			t.Fatalf("seed ticket %d: %v", i, err)
-		}
-		// Save a few sample titles to verify
-		if i == 0 || i == 12 || i == 24 {
-			sampleTitles = append(sampleTitles, title)
-		}
-	}
 
 	scenario.
+		Given("25 tickets are pre-seeded across 3 states", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+			storyID := uuid.MustParse(seed.StoryID)
+			backlogID := uuid.MustParse(seed.BacklogID)
+			inProgressID := uuid.MustParse(seed.InProgressID)
+			doneID := uuid.MustParse(seed.DoneID)
+
+			ts := time.Now().UnixNano()
+			states := []*uuid.UUID{&backlogID, &inProgressID, &doneID}
+
+			for i := 0; i < 25; i++ {
+				title := fmt.Sprintf("Bulk Ticket %d-%d", ts, i)
+				stateIdx := i % 3
+				_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+					Title:   title,
+					Type:    "feature",
+					StoryID: storyID,
+					StateID: states[stateIdx],
+				})
+				if err != nil {
+					return fmt.Errorf("seed ticket %d: %w", i, err)
+				}
+				if i == 0 || i == 12 || i == 24 {
+					sampleTitles = append(sampleTitles, title)
+				}
+			}
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
+		ThenURLContains("/projects/"+seed.ProjectID+"/board").
 		WhenIClickRefresh().
-		WhenIClickRefresh()
-
-	// Verify sample tickets visible
-	for _, title := range sampleTitles {
-		scenario.ThenISeeText(title)
-	}
-
-	// Board still functional
-	scenario.AndISeeSelectorKey("board.add_ticket_button")
+		WhenIClickRefresh().
+		Then("all sample tickets are visible on the board", func(s *Scenario) error {
+			for _, title := range sampleTitles {
+				if err := s.Harness().ExpectTextVisible(title); err != nil {
+					return fmt.Errorf("expected ticket %q to be visible: %w", title, err)
+				}
+			}
+			return nil
+		}).
+		AndISeeSelectorKey("board.add_ticket_button")
 }
 
 func TestTicketWithLongTitleAndDescription(t *testing.T) {
@@ -226,41 +228,40 @@ func TestTicketWithLongTitleAndDescription(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
-
-	projectID := uuid.MustParse(seed.ProjectID)
-	storyID := uuid.MustParse(seed.StoryID)
-	backlogID := uuid.MustParse(seed.BacklogID)
-
-	// 200-character title
-	longTitle := fmt.Sprintf("LongTitle-%d-%s", time.Now().UnixNano(), strings.Repeat("x", 180))
-	if len(longTitle) > 200 {
-		longTitle = longTitle[:200]
-	}
-
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:       longTitle,
-		Description: strings.Repeat("This is a very long description. ", 20),
-		Type:        "feature",
-		StoryID:     storyID,
-		StateID:     &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
-	// Use a prefix of the title for text matching (board may truncate)
-	titlePrefix := longTitle[:30]
+	var titlePrefix string
 
 	scenario.
+		Given("a ticket with a 200-character title and long description is created via the store", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+			storyID := uuid.MustParse(seed.StoryID)
+			backlogID := uuid.MustParse(seed.BacklogID)
+
+			longTitle := fmt.Sprintf("LongTitle-%d-%s", time.Now().UnixNano(), strings.Repeat("x", 180))
+			if len(longTitle) > 200 {
+				longTitle = longTitle[:200]
+			}
+			titlePrefix = longTitle[:30]
+
+			_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:       longTitle,
+				Description: strings.Repeat("This is a very long description. ", 20),
+				Type:        "feature",
+				StoryID:     storyID,
+				StateID:     &backlogID,
+			})
+			if err != nil {
+				return fmt.Errorf("seed ticket: %w", err)
+			}
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board").
+		ThenURLContains("/projects/"+seed.ProjectID+"/board").
 		WhenIClickRefresh().
 		ThenISeeText(titlePrefix).
-		// Board still functional
 		AndISeeSelectorKey("board.add_ticket_button")
 }

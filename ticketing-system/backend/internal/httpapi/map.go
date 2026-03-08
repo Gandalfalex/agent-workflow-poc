@@ -709,6 +709,45 @@ func mapApprovalDecision(d store.ApprovalDecision) ApprovalDecision {
 	return resp
 }
 
+func mapSimulationRun(r store.SimulationRun) SimulationRunSummary {
+	resp := SimulationRunSummary{
+		Id:           toOpenapiUUID(r.ID),
+		ProjectId:    toOpenapiUUID(r.ProjectID),
+		LookbackDays: r.LookbackDays,
+		TotalEvents:  r.TotalEvents,
+		MatchedCount: r.MatchedCount,
+		FailureCount: r.FailureCount,
+		CreatedAt:    r.CreatedAt,
+	}
+	if r.RuleID != nil {
+		v := toOpenapiUUID(*r.RuleID)
+		resp.RuleId = &v
+	}
+	return resp
+}
+
+func mapSimulationResult(r store.SimulationResult) SimulationEventResult {
+	actions := make([]SimulatedActionOutcome, 0, len(r.PredictedActions))
+	for _, a := range r.PredictedActions {
+		outcome := SimulatedActionOutcome{
+			Type:          a.Type,
+			Params:        a.Params,
+			WouldSucceed:  a.WouldSucceed,
+			FailureReason: a.FailureReason,
+		}
+		actions = append(actions, outcome)
+	}
+	return SimulationEventResult{
+		TicketId:         toOpenapiUUID(r.TicketID),
+		TicketKey:        r.TicketKey,
+		EventType:        r.EventType,
+		EventTimestamp:   r.EventTimestamp,
+		Matched:          r.Matched,
+		FailureReason:    r.FailureReason,
+		PredictedActions: actions,
+	}
+}
+
 func mapApprovalRequest(r store.ApprovalRequest) approvalRequestResponse {
 	resp := approvalRequestResponse{
 		Id:              toOpenapiUUID(r.ID),

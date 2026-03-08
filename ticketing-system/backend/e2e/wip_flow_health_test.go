@@ -14,19 +14,7 @@ func TestWIPLimitSavedAndReturned(t *testing.T) {
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
-
-	// Fetch current workflow states.
-	wfResp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("get workflow: %v", err)
-	}
-	defer wfResp.Body.Close()
-	if wfResp.StatusCode != 200 {
-		t.Fatalf("expected 200 getting workflow, got %d", wfResp.StatusCode)
-	}
 
 	var wf struct {
 		States []struct {
@@ -39,42 +27,6 @@ func TestWIPLimitSavedAndReturned(t *testing.T) {
 			WipEnforcement bool   `json:"wipEnforcement"`
 		} `json:"states"`
 	}
-	if err := json.NewDecoder(wfResp.Body).Decode(&wf); err != nil {
-		t.Fatalf("decode workflow: %v", err)
-	}
-	if len(wf.States) == 0 {
-		t.Skip("no workflow states; skipping")
-	}
-
-	// Update workflow with wipLimit=3, wipEnforcement=true on first non-closed state.
-	var updatedStates []map[string]any
-	for _, s := range wf.States {
-		entry := map[string]any{
-			"id":             s.ID,
-			"name":           s.Name,
-			"order":          s.Order,
-			"isDefault":      s.IsDefault,
-			"isClosed":       s.IsClosed,
-			"wipEnforcement": false,
-		}
-		if !s.IsClosed {
-			lim := 3
-			entry["wipLimit"] = lim
-			entry["wipEnforcement"] = true
-		}
-		updatedStates = append(updatedStates, entry)
-	}
-	body, _ := json.Marshal(map[string]any{"states": updatedStates})
-
-	putResp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), strings.NewReader(string(body)))
-	if err != nil {
-		t.Fatalf("update workflow: %v", err)
-	}
-	defer putResp.Body.Close()
-	if putResp.StatusCode != 200 {
-		t.Fatalf("expected 200 updating workflow, got %d", putResp.StatusCode)
-	}
-
 	var updated struct {
 		States []struct {
 			WipLimit       *int `json:"wipLimit"`
@@ -82,20 +34,67 @@ func TestWIPLimitSavedAndReturned(t *testing.T) {
 			IsClosed       bool `json:"isClosed"`
 		} `json:"states"`
 	}
-	if err := json.NewDecoder(putResp.Body).Decode(&updated); err != nil {
-		t.Fatalf("decode updated workflow: %v", err)
-	}
 
-	for _, s := range updated.States {
-		if !s.IsClosed {
-			if s.WipLimit == nil || *s.WipLimit != 3 {
-				t.Fatalf("expected wipLimit=3 on non-closed state, got %v", s.WipLimit)
+	scenario.
+		Given("the project workflow states are fetched", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("get workflow: %w", err)
 			}
-			if !s.WipEnforcement {
-				t.Fatal("expected wipEnforcement=true on non-closed state")
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 getting workflow, got %d", resp.StatusCode)
 			}
-		}
-	}
+			if err := json.NewDecoder(resp.Body).Decode(&wf); err != nil {
+				return fmt.Errorf("decode workflow: %w", err)
+			}
+			if len(wf.States) == 0 {
+				t.Skip("no workflow states; skipping")
+			}
+			return nil
+		}).
+		When("I update all non-closed states with wipLimit=3 and wipEnforcement=true", func(s *Scenario) error {
+			var updatedStates []map[string]any
+			for _, st := range wf.States {
+				entry := map[string]any{
+					"id":             st.ID,
+					"name":           st.Name,
+					"order":          st.Order,
+					"isDefault":      st.IsDefault,
+					"isClosed":       st.IsClosed,
+					"wipEnforcement": false,
+				}
+				if !st.IsClosed {
+					lim := 3
+					entry["wipLimit"] = lim
+					entry["wipEnforcement"] = true
+				}
+				updatedStates = append(updatedStates, entry)
+			}
+			body, _ := json.Marshal(map[string]any{"states": updatedStates})
+			resp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), strings.NewReader(string(body)))
+			if err != nil {
+				return fmt.Errorf("update workflow: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 updating workflow, got %d", resp.StatusCode)
+			}
+			return json.NewDecoder(resp.Body).Decode(&updated)
+		}).
+		Then("every non-closed state has wipLimit=3 and wipEnforcement=true", func(s *Scenario) error {
+			for _, st := range updated.States {
+				if !st.IsClosed {
+					if st.WipLimit == nil || *st.WipLimit != 3 {
+						return fmt.Errorf("expected wipLimit=3 on non-closed state, got %v", st.WipLimit)
+					}
+					if !st.WipEnforcement {
+						return fmt.Errorf("expected wipEnforcement=true on non-closed state")
+					}
+				}
+			}
+			return nil
+		})
 }
 
 func TestFlowHealthAPIReturnsStats(t *testing.T) {
@@ -103,18 +102,7 @@ func TestFlowHealthAPIReturnsStats(t *testing.T) {
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
-
-	resp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/flow-health", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("get flow health: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 getting flow health, got %d", resp.StatusCode)
-	}
 
 	var stats struct {
 		WipStats   []any `json:"wipStats"`
@@ -123,15 +111,31 @@ func TestFlowHealthAPIReturnsStats(t *testing.T) {
 			SampleCount int `json:"sampleCount"`
 		} `json:"cycleTime"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-		t.Fatalf("decode flow health: %v", err)
-	}
-	if stats.WipStats == nil {
-		t.Fatal("expected wipStats array in response")
-	}
-	if stats.Throughput == nil {
-		t.Fatal("expected throughput array in response")
-	}
+
+	scenario.
+		When("I request the flow-health endpoint", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/flow-health", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("get flow health: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 getting flow health, got %d", resp.StatusCode)
+			}
+			return json.NewDecoder(resp.Body).Decode(&stats)
+		}).
+		Then("the response includes a wipStats array", func(s *Scenario) error {
+			if stats.WipStats == nil {
+				return fmt.Errorf("expected wipStats array in response")
+			}
+			return nil
+		}).
+		And("the response includes a throughput array", func(s *Scenario) error {
+			if stats.Throughput == nil {
+				return fmt.Errorf("expected throughput array in response")
+			}
+			return nil
+		})
 }
 
 func TestWIPEnforcementBlocksMove(t *testing.T) {
@@ -139,16 +143,10 @@ func TestWIPEnforcementBlocksMove(t *testing.T) {
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	// Get workflow states.
-	wfResp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("get workflow: %v", err)
-	}
-	defer wfResp.Body.Close()
+	var enforceStateID string
+	var ticketIDs []string
 	var wf struct {
 		States []struct {
 			ID        string `json:"id"`
@@ -158,95 +156,103 @@ func TestWIPEnforcementBlocksMove(t *testing.T) {
 			IsClosed  bool   `json:"isClosed"`
 		} `json:"states"`
 	}
-	if err := json.NewDecoder(wfResp.Body).Decode(&wf); err != nil {
-		t.Fatalf("decode workflow: %v", err)
-	}
-	if len(wf.States) < 2 {
-		t.Skip("need at least 2 states for enforcement test")
-	}
 
-	// Find a non-closed, non-default state to enforce (or second state).
-	var enforceStateID string
-	for _, s := range wf.States {
-		if !s.IsDefault && !s.IsClosed {
-			enforceStateID = s.ID
-			break
-		}
-	}
-	if enforceStateID == "" {
-		t.Skip("no suitable non-default non-closed state found")
-	}
+	scenario.
+		Given("a non-default non-closed workflow state has wipLimit=1 and wipEnforcement=true", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("get workflow: %w", err)
+			}
+			defer resp.Body.Close()
+			if err := json.NewDecoder(resp.Body).Decode(&wf); err != nil {
+				return fmt.Errorf("decode workflow: %w", err)
+			}
+			if len(wf.States) < 2 {
+				t.Skip("need at least 2 states for enforcement test")
+			}
+			for _, st := range wf.States {
+				if !st.IsDefault && !st.IsClosed {
+					enforceStateID = st.ID
+					break
+				}
+			}
+			if enforceStateID == "" {
+				t.Skip("no suitable non-default non-closed state found")
+			}
 
-	// Set wipLimit=1 enforcement=true on that state.
-	var updatedStates []map[string]any
-	for _, s := range wf.States {
-		entry := map[string]any{
-			"id":             s.ID,
-			"name":           s.Name,
-			"order":          s.Order,
-			"isDefault":      s.IsDefault,
-			"isClosed":       s.IsClosed,
-			"wipEnforcement": false,
-		}
-		if s.ID == enforceStateID {
-			lim := 1
-			entry["wipLimit"] = lim
-			entry["wipEnforcement"] = true
-		}
-		updatedStates = append(updatedStates, entry)
-	}
-	body, _ := json.Marshal(map[string]any{"states": updatedStates})
-	putResp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), strings.NewReader(string(body)))
-	if err != nil {
-		t.Fatalf("update workflow: %v", err)
-	}
-	putResp.Body.Close()
-	if putResp.StatusCode != 200 {
-		t.Fatalf("expected 200 setting up WIP, got %d", putResp.StatusCode)
-	}
-
-	// Create two tickets in default state.
-	var ticketIDs []string
-	for i := 0; i < 2; i++ {
-		ticketBody := fmt.Sprintf(`{"title":"WIP test ticket %d","type":"feature","priority":"medium","storyId":"%s"}`, i, seed.StoryID)
-		cr, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), strings.NewReader(ticketBody))
-		if err != nil {
-			t.Fatalf("create ticket %d: %v", i, err)
-		}
-		defer cr.Body.Close()
-		if cr.StatusCode != 201 {
-			t.Fatalf("expected 201 creating ticket, got %d", cr.StatusCode)
-		}
-		var ticket struct {
-			ID string `json:"id"`
-		}
-		if err := json.NewDecoder(cr.Body).Decode(&ticket); err != nil {
-			t.Fatalf("decode ticket: %v", err)
-		}
-		ticketIDs = append(ticketIDs, ticket.ID)
-	}
-
-	// Move first ticket to enforced state — should succeed (0 → 1).
-	mv1Body := fmt.Sprintf(`{"stateId":"%s"}`, enforceStateID)
-	mv1, err := h.APIRequest("PATCH", fmt.Sprintf("/tickets/%s", ticketIDs[0]), strings.NewReader(mv1Body))
-	if err != nil {
-		t.Fatalf("move ticket 1: %v", err)
-	}
-	mv1.Body.Close()
-	if mv1.StatusCode != 200 {
-		t.Fatalf("expected 200 moving first ticket, got %d", mv1.StatusCode)
-	}
-
-	// Move second ticket to enforced state — should be blocked (1 ≥ 1).
-	mv2Body := fmt.Sprintf(`{"stateId":"%s"}`, enforceStateID)
-	mv2, err := h.APIRequest("PATCH", fmt.Sprintf("/tickets/%s", ticketIDs[1]), strings.NewReader(mv2Body))
-	if err != nil {
-		t.Fatalf("move ticket 2: %v", err)
-	}
-	mv2.Body.Close()
-	if mv2.StatusCode != 409 {
-		t.Fatalf("expected 409 (wip_limit_exceeded) when enforcement blocks move, got %d", mv2.StatusCode)
-	}
+			var updatedStates []map[string]any
+			for _, st := range wf.States {
+				entry := map[string]any{
+					"id":             st.ID,
+					"name":           st.Name,
+					"order":          st.Order,
+					"isDefault":      st.IsDefault,
+					"isClosed":       st.IsClosed,
+					"wipEnforcement": false,
+				}
+				if st.ID == enforceStateID {
+					lim := 1
+					entry["wipLimit"] = lim
+					entry["wipEnforcement"] = true
+				}
+				updatedStates = append(updatedStates, entry)
+			}
+			body, _ := json.Marshal(map[string]any{"states": updatedStates})
+			putResp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), strings.NewReader(string(body)))
+			if err != nil {
+				return fmt.Errorf("update workflow: %w", err)
+			}
+			putResp.Body.Close()
+			if putResp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 setting up WIP, got %d", putResp.StatusCode)
+			}
+			return nil
+		}).
+		And("two tickets exist in the default state", func(s *Scenario) error {
+			for i := 0; i < 2; i++ {
+				body := fmt.Sprintf(`{"title":"WIP test ticket %d","type":"feature","priority":"medium","storyId":"%s"}`, i, seed.StoryID)
+				resp, err := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), strings.NewReader(body))
+				if err != nil {
+					return fmt.Errorf("create ticket %d: %w", i, err)
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != 201 {
+					return fmt.Errorf("expected 201 creating ticket, got %d", resp.StatusCode)
+				}
+				var ticket struct {
+					ID string `json:"id"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&ticket); err != nil {
+					return fmt.Errorf("decode ticket: %w", err)
+				}
+				ticketIDs = append(ticketIDs, ticket.ID)
+			}
+			return nil
+		}).
+		When("I move the first ticket into the enforced state", func(s *Scenario) error {
+			body := fmt.Sprintf(`{"stateId":"%s"}`, enforceStateID)
+			resp, err := s.Harness().APIRequest("PATCH", fmt.Sprintf("/tickets/%s", ticketIDs[0]), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("move ticket 1: %w", err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 moving first ticket, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("moving the second ticket into the enforced state is blocked with 409", func(s *Scenario) error {
+			body := fmt.Sprintf(`{"stateId":"%s"}`, enforceStateID)
+			resp, err := s.Harness().APIRequest("PATCH", fmt.Sprintf("/tickets/%s", ticketIDs[1]), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("move ticket 2: %w", err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != 409 {
+				return fmt.Errorf("expected 409 (wip_limit_exceeded) when enforcement blocks move, got %d", resp.StatusCode)
+			}
+			return nil
+		})
 }
 
 func TestFlowHealthViewerCanAccess(t *testing.T) {
@@ -254,16 +260,21 @@ func TestFlowHealthViewerCanAccess(t *testing.T) {
 
 	scenario := NewScenario(t, WithViewerUser())
 	defer scenario.Close()
-
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	resp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/flow-health", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("viewer get flow health: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for viewer, got %d", resp.StatusCode)
-	}
+	scenario.
+		When("a viewer requests the flow-health endpoint", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/flow-health", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("viewer get flow health: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 for viewer, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the request succeeds with 200", func(s *Scenario) error {
+			return nil
+		})
 }

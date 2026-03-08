@@ -29,28 +29,40 @@ func TestProjectEventsWebSocketDeliversLiveUpdates(t *testing.T) {
 	defer sc.Close()
 
 	seed := sc.SeedData()
-	conn, err := dialProjectEventsWS(sc.Harness(), seed.ProjectID, e2eUserToken)
-	if err != nil {
-		t.Fatalf("dial project events ws: %v", err)
-	}
-	defer conn.Close()
 
-	if err := apiMarkAllRead(sc.Harness(), seed.ProjectID); err != nil {
-		t.Fatalf("mark all read: %v", err)
-	}
-	if err := apiCreateTicketForWS(sc.Harness(), seed.ProjectID, seed.StoryID); err != nil {
-		t.Fatalf("create ticket for ws: %v", err)
-	}
+	var conn *websocket.Conn
 
-	expected := map[string]bool{
-		"notifications.changed":      false,
-		"notifications.unread_count": false,
-		"board.refresh":              false,
-		"activity.changed":           false,
-	}
-	if err := waitForProjectEventTypes(conn, 5*time.Second, expected); err != nil {
-		t.Fatalf("wait for ws events: %v", err)
-	}
+	sc.
+		Given("a WebSocket connection is established to the project events stream", func(s *Scenario) error {
+			c, err := dialProjectEventsWS(s.Harness(), seed.ProjectID, e2eUserToken)
+			if err != nil {
+				return fmt.Errorf("dial project events ws: %w", err)
+			}
+			conn = c
+			return nil
+		}).
+		When("all notifications are marked read and a new ticket is created", func(s *Scenario) error {
+			if err := apiMarkAllRead(s.Harness(), seed.ProjectID); err != nil {
+				return fmt.Errorf("mark all read: %w", err)
+			}
+			if err := apiCreateTicketForWS(s.Harness(), seed.ProjectID, seed.StoryID); err != nil {
+				return fmt.Errorf("create ticket for ws: %w", err)
+			}
+			return nil
+		}).
+		Then("all expected live event types are received over the WebSocket within 5 seconds", func(s *Scenario) error {
+			defer conn.Close()
+			expected := map[string]bool{
+				"notifications.changed":      false,
+				"notifications.unread_count": false,
+				"board.refresh":              false,
+				"activity.changed":           false,
+			}
+			if err := waitForProjectEventTypes(conn, 5*time.Second, expected); err != nil {
+				return fmt.Errorf("wait for ws events: %w", err)
+			}
+			return nil
+		})
 }
 
 func TestProjectEventsWebSocketFallbackToPollingEndpoints(t *testing.T) {
@@ -60,25 +72,32 @@ func TestProjectEventsWebSocketFallbackToPollingEndpoints(t *testing.T) {
 	defer sc.Close()
 
 	seed := sc.SeedData()
-	resp, err := sc.Harness().APIRequest(http.MethodGet, fmt.Sprintf("/projects/%s/events/ws", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("request ws endpoint without upgrade: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusUpgradeRequired {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 426 from ws endpoint without upgrade, got %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
 
-	countResp, err := sc.Harness().APIRequest(http.MethodGet, fmt.Sprintf("/projects/%s/notifications/unread-count", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("poll unread count after ws upgrade failure: %v", err)
-	}
-	defer countResp.Body.Close()
-	if countResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(countResp.Body)
-		t.Fatalf("expected polling unread-count endpoint to succeed, got %d: %s", countResp.StatusCode, strings.TrimSpace(string(body)))
-	}
+	sc.
+		When("I request the WebSocket endpoint without an Upgrade header", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest(http.MethodGet, fmt.Sprintf("/projects/%s/events/ws", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("request ws endpoint without upgrade: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusUpgradeRequired {
+				body, _ := io.ReadAll(resp.Body)
+				return fmt.Errorf("expected 426 from ws endpoint without upgrade, got %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			}
+			return nil
+		}).
+		Then("the polling unread-count endpoint is still reachable as a fallback", func(s *Scenario) error {
+			countResp, err := s.Harness().APIRequest(http.MethodGet, fmt.Sprintf("/projects/%s/notifications/unread-count", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("poll unread count after ws upgrade failure: %w", err)
+			}
+			defer countResp.Body.Close()
+			if countResp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(countResp.Body)
+				return fmt.Errorf("expected polling unread-count endpoint to succeed, got %d: %s", countResp.StatusCode, strings.TrimSpace(string(body)))
+			}
+			return nil
+		})
 }
 
 func dialProjectEventsWS(h *Harness, projectID, token string) (*websocket.Conn, error) {

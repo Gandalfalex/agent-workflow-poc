@@ -227,6 +227,7 @@ Deferred (later): Multi-channel notifications (Slack/Teams/email)
 8. ~~WIP limits and flow health insights (P1)~~ **DONE — TKT-031**
 9. ~~Release and version management (P1-P2)~~ **DONE — TKT-032**
 10. ~~Approval gates for sensitive workflow transitions (P1-P2)~~ **DONE — TKT-033**
+11. ~~Automation rule simulator and dry-run replay (P2)~~ **DONE — TKT-034**
 
 ## Risks and Dependencies
 - Schema changes for activity timeline need migration planning.

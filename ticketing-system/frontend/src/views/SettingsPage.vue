@@ -22,6 +22,7 @@ import {
     listReleases,
     replaceApprovalPolicies,
     replaceProjectCapacitySettings,
+    simulateAutomationRule,
     syncUsersFromIdentityProvider,
     updateCustomField,
     updateProject,
@@ -45,12 +46,15 @@ import type {
     Release,
     ReleaseStatus,
     ReportingExportFormat,
+    SimulationEventResult,
+    SimulationRunResponse,
     SlaPolicyEntry,
     WebhookDelivery,
     WebhookEvent,
     WebhookResponse,
     WorkflowState,
 } from "@/lib/api";
+import { evaluateRule } from "@/lib/ruleEvaluator";
 
 const props = defineProps<{ projectId: string }>();
 
@@ -217,6 +221,92 @@ async function toggleRuleExpanded(projectId: string, ruleId: string) {
     } else {
         expandedRuleId.value = ruleId;
         await automationStore.loadExecutions(projectId, ruleId);
+    }
+}
+
+// Simulator state
+const simulatorOpen = ref(false);
+const simulatorLookbackDays = ref<7 | 30>(7);
+const simulatorRunning = ref(false);
+const simulatorError = ref<string | null>(null);
+const simulatorResult = ref<SimulationRunResponse | null>(null);
+const simulatorActiveEventIdx = ref<number>(0);
+
+const simulatorActiveEvent = computed<SimulationEventResult | null>(() =>
+    simulatorResult.value?.items[simulatorActiveEventIdx.value] ?? null,
+);
+
+const simulatorActiveEval = computed(() => {
+    const ev = simulatorActiveEvent.value;
+    if (!ev) return null;
+    const rule = {
+        triggerEvent: automationForm.value.triggerEvent,
+        triggerConditions: buildAutomationConditions(),
+        actions: automationForm.value.actions.map((a) => ({ type: a.type, params: { ...a.params } })),
+    };
+    return evaluateRule(rule, { eventType: ev.eventType, extra: {} });
+});
+
+let simulatorPlayInterval: ReturnType<typeof setInterval> | null = null;
+
+function buildAutomationConditions(): Record<string, string> {
+    const conds: Record<string, string> = {};
+    if (automationForm.value.condFromState) conds["fromState"] = automationForm.value.condFromState;
+    if (automationForm.value.condToState) conds["toState"] = automationForm.value.condToState;
+    return conds;
+}
+
+async function runSimulation() {
+    if (!selectedProjectId.value) return;
+    simulatorRunning.value = true;
+    simulatorError.value = null;
+    simulatorResult.value = null;
+    simulatorActiveEventIdx.value = 0;
+    stopSimulatorPlay();
+    try {
+        const conds = buildAutomationConditions();
+        simulatorResult.value = await simulateAutomationRule(selectedProjectId.value, {
+            lookbackDays: simulatorLookbackDays.value,
+            rule: {
+                name: automationForm.value.name || "draft",
+                triggerEvent: automationForm.value.triggerEvent,
+                triggerConditions: conds,
+                actions: automationForm.value.actions.map((a) => ({
+                    type: a.type as import("@/lib/api").AutomationActionType,
+                    params: { ...a.params },
+                })),
+                enabled: false,
+            },
+        });
+    } catch (e: unknown) {
+        simulatorError.value = e instanceof Error ? e.message : "Simulation failed";
+    } finally {
+        simulatorRunning.value = false;
+    }
+}
+
+function simulatorStep(dir: 1 | -1) {
+    if (!simulatorResult.value) return;
+    const max = simulatorResult.value.items.length - 1;
+    simulatorActiveEventIdx.value = Math.max(0, Math.min(max, simulatorActiveEventIdx.value + dir));
+}
+
+function startSimulatorPlay() {
+    if (simulatorPlayInterval) return;
+    simulatorPlayInterval = setInterval(() => {
+        if (!simulatorResult.value) return stopSimulatorPlay();
+        if (simulatorActiveEventIdx.value >= simulatorResult.value.items.length - 1) {
+            stopSimulatorPlay();
+        } else {
+            simulatorActiveEventIdx.value++;
+        }
+    }, 350);
+}
+
+function stopSimulatorPlay() {
+    if (simulatorPlayInterval) {
+        clearInterval(simulatorPlayInterval);
+        simulatorPlayInterval = null;
     }
 }
 
@@ -3169,7 +3259,151 @@ watch(selectedGroupId, async () => {
                 >
                     {{ t("settings.automation.save") }}
                 </Button>
+                <Button
+                    data-testid="automation.simulate_button"
+                    variant="outline"
+                    size="sm"
+                    :disabled="!automationForm.triggerEvent || simulatorRunning"
+                    @click="simulatorOpen = true; runSimulation()"
+                >
+                    {{ simulatorRunning ? "Simulating…" : "Simulate" }}
+                </Button>
                 <Button variant="ghost" size="sm" @click="resetAutomationForm">{{ t("settings.automation.cancel") }}</Button>
+            </div>
+        </div>
+
+        <!-- Simulator panel -->
+        <div
+            v-if="simulatorOpen"
+            data-testid="automation.simulator_panel"
+            class="mt-4 rounded-2xl border border-border bg-muted/20 p-4 space-y-4"
+        >
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-semibold">Simulator</span>
+                    <select
+                        v-model="simulatorLookbackDays"
+                        class="rounded border border-border bg-background px-2 py-0.5 text-xs"
+                        @change="runSimulation()"
+                    >
+                        <option :value="7">Last 7 days</option>
+                        <option :value="30">Last 30 days</option>
+                    </select>
+                </div>
+                <button class="text-xs text-muted-foreground hover:text-foreground" @click="simulatorOpen = false; stopSimulatorPlay()">✕ Close</button>
+            </div>
+
+            <!-- Summary bar -->
+            <div
+                v-if="simulatorResult"
+                data-testid="automation.summary_bar"
+                class="flex items-center gap-4 rounded-lg bg-background px-3 py-2 text-xs border border-border"
+            >
+                <span>Scanned <strong>{{ simulatorResult.run.totalEvents }}</strong> events</span>
+                <span class="text-green-600 dark:text-green-400">✓ <strong>{{ simulatorResult.run.matchedCount }}</strong> matched</span>
+                <span v-if="simulatorResult.run.failureCount > 0" class="text-amber-600 dark:text-amber-400">⚠ <strong>{{ simulatorResult.run.failureCount }}</strong> predicted failures</span>
+            </div>
+            <div v-else-if="simulatorRunning" class="text-xs text-muted-foreground">Running simulation…</div>
+            <div v-else-if="simulatorError" class="text-xs text-destructive">{{ simulatorError }}</div>
+
+            <!-- Rule graph (static) -->
+            <div
+                v-if="simulatorResult"
+                data-testid="automation.rule_graph"
+                class="flex items-start gap-2 overflow-x-auto pb-1"
+            >
+                <!-- Trigger node -->
+                <div class="shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-xs text-center min-w-[100px]"
+                     :class="simulatorActiveEvent ? 'border-blue-500 bg-blue-500/10' : ''">
+                    <div class="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Trigger</div>
+                    <div class="font-mono font-medium">{{ automationForm.triggerEvent }}</div>
+                </div>
+                <div class="self-center text-muted-foreground shrink-0">→</div>
+                <!-- Condition nodes -->
+                <template v-if="simulatorActiveEval && simulatorActiveEval.conditionResults.length">
+                    <div
+                        v-for="cond in simulatorActiveEval.conditionResults"
+                        :key="cond.key"
+                        class="shrink-0 rounded-lg border px-3 py-2 text-xs min-w-[110px]"
+                        :class="cond.passed ? 'border-green-500 bg-green-500/10' : 'border-red-500 bg-red-500/10'"
+                    >
+                        <div class="text-[10px] text-muted-foreground mb-0.5">{{ cond.key }}</div>
+                        <div class="font-mono text-[10px]">{{ cond.expectedValue }}</div>
+                        <div class="text-[10px] mt-0.5" :class="cond.passed ? 'text-green-600' : 'text-red-500'">
+                            {{ cond.passed ? '✓' : `✗ got "${cond.actualValue}"` }}
+                        </div>
+                    </div>
+                    <div class="self-center text-muted-foreground shrink-0">→</div>
+                </template>
+                <!-- Action nodes -->
+                <div
+                    v-for="(action, i) in automationForm.actions"
+                    :key="i"
+                    class="shrink-0 rounded-lg border px-3 py-2 text-xs min-w-[100px]"
+                    :class="simulatorActiveEval?.matched
+                        ? (simulatorActiveEval.predictedActions[i]?.wouldSucceed ? 'border-green-500 bg-green-500/10' : 'border-amber-500 bg-amber-500/10')
+                        : 'border-border opacity-40'"
+                >
+                    <div class="text-[10px] text-muted-foreground mb-0.5">Action</div>
+                    <div class="font-medium">{{ action.type }}</div>
+                    <div v-if="simulatorActiveEval?.matched && simulatorActiveEval.predictedActions[i]" class="text-[10px] mt-0.5"
+                         :class="simulatorActiveEval.predictedActions[i]!.wouldSucceed ? 'text-green-600' : 'text-amber-600'">
+                        {{ simulatorActiveEval.predictedActions[i]!.wouldSucceed ? '✓ would fire' : `⚠ ${simulatorActiveEval.predictedActions[i]!.failureReason}` }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event timeline -->
+            <div v-if="simulatorResult && simulatorResult.items.length" class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-muted-foreground">{{ simulatorActiveEventIdx + 1 }} / {{ simulatorResult.items.length }}</span>
+                    <button class="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted" @click="simulatorStep(-1)">←</button>
+                    <button
+                        data-testid="automation.timeline_play_button"
+                        class="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted"
+                        @click="simulatorPlayInterval ? stopSimulatorPlay() : startSimulatorPlay()"
+                    >
+                        {{ simulatorPlayInterval ? "⏸ Pause" : "▶ Play" }}
+                    </button>
+                    <button class="rounded border border-border px-2 py-0.5 text-xs hover:bg-muted" @click="simulatorStep(1)">→</button>
+                </div>
+
+                <!-- Timeline dots -->
+                <div
+                    data-testid="automation.timeline"
+                    class="flex items-center gap-1 overflow-x-auto pb-1"
+                >
+                    <button
+                        v-for="(item, idx) in simulatorResult.items"
+                        :key="idx"
+                        data-testid="automation.timeline_event"
+                        class="h-3 w-3 shrink-0 rounded-full transition-all"
+                        :class="[
+                            idx === simulatorActiveEventIdx ? 'ring-2 ring-offset-1 ring-primary scale-125' : '',
+                            item.matched ? 'bg-green-500' : 'bg-muted-foreground/40'
+                        ]"
+                        :title="`${item.ticketKey} · ${item.eventType} · ${new Date(item.eventTimestamp).toLocaleDateString()}`"
+                        @click="simulatorActiveEventIdx = idx; stopSimulatorPlay()"
+                    />
+                </div>
+
+                <!-- Active event context -->
+                <div
+                    v-if="simulatorActiveEvent"
+                    data-testid="automation.ticket_context"
+                    class="rounded-lg border border-border bg-background px-3 py-2 text-xs space-y-1"
+                >
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono font-semibold">{{ simulatorActiveEvent.ticketKey }}</span>
+                        <span class="font-mono text-muted-foreground">{{ simulatorActiveEvent.eventType }}</span>
+                        <span class="text-muted-foreground ml-auto">{{ new Date(simulatorActiveEvent.eventTimestamp).toLocaleString() }}</span>
+                    </div>
+                    <div v-if="simulatorActiveEvent.matched" class="text-green-600 dark:text-green-400">✓ Rule would fire</div>
+                    <div v-else class="text-muted-foreground">{{ simulatorActiveEvent.failureReason || "No match" }}</div>
+                </div>
+            </div>
+            <div v-else-if="simulatorResult && !simulatorResult.items.length" class="text-xs text-muted-foreground">
+                No events found in the selected window for trigger <code>{{ automationForm.triggerEvent }}</code>.
             </div>
         </div>
 

@@ -52,17 +52,23 @@ func TestRBACViewerAPICreateTicket403(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	h := scenario.Harness()
 
-	body := `{"title":"Should Fail"}`
-	resp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("API request failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403, got %d", resp.StatusCode)
-	}
+	scenario.
+		When("a viewer POSTs a new ticket via the API", func(s *Scenario) error {
+			body := `{"title":"Should Fail"}`
+			resp, err := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/tickets", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("API request failed: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 403 {
+				return fmt.Errorf("expected 403, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the request is rejected with 403 Forbidden", func(s *Scenario) error {
+			return nil
+		})
 }
 
 func TestRBACViewerAPIUpdateWorkflow403(t *testing.T) {
@@ -72,15 +78,21 @@ func TestRBACViewerAPIUpdateWorkflow403(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	h := scenario.Harness()
 
-	body := `{"states":[{"name":"Done","order":1,"isDefault":true,"isClosed":true}]}`
-	resp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("API request failed: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403, got %d", resp.StatusCode)
-	}
+	scenario.
+		When("a viewer PUTs a workflow update via the API", func(s *Scenario) error {
+			body := `{"states":[{"name":"Done","order":1,"isDefault":true,"isClosed":true}]}`
+			resp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/projects/%s/workflow", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("API request failed: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 403 {
+				return fmt.Errorf("expected 403, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the request is rejected with 403 Forbidden", func(s *Scenario) error {
+			return nil
+		})
 }

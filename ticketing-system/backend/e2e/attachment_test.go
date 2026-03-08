@@ -13,6 +13,29 @@ import (
 	"ticketing-system/backend/internal/store"
 )
 
+// seedAttachmentTicket creates a ticket directly via the store for attachment tests.
+func seedAttachmentTicket(s *Scenario, projectID, storyID, backlogID uuid.UUID, title string) error {
+	_, err := s.Harness().Store().CreateTicket(s.Harness().Context(), projectID, store.TicketCreateInput{
+		Title:   title,
+		Type:    "feature",
+		StoryID: storyID,
+		StateID: &backlogID,
+	})
+	if err != nil {
+		return fmt.Errorf("seed ticket: %w", err)
+	}
+	return nil
+}
+
+// writeTempFile writes content to a named file inside dir and returns the full path.
+func writeTempFile(dir, name string, content []byte) (string, error) {
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		return "", fmt.Errorf("create temp file %q: %w", name, err)
+	}
+	return path, nil
+}
+
 func TestUploadAndListAttachment(t *testing.T) {
 	t.Parallel()
 
@@ -20,8 +43,6 @@ func TestUploadAndListAttachment(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
@@ -30,24 +51,18 @@ func TestUploadAndListAttachment(t *testing.T) {
 	ts := time.Now().UnixNano()
 	title := fmt.Sprintf("Attachment Upload Ticket %d", ts)
 
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   title,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
-	// Create a temporary test file
 	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test-upload.txt")
-	if err := os.WriteFile(testFile, []byte("hello e2e attachment test"), 0644); err != nil {
-		t.Fatalf("create test file: %v", err)
-	}
+	var testFile string
 
 	scenario.
+		Given("a ticket exists for attachment upload testing", func(s *Scenario) error {
+			return seedAttachmentTicket(s, projectID, storyID, backlogID, title)
+		}).
+		And("a local test file is prepared", func(s *Scenario) error {
+			var err error
+			testFile, err = writeTempFile(tmpDir, "test-upload.txt", []byte("hello e2e attachment test"))
+			return err
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
@@ -58,9 +73,7 @@ func TestUploadAndListAttachment(t *testing.T) {
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
 		ThenISeeSelectorKey("ticket.attachments_section").
-		// Upload file via hidden input
 		WhenIUploadFileViaInput(testFile).
-		// Wait for filename to appear in the attachment list
 		ThenISeeText("test-upload.txt").
 		AndISeeSelectorKey("ticket.attachment_item").
 		AndISeeSelectorKey("ticket.attachment_download_link")
@@ -73,8 +86,6 @@ func TestDeleteAttachment(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
@@ -83,24 +94,18 @@ func TestDeleteAttachment(t *testing.T) {
 	ts := time.Now().UnixNano()
 	title := fmt.Sprintf("Attachment Delete Ticket %d", ts)
 
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   title,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
-	// Create a temporary test file
 	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "delete-me.txt")
-	if err := os.WriteFile(testFile, []byte("file to be deleted"), 0644); err != nil {
-		t.Fatalf("create test file: %v", err)
-	}
+	var testFile string
 
 	scenario.
+		Given("a ticket exists for attachment deletion testing", func(s *Scenario) error {
+			return seedAttachmentTicket(s, projectID, storyID, backlogID, title)
+		}).
+		And("a local test file is prepared", func(s *Scenario) error {
+			var err error
+			testFile, err = writeTempFile(tmpDir, "delete-me.txt", []byte("file to be deleted"))
+			return err
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
@@ -110,11 +115,8 @@ func TestDeleteAttachment(t *testing.T) {
 		ThenISeeText(title).
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
-		// Upload the file
 		WhenIUploadFileViaInput(testFile).
 		ThenISeeText("delete-me.txt").
-		// Click the delete button on the attachment
 		WhenIClickKey("ticket.attachment_delete_button").
-		// Verify the filename disappears
 		ThenIDoNotSeeText("delete-me.txt")
 }

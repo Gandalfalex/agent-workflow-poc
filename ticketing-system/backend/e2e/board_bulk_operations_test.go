@@ -29,6 +29,19 @@ type bulkOpAPIResponse struct {
 	} `json:"results"`
 }
 
+func seedBulkTicket(ctx context.Context, st *store.Store, projectID, storyID, stateID uuid.UUID, title, ticketType string) (store.Ticket, error) {
+	ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+		Title:   title,
+		Type:    ticketType,
+		StoryID: storyID,
+		StateID: &stateID,
+	})
+	if err != nil {
+		return store.Ticket{}, fmt.Errorf("seed ticket %q: %w", title, err)
+	}
+	return ticket, nil
+}
+
 func TestBulkTicketOperationsAdminUI(t *testing.T) {
 	t.Parallel()
 
@@ -46,38 +59,36 @@ func TestBulkTicketOperationsAdminUI(t *testing.T) {
 	viewerUserID := uuid.MustParse(seed.ViewerUserID)
 
 	ts := time.Now().UnixNano()
-	lookup, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:      fmt.Sprintf("Bulk Lookup %d", ts),
-		Type:       "feature",
-		StoryID:    storyID,
-		StateID:    &backlogID,
-		AssigneeID: &viewerUserID,
-	})
-	if err != nil {
-		t.Fatalf("seed lookup ticket: %v", err)
-	}
-	_ = lookup
 
-	ticketA, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   fmt.Sprintf("Bulk A %d", ts),
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket A: %v", err)
-	}
-	ticketB, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   fmt.Sprintf("Bulk B %d", ts),
-		Type:    "bug",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket B: %v", err)
-	}
+	var ticketA, ticketB store.Ticket
 
 	scenario.
+		Given("three tickets are seeded into the project", func(s *Scenario) error {
+			lookup, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:      fmt.Sprintf("Bulk Lookup %d", ts),
+				Type:       "feature",
+				StoryID:    storyID,
+				StateID:    &backlogID,
+				AssigneeID: &viewerUserID,
+			})
+			if err != nil {
+				return fmt.Errorf("seed lookup ticket: %w", err)
+			}
+			_ = lookup
+
+			a, err := seedBulkTicket(ctx, st, projectID, storyID, backlogID, fmt.Sprintf("Bulk A %d", ts), "feature")
+			if err != nil {
+				return err
+			}
+			ticketA = a
+
+			b, err := seedBulkTicket(ctx, st, projectID, storyID, backlogID, fmt.Sprintf("Bulk B %d", ts), "bug")
+			if err != nil {
+				return err
+			}
+			ticketB = b
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
@@ -149,58 +160,65 @@ func TestBulkTicketOperationViewerGetsPerTicketFailures(t *testing.T) {
 	storyID := uuid.MustParse(seed.StoryID)
 	backlogID := uuid.MustParse(seed.BacklogID)
 
-	ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   fmt.Sprintf("Viewer Bulk %d", time.Now().UnixNano()),
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
+	var ticketID string
+	var bulkResponse bulkOpAPIResponse
 
 	scenario.
+		Given("a ticket is seeded into the project", func(s *Scenario) error {
+			ticket, err := seedBulkTicket(ctx, st, projectID, storyID, backlogID,
+				fmt.Sprintf("Viewer Bulk %d", time.Now().UnixNano()), "feature")
+			if err != nil {
+				return err
+			}
+			ticketID = ticket.ID.String()
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInWithHarnessUser().
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/" + seed.ProjectID + "/board")
-
-	reqBody := map[string]any{
-		"action":    "delete",
-		"ticketIds": []string{ticket.ID.String()},
-	}
-	raw, err := json.Marshal(reqBody)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-
-	resp, err := scenario.Harness().APIRequest(
-		http.MethodPost,
-		fmt.Sprintf("/projects/%s/tickets/bulk", seed.ProjectID),
-		bytes.NewReader(raw),
-	)
-	if err != nil {
-		t.Fatalf("bulk API request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	var payload bulkOpAPIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode bulk response: %v", err)
-	}
-	if payload.Total != 1 || payload.SuccessCount != 0 || payload.ErrorCount != 1 {
-		t.Fatalf("unexpected summary: %+v", payload)
-	}
-	if len(payload.Results) != 1 || payload.Results[0].Success {
-		t.Fatalf("expected one failed result, got %+v", payload.Results)
-	}
-	if payload.Results[0].ErrorCode == nil || *payload.Results[0].ErrorCode != "insufficient_role" {
-		t.Fatalf("expected insufficient_role error, got %+v", payload.Results[0].ErrorCode)
-	}
+		ThenURLContains("/projects/" + seed.ProjectID + "/board").
+		When("a viewer submits a bulk delete request via API", func(s *Scenario) error {
+			reqBody := map[string]any{
+				"action":    "delete",
+				"ticketIds": []string{ticketID},
+			}
+			raw, err := json.Marshal(reqBody)
+			if err != nil {
+				return fmt.Errorf("marshal request: %w", err)
+			}
+			resp, err := s.Harness().APIRequest(
+				http.MethodPost,
+				fmt.Sprintf("/projects/%s/tickets/bulk", seed.ProjectID),
+				bytes.NewReader(raw),
+			)
+			if err != nil {
+				return fmt.Errorf("bulk API request: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&bulkResponse); err != nil {
+				return fmt.Errorf("decode bulk response: %w", err)
+			}
+			return nil
+		}).
+		Then("the response summary shows one total and one error", func(s *Scenario) error {
+			if bulkResponse.Total != 1 || bulkResponse.SuccessCount != 0 || bulkResponse.ErrorCount != 1 {
+				return fmt.Errorf("unexpected summary: %+v", bulkResponse)
+			}
+			return nil
+		}).
+		And("the response contains a per-ticket insufficient_role failure", func(s *Scenario) error {
+			if len(bulkResponse.Results) != 1 || bulkResponse.Results[0].Success {
+				return fmt.Errorf("expected one failed result, got %+v", bulkResponse.Results)
+			}
+			if bulkResponse.Results[0].ErrorCode == nil || *bulkResponse.Results[0].ErrorCode != "insufficient_role" {
+				return fmt.Errorf("expected insufficient_role error, got %+v", bulkResponse.Results[0].ErrorCode)
+			}
+			return nil
+		})
 }
 
 func clickBulkTicketKey(h *Harness, ticketKey string) error {

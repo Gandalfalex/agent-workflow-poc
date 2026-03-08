@@ -308,3 +308,16 @@ Snapshot date: March 7, 2026
 - Frontend — BoardPage: `saveTicket` detects 202 response, sets `ticketApprovalPendingRequestId`, shows toast.
 - E2E contract: 9 new selectors (225 total).
 - E2E tests: policy CRUD, gated transition returns 202, second attempt returns 409, approve unblocks, reject triggers new request, viewer access (`approval_gates_test.go`).
+
+## Automation Rule Simulator (TKT-034)
+- Dry-run simulation of automation rules against historical project events with no ticket mutations.
+- Backend: `POST /projects/{id}/automation/simulate` runs simulation and stores results; `GET /automation/simulation-runs` and `GET /automation/simulation-runs/{runId}` retrieve stored runs with pagination.
+- Event sources: `ticket.state_changed` reconstructed from `ticket_activities` with JOIN on `workflow_states` to resolve names back to UUIDs; `ticket.created` and `ticket.updated` from tickets table.
+- Pure `EvaluateRule` function in `automation/evaluate.go` — no DB writes, drives per-event condition pass/fail prediction.
+- Migration `030_simulation.sql`: `simulation_runs` + `simulation_results` tables.
+- SQL templates in `24_simulation.go.templ`.
+- Store methods in `store/simulation.go`.
+- Frontend client-side evaluator `lib/ruleEvaluator.ts` mirrors Go `matchConditions` logic for instant step-through animation.
+- Frontend — SettingsPage: "Simulate" button in rule editor opens simulator panel showing rule graph, event timeline dots, live condition highlighting, ticket context card, aggregate summary bar, and play/pause/step controls.
+- E2E contract: 8 new selectors (233 total).
+- E2E tests: no-events run returns empty result, no mutation verified, run persisted and retrievable, draft rule (no ruleId) works, impossible condition returns 0 matches (`simulation_test.go`).

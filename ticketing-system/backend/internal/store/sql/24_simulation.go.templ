@@ -1,0 +1,78 @@
+{{define "simulation_run_insert.sql"}}
+INSERT INTO simulation_runs (project_id, rule_id, rule_snapshot, lookback_days, total_events, matched_count, failure_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, project_id, rule_id, rule_snapshot, lookback_days, total_events, matched_count, failure_count, created_at
+{{end}}
+
+{{define "simulation_runs_by_project.sql"}}
+SELECT id, project_id, rule_id, rule_snapshot, lookback_days, total_events, matched_count, failure_count, created_at
+FROM simulation_runs
+WHERE project_id = $1
+ORDER BY created_at DESC
+LIMIT 50
+{{end}}
+
+{{define "simulation_run_by_id.sql"}}
+SELECT id, project_id, rule_id, rule_snapshot, lookback_days, total_events, matched_count, failure_count, created_at
+FROM simulation_runs
+WHERE id = $1 AND project_id = $2
+{{end}}
+
+{{define "simulation_result_insert.sql"}}
+INSERT INTO simulation_results (run_id, ticket_id, ticket_key, event_type, event_timestamp, matched, failure_reason, predicted_actions)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+{{end}}
+
+{{define "simulation_results_by_run.sql"}}
+SELECT id, run_id, ticket_id, ticket_key, event_type, event_timestamp, matched, failure_reason, predicted_actions
+FROM simulation_results
+WHERE run_id = $1
+ORDER BY event_timestamp DESC
+LIMIT $2 OFFSET $3
+{{end}}
+
+{{define "simulation_results_count.sql"}}
+SELECT COUNT(*) FROM simulation_results WHERE run_id = $1
+{{end}}
+
+-- Query ticket state-change activities, resolving state names back to UUIDs via workflow_states
+{{define "simulation_state_change_events.sql"}}
+SELECT
+    ta.ticket_id,
+    t.key,
+    t.priority,
+    ta.created_at,
+    COALESCE(ws_old.id::text, '') AS from_state,
+    COALESCE(ws_new.id::text, '') AS to_state
+FROM ticket_activities ta
+JOIN tickets t ON t.id = ta.ticket_id
+LEFT JOIN workflow_states ws_old
+    ON ws_old.project_id = t.project_id AND ws_old.name = ta.old_value
+LEFT JOIN workflow_states ws_new
+    ON ws_new.project_id = t.project_id AND ws_new.name = ta.new_value
+WHERE t.project_id = $1
+  AND ta.action = 'state_changed'
+  AND ta.created_at >= now() - ($2 * interval '1 day')
+ORDER BY ta.created_at DESC
+LIMIT 500
+{{end}}
+
+-- Query tickets created in the lookback window
+{{define "simulation_created_events.sql"}}
+SELECT id, key, priority, state_id::text, created_at
+FROM tickets
+WHERE project_id = $1
+  AND created_at >= now() - ($2 * interval '1 day')
+ORDER BY created_at DESC
+LIMIT 500
+{{end}}
+
+-- Query tickets updated in the lookback window (for ticket.updated events)
+{{define "simulation_updated_events.sql"}}
+SELECT id, key, priority, state_id::text, updated_at
+FROM tickets
+WHERE project_id = $1
+  AND updated_at >= now() - ($2 * interval '1 day')
+ORDER BY updated_at DESC
+LIMIT 500
+{{end}}

@@ -119,3 +119,5 @@ type approvalPoliciesReplaceRequest = ApprovalPoliciesReplaceRequest
 type approvalRequestResponse = ApprovalRequest
 type approvalRequestListResponse = ApprovalRequestListResponse
 type approvalDecisionRequest = ApprovalDecisionRequest
+type simulationRunResponse = SimulationRunResponse
+type simulationRunListResponse = SimulationRunListResponse

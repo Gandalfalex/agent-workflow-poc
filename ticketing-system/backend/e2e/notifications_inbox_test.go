@@ -23,37 +23,45 @@ func TestInboxNotificationsMentionsAssignmentsAndPreferences(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
-	projectID := uuid.MustParse(seed.ProjectID)
-	storyID := uuid.MustParse(seed.StoryID)
-	backlogID := uuid.MustParse(seed.BacklogID)
-	viewerID := uuid.MustParse(seed.ViewerUserID)
-
-	ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   fmt.Sprintf("Notif Ticket %d", time.Now().UnixNano()),
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
+	var ticketID string
 
 	scenario.
+		Given("a ticket is seeded for the notifications test", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+			storyID := uuid.MustParse(seed.StoryID)
+			backlogID := uuid.MustParse(seed.BacklogID)
+			ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:   fmt.Sprintf("Notif Ticket %d", time.Now().UnixNano()),
+				Type:    "feature",
+				StoryID: storyID,
+				StateID: &backlogID,
+			})
+			if err != nil {
+				return fmt.Errorf("seed ticket: %w", err)
+			}
+			ticketID = ticket.ID.String()
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
 		ThenURLContains("/projects/"+seed.ProjectID+"/board").
-		Then("admin assigns and mentions viewer", func(s *Scenario) error {
-			if err := apiUpdateTicketAssignee(s.Harness(), ticket.ID.String(), viewerID.String()); err != nil {
+		When("admin assigns the ticket to the viewer and mentions them in a comment", func(s *Scenario) error {
+			viewerID := uuid.MustParse(seed.ViewerUserID)
+			if err := apiUpdateTicketAssignee(s.Harness(), ticketID, viewerID.String()); err != nil {
 				return err
 			}
-			return apiAddComment(s.Harness(), ticket.ID.String(), "@NormalUser please review this")
+			return apiAddComment(s.Harness(), ticketID, "@NormalUser please review this")
 		}).
-		Then("viewer has unread notifications after assignment and mention", func(s *Scenario) error {
+		Then("viewer has at least 2 unread notifications after assignment and mention", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+			viewerID := uuid.MustParse(seed.ViewerUserID)
 			count, err := st.CountUnreadNotifications(ctx, projectID, viewerID)
 			if err != nil {
 				return fmt.Errorf("count viewer unread notifications: %w", err)
@@ -71,13 +79,13 @@ func TestInboxNotificationsMentionsAssignmentsAndPreferences(t *testing.T) {
 		ThenISeeSelectorKey("nav.inbox_panel").
 		ThenISeeText("assigned you").
 		AndISeeText("mentioned you").
-		Then("viewer marks all read", func(s *Scenario) error {
+		When("viewer marks all notifications as read", func(s *Scenario) error {
 			return apiMarkAllRead(s.Harness(), seed.ProjectID)
 		}).
-		Then("viewer unread count is zero after mark all", func(s *Scenario) error {
+		Then("viewer unread count is zero after marking all read", func(s *Scenario) error {
 			return waitUnreadCount(s.Harness(), seed.ProjectID, 0, 5*time.Second)
 		}).
-		Then("viewer disables mention notifications", func(s *Scenario) error {
+		When("viewer disables mention notifications in preferences", func(s *Scenario) error {
 			return apiUpdateNotificationPreferences(s.Harness(), seed.ProjectID, map[string]any{
 				"mentionEnabled": false,
 			})
@@ -85,13 +93,13 @@ func TestInboxNotificationsMentionsAssignmentsAndPreferences(t *testing.T) {
 		WhenIClickLogout().
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		Then("admin sends a new mention", func(s *Scenario) error {
-			return apiAddComment(s.Harness(), ticket.ID.String(), "@NormalUser follow-up mention")
+		When("admin sends a new mention to the viewer", func(s *Scenario) error {
+			return apiAddComment(s.Harness(), ticketID, "@NormalUser follow-up mention")
 		}).
 		WhenIClickLogout().
 		WhenILogInAs("NormalUser", "viewer123").
 		WhenISelectProjectByID(seed.ProjectID).
-		Then("viewer does not get mention notifications when mention preference disabled", func(s *Scenario) error {
+		Then("viewer does not receive a mention notification when mention preference is disabled", func(s *Scenario) error {
 			return waitUnreadCount(s.Harness(), seed.ProjectID, 0, 5*time.Second)
 		})
 }

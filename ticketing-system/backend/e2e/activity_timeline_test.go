@@ -11,6 +11,20 @@ import (
 	"ticketing-system/backend/internal/store"
 )
 
+// seedActivityTicket creates a ticket directly via the store for activity timeline tests.
+func seedActivityTicket(s *Scenario, projectID, storyID, backlogID uuid.UUID, title string) error {
+	_, err := s.Harness().Store().CreateTicket(s.Harness().Context(), projectID, store.TicketCreateInput{
+		Title:   title,
+		Type:    "feature",
+		StoryID: storyID,
+		StateID: &backlogID,
+	})
+	if err != nil {
+		return fmt.Errorf("seed ticket: %w", err)
+	}
+	return nil
+}
+
 func TestActivityTimelineShowsStateChange(t *testing.T) {
 	t.Parallel()
 
@@ -18,8 +32,6 @@ func TestActivityTimelineShowsStateChange(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
@@ -28,30 +40,21 @@ func TestActivityTimelineShowsStateChange(t *testing.T) {
 	ts := time.Now().UnixNano()
 	title := fmt.Sprintf("Activity Timeline Test %d", ts)
 
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   title,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
 	scenario.
+		Given("a ticket exists for activity timeline testing", func(s *Scenario) error {
+			return seedActivityTicket(s, projectID, storyID, backlogID, title)
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/"+seed.ProjectID+"/board").
+		ThenURLContains("/projects/" + seed.ProjectID + "/board").
 		WhenIClickRefresh().
 		ThenISeeText(title).
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
-		// Change state from Backlog to In Progress
 		WhenISelectOptionByValueKey("ticket.state_select", seed.InProgressID).
 		WhenIClickKey("ticket.save_button").
-		// Reopen the ticket to see the activity timeline
 		WhenIClickRefresh().
 		ThenISeeText(title).
 		WhenIClickTicketByText(title).
@@ -68,8 +71,6 @@ func TestActivityTimelineShowsPriorityChange(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
@@ -78,30 +79,21 @@ func TestActivityTimelineShowsPriorityChange(t *testing.T) {
 	ts := time.Now().UnixNano()
 	title := fmt.Sprintf("Priority Activity Test %d", ts)
 
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   title,
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
-
 	scenario.
+		Given("a ticket exists for priority activity testing", func(s *Scenario) error {
+			return seedActivityTicket(s, projectID, storyID, backlogID, title)
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
 		WhenISelectProjectByID(seed.ProjectID).
-		ThenURLContains("/projects/"+seed.ProjectID+"/board").
+		ThenURLContains("/projects/" + seed.ProjectID + "/board").
 		WhenIClickRefresh().
 		ThenISeeText(title).
 		WhenIClickTicketByText(title).
 		ThenISeeSelectorKey("ticket.modal").
-		// Change priority to urgent
 		WhenISelectOptionByValueKey("ticket.priority_select", "urgent").
 		WhenIClickKey("ticket.save_button").
-		// Reopen to check activity
 		WhenIClickRefresh().
 		ThenISeeText(title).
 		WhenIClickTicketByText(title).

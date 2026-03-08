@@ -921,6 +921,30 @@ func (f *fakeStore) HasDuplicateApprovalDecision(ctx context.Context, requestID,
 	return false, nil
 }
 
+func (f *fakeStore) CreateSimulationRun(ctx context.Context, input store.SimulationRunCreateInput) (store.SimulationRun, error) {
+	return store.SimulationRun{}, nil
+}
+
+func (f *fakeStore) ListSimulationRuns(ctx context.Context, projectID uuid.UUID) ([]store.SimulationRun, error) {
+	return nil, nil
+}
+
+func (f *fakeStore) GetSimulationRun(ctx context.Context, id, projectID uuid.UUID) (store.SimulationRun, error) {
+	return store.SimulationRun{}, nil
+}
+
+func (f *fakeStore) CreateSimulationResult(ctx context.Context, input store.SimulationResultCreateInput) error {
+	return nil
+}
+
+func (f *fakeStore) ListSimulationResults(ctx context.Context, runID uuid.UUID, limit, offset int) ([]store.SimulationResult, int, error) {
+	return nil, 0, nil
+}
+
+func (f *fakeStore) GetSimulationEvents(ctx context.Context, projectID uuid.UUID, triggerEvent string, lookbackDays int) ([]store.SimulationEvent, error) {
+	return nil, nil
+}
+
 type fakeAuth struct {
 	loginUser  auth.User
 	loginToken auth.TokenSet

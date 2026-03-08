@@ -9,74 +9,87 @@ import (
 	"testing"
 )
 
+// createAutomationRule POSTs an automation rule and returns its ID and triggerEvent.
+func createAutomationRule(s *Scenario, projectID, body string) (id string, triggerEvent string, err error) {
+	resp, respErr := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/automation/rules", projectID), strings.NewReader(body))
+	if respErr != nil {
+		return "", "", fmt.Errorf("create rule: %w", respErr)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 201 {
+		return "", "", fmt.Errorf("expected 201 creating rule, got %d", resp.StatusCode)
+	}
+	var rule struct {
+		ID           string `json:"id"`
+		TriggerEvent string `json:"triggerEvent"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rule); err != nil {
+		return "", "", fmt.Errorf("decode rule: %w", err)
+	}
+	return rule.ID, rule.TriggerEvent, nil
+}
+
 func TestAutomationRuleAPICreateAndExecution(t *testing.T) {
 	t.Parallel()
 
 	scenario := NewScenario(t)
 	defer scenario.Close()
 
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	// Create an automation rule for ticket.state_changed
-	ruleBody := fmt.Sprintf(`{
-		"name":"Auto-comment on state change",
-		"enabled":true,
-		"triggerEvent":"ticket.state_changed",
-		"triggerConditions":{},
-		"actions":[{"type":"add_comment","params":{"body":"State changed on {{ticket.title}}"}}]
-	}`)
+	var ruleID string
+	var triggerEvent string
 
-	resp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/automation/rules", seed.ProjectID), strings.NewReader(ruleBody))
-	if err != nil {
-		t.Fatalf("create rule: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 201 {
-		t.Fatalf("expected 201 creating rule, got %d", resp.StatusCode)
-	}
-
-	var rule struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		TriggerEvent string `json:"triggerEvent"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rule); err != nil {
-		t.Fatalf("decode rule: %v", err)
-	}
-	if rule.TriggerEvent != "ticket.state_changed" {
-		t.Fatalf("expected triggerEvent=ticket.state_changed, got %s", rule.TriggerEvent)
-	}
-
-	// List rules
-	listResp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/automation/rules", seed.ProjectID), nil)
-	if err != nil {
-		t.Fatalf("list rules: %v", err)
-	}
-	defer listResp.Body.Close()
-	if listResp.StatusCode != 200 {
-		t.Fatalf("expected 200 listing rules, got %d", listResp.StatusCode)
-	}
-
-	var listResult struct {
-		Items []struct{ ID string `json:"id"` } `json:"items"`
-	}
-	if err := json.NewDecoder(listResp.Body).Decode(&listResult); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	if len(listResult.Items) == 0 {
-		t.Fatalf("expected at least one rule")
-	}
-
-	// Executions list should be empty initially
-	execResp, err := h.APIRequest("GET", fmt.Sprintf("/projects/%s/automation/rules/%s/executions", seed.ProjectID, rule.ID), nil)
-	if err != nil {
-		t.Fatalf("list executions: %v", err)
-	}
-	defer execResp.Body.Close()
-	if execResp.StatusCode != 200 {
-		t.Fatalf("expected 200 listing executions, got %d", execResp.StatusCode)
-	}
+	scenario.
+		When("I create an automation rule for ticket.state_changed", func(s *Scenario) error {
+			body := `{
+	"name":"Auto-comment on state change",
+	"enabled":true,
+	"triggerEvent":"ticket.state_changed",
+	"triggerConditions":{},
+	"actions":[{"type":"add_comment","params":{"body":"State changed on {{ticket.title}}"}}]
+}`
+			var err error
+			ruleID, triggerEvent, err = createAutomationRule(s, seed.ProjectID, body)
+			return err
+		}).
+		Then("the rule has triggerEvent=ticket.state_changed", func(s *Scenario) error {
+			if triggerEvent != "ticket.state_changed" {
+				return fmt.Errorf("expected triggerEvent=ticket.state_changed, got %s", triggerEvent)
+			}
+			return nil
+		}).
+		And("the rule appears in the rules list", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/automation/rules", seed.ProjectID), nil)
+			if err != nil {
+				return fmt.Errorf("list rules: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 listing rules, got %d", resp.StatusCode)
+			}
+			var listResult struct {
+				Items []struct{ ID string `json:"id"` } `json:"items"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&listResult); err != nil {
+				return fmt.Errorf("decode list: %w", err)
+			}
+			if len(listResult.Items) == 0 {
+				return fmt.Errorf("expected at least one rule")
+			}
+			return nil
+		}).
+		And("the executions list is initially empty", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("GET", fmt.Sprintf("/projects/%s/automation/rules/%s/executions", seed.ProjectID, ruleID), nil)
+			if err != nil {
+				return fmt.Errorf("list executions: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 listing executions, got %d", resp.StatusCode)
+			}
+			return nil
+		})
 }
 
 func TestAutomationRuleDisabledNotReturned(t *testing.T) {
@@ -85,51 +98,56 @@ func TestAutomationRuleDisabledNotReturned(t *testing.T) {
 	scenario := NewScenario(t)
 	defer scenario.Close()
 
-	h := scenario.Harness()
 	seed := scenario.SeedData()
 
-	// Create a disabled rule
-	ruleBody := `{"name":"Disabled rule","enabled":false,"triggerEvent":"ticket.created","actions":[]}`
-	resp, err := h.APIRequest("POST", fmt.Sprintf("/projects/%s/automation/rules", seed.ProjectID), strings.NewReader(ruleBody))
-	if err != nil {
-		t.Fatalf("create rule: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 201 {
-		t.Fatalf("expected 201, got %d", resp.StatusCode)
-	}
+	var ruleID string
 
-	var rule struct {
-		ID      string `json:"id"`
-		Enabled bool   `json:"enabled"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rule); err != nil {
-		t.Fatalf("decode rule: %v", err)
-	}
-	if rule.Enabled {
-		t.Fatalf("expected rule to be disabled")
-	}
-
-	// Update to enable it
-	updateBody := `{"enabled":true}`
-	updateResp, err := h.APIRequest("PUT", fmt.Sprintf("/projects/%s/automation/rules/%s", seed.ProjectID, rule.ID), strings.NewReader(updateBody))
-	if err != nil {
-		t.Fatalf("update rule: %v", err)
-	}
-	defer updateResp.Body.Close()
-	if updateResp.StatusCode != 200 {
-		t.Fatalf("expected 200 updating rule, got %d", updateResp.StatusCode)
-	}
-
-	// Delete it
-	delResp, err := h.APIRequest("DELETE", fmt.Sprintf("/projects/%s/automation/rules/%s", seed.ProjectID, rule.ID), nil)
-	if err != nil {
-		t.Fatalf("delete rule: %v", err)
-	}
-	defer delResp.Body.Close()
-	if delResp.StatusCode != 204 {
-		t.Fatalf("expected 204 deleting rule, got %d", delResp.StatusCode)
-	}
+	scenario.
+		Given("a disabled automation rule exists", func(s *Scenario) error {
+			body := `{"name":"Disabled rule","enabled":false,"triggerEvent":"ticket.created","actions":[]}`
+			resp, err := s.Harness().APIRequest("POST", fmt.Sprintf("/projects/%s/automation/rules", seed.ProjectID), strings.NewReader(body))
+			if err != nil {
+				return fmt.Errorf("create rule: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 201 {
+				return fmt.Errorf("expected 201, got %d", resp.StatusCode)
+			}
+			var rule struct {
+				ID      string `json:"id"`
+				Enabled bool   `json:"enabled"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&rule); err != nil {
+				return fmt.Errorf("decode rule: %w", err)
+			}
+			if rule.Enabled {
+				return fmt.Errorf("expected rule to be disabled")
+			}
+			ruleID = rule.ID
+			return nil
+		}).
+		When("I enable the rule via PUT", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("PUT", fmt.Sprintf("/projects/%s/automation/rules/%s", seed.ProjectID, ruleID), strings.NewReader(`{"enabled":true}`))
+			if err != nil {
+				return fmt.Errorf("update rule: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return fmt.Errorf("expected 200 updating rule, got %d", resp.StatusCode)
+			}
+			return nil
+		}).
+		Then("the rule can be deleted", func(s *Scenario) error {
+			resp, err := s.Harness().APIRequest("DELETE", fmt.Sprintf("/projects/%s/automation/rules/%s", seed.ProjectID, ruleID), nil)
+			if err != nil {
+				return fmt.Errorf("delete rule: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 204 {
+				return fmt.Errorf("expected 204 deleting rule, got %d", resp.StatusCode)
+			}
+			return nil
+		})
 }
 
 func TestAutomationUIShowsAutomationTab(t *testing.T) {

@@ -11,23 +11,15 @@ import (
 	"ticketing-system/backend/internal/store"
 )
 
-func TestDashboardShowsRecentActivity(t *testing.T) {
-	t.Parallel()
-
-	scenario := NewScenario(t)
-	defer scenario.Close()
-
-	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
+// seedDashboardTicket creates a ticket and moves it to in-progress, recording activity.
+func seedDashboardTicket(s *Scenario, seed SeedData, title string) error {
+	st := s.Harness().Store()
+	ctx := s.Harness().Context()
 
 	projectID := uuid.MustParse(seed.ProjectID)
 	storyID := uuid.MustParse(seed.StoryID)
 	backlogID := uuid.MustParse(seed.BacklogID)
 	inProgressID := uuid.MustParse(seed.InProgressID)
-
-	ts := time.Now().UnixNano()
-	title := fmt.Sprintf("Dashboard Activity Ticket %d", ts)
 
 	ticket, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
 		Title:   title,
@@ -36,18 +28,31 @@ func TestDashboardShowsRecentActivity(t *testing.T) {
 		StateID: &backlogID,
 	})
 	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
+		return fmt.Errorf("seed ticket: %w", err)
 	}
 
-	// Record an activity by updating the ticket state
 	_, err = st.UpdateTicket(ctx, ticket.ID, store.TicketUpdateInput{
 		StateID: &inProgressID,
 	})
 	if err != nil {
-		t.Fatalf("update ticket: %v", err)
+		return fmt.Errorf("update ticket state: %w", err)
 	}
+	return nil
+}
+
+func TestDashboardShowsRecentActivity(t *testing.T) {
+	t.Parallel()
+
+	scenario := NewScenario(t)
+	defer scenario.Close()
+
+	seed := scenario.SeedData()
 
 	scenario.
+		Given("a ticket exists and has been moved to in-progress to generate activity", func(s *Scenario) error {
+			ts := time.Now().UnixNano()
+			return seedDashboardTicket(s, seed, fmt.Sprintf("Dashboard Activity Ticket %d", ts))
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
@@ -65,23 +70,25 @@ func TestDashboardNavigationFromBoard(t *testing.T) {
 	defer scenario.Close()
 
 	seed := scenario.SeedData()
-	st := scenario.Harness().Store()
-	ctx := scenario.Harness().Context()
-
-	projectID := uuid.MustParse(seed.ProjectID)
-	storyID := uuid.MustParse(seed.StoryID)
-	backlogID := uuid.MustParse(seed.BacklogID)
-	_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
-		Title:   "Nav Test Ticket",
-		Type:    "feature",
-		StoryID: storyID,
-		StateID: &backlogID,
-	})
-	if err != nil {
-		t.Fatalf("seed ticket: %v", err)
-	}
 
 	scenario.
+		Given("a ticket exists in the project", func(s *Scenario) error {
+			st := s.Harness().Store()
+			ctx := s.Harness().Context()
+			projectID := uuid.MustParse(seed.ProjectID)
+			storyID := uuid.MustParse(seed.StoryID)
+			backlogID := uuid.MustParse(seed.BacklogID)
+			_, err := st.CreateTicket(ctx, projectID, store.TicketCreateInput{
+				Title:   "Nav Test Ticket",
+				Type:    "feature",
+				StoryID: storyID,
+				StateID: &backlogID,
+			})
+			if err != nil {
+				return fmt.Errorf("seed ticket: %w", err)
+			}
+			return nil
+		}).
 		GivenAppIsRunning().
 		WhenIGoToRoute("home").
 		WhenILogInAs("AdminUser", "admin123").
