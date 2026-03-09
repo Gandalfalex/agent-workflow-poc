@@ -12,4 +12,10 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  server: {
+    proxy: {
+      "/rest": "http://localhost:8080",
+      "/auth": "http://localhost:8080",
+    },
+  },
 });

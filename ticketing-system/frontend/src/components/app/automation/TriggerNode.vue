@@ -21,21 +21,21 @@ const triggerLabels: Record<string, string> = {
       <span class="ml-auto text-[10px] text-primary/40">⠿</span>
     </div>
     <div class="nodrag p-3">
-      <select v-model="props.data.triggerEvent" class="nodrag w-full rounded-lg border border-primary/20 bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40">
+      <select v-model="props.data.triggerEvent" class="nodrag w-full rounded-lg border border-primary/20 bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40" @change="props.data.onUpdate?.()">
         <option v-for="(label, val) in triggerLabels" :key="val" :value="val">{{ label }}</option>
       </select>
       <template v-if="props.data.triggerEvent === 'ticket.state_changed'">
         <div class="mt-2 grid grid-cols-2 gap-2">
           <div>
             <label class="mb-1 block text-[10px] text-muted-foreground">From</label>
-            <select v-model="props.data.condFromState" class="nodrag w-full rounded border border-primary/20 bg-background px-2 py-1 text-xs focus:outline-none">
+            <select v-model="props.data.condFromState" class="nodrag w-full rounded border border-primary/20 bg-background px-2 py-1 text-xs focus:outline-none" @change="props.data.onUpdate?.()">
               <option value="">Any</option>
               <option v-for="s in props.data.workflowStates" :key="s.id" :value="s.id">{{ s.name }}</option>
             </select>
           </div>
           <div>
             <label class="mb-1 block text-[10px] text-muted-foreground">To</label>
-            <select v-model="props.data.condToState" class="nodrag w-full rounded border border-primary/20 bg-background px-2 py-1 text-xs focus:outline-none">
+            <select v-model="props.data.condToState" class="nodrag w-full rounded border border-primary/20 bg-background px-2 py-1 text-xs focus:outline-none" @change="props.data.onUpdate?.()">
               <option value="">Any</option>
               <option v-for="s in props.data.workflowStates" :key="s.id" :value="s.id">{{ s.name }}</option>
             </select>

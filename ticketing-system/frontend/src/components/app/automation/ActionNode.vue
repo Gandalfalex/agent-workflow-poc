@@ -73,19 +73,19 @@ function onTypeChange() {
       </select>
 
       <div v-if="props.data.actionType === 'set_state'">
-        <select v-model="props.data.params.state_id" class="nodrag w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs focus:outline-none">
+        <select v-model="props.data.params.state_id" class="nodrag w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs focus:outline-none" @change="props.data.onUpdate?.()">
           <option value="">Select state…</option>
           <option v-for="s in props.data.workflowStates" :key="s.id" :value="s.id">{{ s.name }}</option>
         </select>
       </div>
       <div v-else-if="props.data.actionType === 'set_assignee'">
-        <select v-model="props.data.params.assignee_id" class="nodrag w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs focus:outline-none">
+        <select v-model="props.data.params.assignee_id" class="nodrag w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs focus:outline-none" @change="props.data.onUpdate?.()">
           <option value="">Select user…</option>
           <option v-for="u in props.data.users" :key="u.id" :value="u.id">{{ u.name || u.email }}</option>
         </select>
       </div>
       <div v-else-if="props.data.actionType === 'set_priority'">
-        <select v-model="props.data.params.priority" class="nodrag w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs focus:outline-none">
+        <select v-model="props.data.params.priority" class="nodrag w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs focus:outline-none" @change="props.data.onUpdate?.()">
           <option value="low">Low</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
@@ -97,6 +97,7 @@ function onTypeChange() {
           v-model="props.data.params.body"
           class="nodrag w-full rounded-lg border border-border bg-muted px-2 py-1.5 text-xs focus:outline-none"
           placeholder="Comment text…"
+          @change="props.data.onUpdate?.()"
         />
       </div>
       <div v-else-if="props.data.actionType === 'call_webhook'" class="text-[10px] text-muted-foreground">

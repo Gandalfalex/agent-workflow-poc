@@ -3256,12 +3256,16 @@ watch(selectedGroupId, async () => {
 
             <!-- Rule name + meta bar -->
             <div class="mb-4 flex items-center gap-3">
-                <input
-                    v-model="automationForm.name"
-                    data-testid="automation.rule_name_input"
-                    class="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
-                    placeholder="Rule name…"
-                />
+                <div class="relative flex-1">
+                    <input
+                        v-model="automationForm.name"
+                        data-testid="automation.rule_name_input"
+                        class="w-full rounded-lg border bg-background px-3 py-2 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                        :class="automationForm.name ? 'border-border' : 'border-destructive/50'"
+                        placeholder="Rule name (required)…"
+                    />
+                    <span v-if="!automationForm.name" class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-destructive/70">required</span>
+                </div>
                 <label class="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
                     <input type="checkbox" v-model="automationForm.enabled" class="h-4 w-4 rounded" />
                     Enabled

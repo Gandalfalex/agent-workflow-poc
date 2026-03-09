@@ -122,7 +122,7 @@ function nodeClass(node: Node): string {
   return classes.join(' ')
 }
 
-const { onConnect, addEdges, removeEdges } = useVueFlow()
+const { onConnect, addEdges, removeEdges, fitView } = useVueFlow()
 
 onConnect((params) => {
   const sourceBranch = nodes.value.find((n) => n.id === params.source && n.type === 'branch')
@@ -162,6 +162,7 @@ function addActionNode() {
     },
   ]
   emitUpdate()
+  setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50)
 }
 
 function addBranchNode() {
@@ -177,6 +178,7 @@ function addBranchNode() {
     },
   ]
   emitUpdate()
+  setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50)
 }
 </script>
 

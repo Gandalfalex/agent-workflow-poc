@@ -1470,17 +1470,6 @@ const relationLabel = (relationType: string): string => {
 
             <!-- Footer: fixed at bottom -->
             <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-border flex-shrink-0">
-                <Button
-                    v-if="!props.readOnly"
-                    data-testid="ticket.delete-button"
-                    variant="outline"
-                    size="sm"
-                    class="border-destructive/30 text-destructive hover:bg-destructive/5"
-                    :disabled="props.ticketSaving"
-                    @click="emit('delete')"
-                >
-                    {{ t("ticket.deleteTicket") }}
-                </Button>
                 <Button variant="ghost" size="sm" @click="emit('close')">
                     {{ t("common.cancel") }}
                 </Button>
