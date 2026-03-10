@@ -16,6 +16,7 @@ type DropCardHandler = (
 const props = defineProps<{
     row: StoryRow;
     states: WorkflowState[];
+    dragging: boolean;
     canEditTickets: boolean;
     canQuickAssignToMe: boolean;
     bulkSelectMode: boolean;
@@ -71,9 +72,9 @@ const dragOverStateId = ref<string | null>(null);
             <TransitionGroup
                 tag="div"
                 class="flex flex-1 flex-col gap-2.5"
-                enter-active-class="transition-all duration-200 ease-out"
-                enter-from-class="opacity-0 translate-y-2"
-                enter-to-class="opacity-100 translate-y-0"
+                :enter-active-class="props.dragging ? '' : 'transition-all duration-200 ease-out'"
+                :enter-from-class="props.dragging ? '' : 'opacity-0 translate-y-2'"
+                :enter-to-class="props.dragging ? '' : 'opacity-100 translate-y-0'"
                 move-class="transition-all duration-200"
                 appear
             >

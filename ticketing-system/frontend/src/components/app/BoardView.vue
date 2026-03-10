@@ -48,6 +48,7 @@ const props = defineProps<{
     onDeleteStory: DeleteStoryHandler;
     onOpenTicket: OpenTicketHandler;
     onOpenNewTicket: OpenNewTicketHandler;
+    dragging: boolean;
     onDragStart: DragHandler;
     onDragEnd: () => void;
     onDropColumn: DropHandler;
@@ -160,6 +161,7 @@ const ticketCountByState = computed(() => {
                 :on-open-new-ticket="props.onOpenNewTicket"
                 :on-open-ticket="props.onOpenTicket"
                 :on-toggle-ticket-selection="props.onToggleTicketSelection"
+                :dragging="props.dragging"
                 :on-drag-start="props.onDragStart"
                 :on-drag-end="props.onDragEnd"
                 :on-drop-column="props.onDropColumn"

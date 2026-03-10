@@ -1675,6 +1675,7 @@ watch(
         :on-open-ticket="openTicket"
         :on-open-new-ticket="openNewTicket"
         :on-clear-filter="clearBoardFilters"
+        :dragging="!!draggingId"
         :on-drag-start="onDragStart"
         :on-drag-end="onDragEnd"
         :on-drop-column="onDropColumn"

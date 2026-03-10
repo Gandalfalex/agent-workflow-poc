@@ -917,7 +917,7 @@ func (h *API) CreateTicket(w http.ResponseWriter, r *http.Request, projectId ope
 	})
 	if h.engine != nil {
 		extra := map[string]string{"priority": ticket.Priority}
-		go h.engine.Fire(r.Context(), projectUUID, "ticket.created", ticket, extra)
+		go h.engine.Fire(context.WithoutCancel(r.Context()), projectUUID, "ticket.created", ticket, extra)
 	}
 
 	writeJSON(w, http.StatusCreated, response)
@@ -1387,14 +1387,15 @@ func (h *API) UpdateTicket(w http.ResponseWriter, r *http.Request, id openapi_ty
 		if previous != nil && previous.Priority != ticket.Priority {
 			extra["toPriority"] = ticket.Priority
 		}
-		go h.engine.Fire(r.Context(), projectUUID, "ticket.updated", ticket, extra)
+		engineCtx := context.WithoutCancel(r.Context())
+		go h.engine.Fire(engineCtx, projectUUID, "ticket.updated", ticket, extra)
 		if previous != nil && previous.StateID != ticket.StateID {
 			stateExtra := map[string]string{
 				"priority":  ticket.Priority,
 				"fromState": previous.StateID.String(),
 				"toState":   ticket.StateID.String(),
 			}
-			go h.engine.Fire(r.Context(), projectUUID, "ticket.state_changed", ticket, stateExtra)
+			go h.engine.Fire(engineCtx, projectUUID, "ticket.state_changed", ticket, stateExtra)
 		}
 	}
 

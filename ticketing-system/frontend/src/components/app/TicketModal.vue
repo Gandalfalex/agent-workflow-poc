@@ -2,7 +2,10 @@
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { marked } from "marked";
-import { computed, ref, watch } from "vue";
+import { computed, markRaw, ref, watch } from "vue";
+import { type Node, type Edge } from "@vue-flow/core";
+import GraphCanvas from "@/components/app/automation/GraphCanvas.vue";
+import TicketNode from "@/components/app/automation/TicketNode.vue";
 import type {
     Attachment,
     CustomFieldDefinition,
@@ -119,6 +122,9 @@ const emit = defineEmits<{
 const fileInput = ref<HTMLInputElement | null>(null);
 const incidentExpanded = ref(false);
 const showDependencyGraphOverlay = ref(false);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const depGraphNodeTypes = markRaw({ ticket: markRaw(TicketNode) }) as any;
 const timeEntryMinutes = ref<number | null>(null);
 const timeEntryDescription = ref("");
 const { t } = useI18n();
@@ -355,126 +361,64 @@ const priorityColor = (priority: string) => {
     }
 };
 
-type GraphNodeLayout = {
-    id: string;
-    key: string;
-    title: string;
-    depth: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    isCurrent: boolean;
-};
+// Convert the dependency graph response to VueFlow nodes/edges using the same
+// depth-based column layout as before. Positions are initial — VueFlow's built-in
+// pan/zoom/fit-view takes over from there.
+const depGraphFlowData = computed((): { nodes: Node[]; edges: Edge[] } => {
+    const rawNodes = props.dependencyGraph.nodes || [];
+    const rawEdges = props.dependencyGraph.edges || [];
+    if (!rawNodes.length) return { nodes: [], edges: [] };
 
-type GraphEdgeLayout = {
-    id: string;
-    path: string;
-    relationType: string;
-    color: string;
-};
-
-const dependencyGraphLayout = computed(() => {
-    const nodes = props.dependencyGraph.nodes || [];
-    const edges = props.dependencyGraph.edges || [];
-    if (!nodes.length) {
-        return {
-            width: 640,
-            height: 180,
-            nodes: [] as GraphNodeLayout[],
-            edges: [] as GraphEdgeLayout[],
-        };
-    }
-
-    const grouped = new Map<number, typeof nodes>();
-    for (const node of nodes) {
-        const list = grouped.get(node.depth) || [];
-        list.push(node);
-        grouped.set(node.depth, list);
+    const grouped = new Map<number, typeof rawNodes>();
+    for (const n of rawNodes) {
+        const list = grouped.get(n.depth) || [];
+        list.push(n);
+        grouped.set(n.depth, list);
     }
     const depths = Array.from(grouped.keys()).sort((a, b) => a - b);
-    for (const depth of depths) {
-        const list = grouped.get(depth) || [];
+    for (const d of depths) {
+        const list = grouped.get(d) || [];
         list.sort((a, b) => a.ticket.key.localeCompare(b.ticket.key));
-        grouped.set(depth, list);
+        grouped.set(d, list);
     }
 
-    const cardWidth = 150;
-    const cardHeight = 38;
-    const colGap = 26;
-    const rowGap = 14;
-    const marginX = 18;
-    const marginY = 16;
-    const maxRows = Math.max(...depths.map((d) => (grouped.get(d) || []).length));
-    const width = Math.max(520, marginX * 2 + depths.length * cardWidth + (depths.length - 1) * colGap);
-    const height = Math.max(150, marginY * 2 + maxRows * cardHeight + (maxRows - 1) * rowGap);
+    const colW = 180, rowH = 52, colGap = 40, rowGap = 16, marginX = 24, marginY = 24;
 
-    const nodeLayouts: GraphNodeLayout[] = [];
-    const byID = new Map<string, GraphNodeLayout>();
+    const flowNodes: Node[] = [];
     depths.forEach((depth, colIndex) => {
         const list = grouped.get(depth) || [];
-        list.forEach((node, rowIndex) => {
-            const layout: GraphNodeLayout = {
-                id: node.ticket.id,
-                key: node.ticket.key,
-                title: node.ticket.title,
-                depth: node.depth,
-                x: marginX + colIndex * (cardWidth + colGap),
-                y: marginY + rowIndex * (cardHeight + rowGap),
-                width: cardWidth,
-                height: cardHeight,
-                isCurrent: node.ticket.id === props.ticketId,
-            };
-            nodeLayouts.push(layout);
-            byID.set(layout.id, layout);
+        list.forEach((n, rowIndex) => {
+            flowNodes.push({
+                id: n.ticket.id,
+                type: 'ticket',
+                position: {
+                    x: marginX + colIndex * (colW + colGap),
+                    y: marginY + rowIndex * (rowH + rowGap),
+                },
+                data: {
+                    key: n.ticket.key,
+                    title: n.ticket.title,
+                    isCurrent: n.ticket.id === props.ticketId,
+                    onClick: openDependencyTicket,
+                },
+            });
         });
     });
 
-    const colorForRelation = (relationType: string) => {
-        switch (relationType) {
-            case "blocks":
-                return "#f97316";
-            case "blocked_by":
-                return "#38bdf8";
-            default:
-                return "#94a3b8";
-        }
-    };
+    const edgeColor = (r: string) =>
+        r === 'blocks' ? '#f97316' : r === 'blocked_by' ? '#38bdf8' : '#94a3b8';
 
-    const edgeLayouts: GraphEdgeLayout[] = [];
-    for (const edge of edges) {
-        const source = byID.get(edge.sourceTicketId);
-        const target = byID.get(edge.targetTicketId);
-        if (!source || !target) continue;
-        const sx = source.x + source.width;
-        const sy = source.y + source.height / 2;
-        const tx = target.x;
-        const ty = target.y + target.height / 2;
-        const cx = sx + (tx - sx) / 2;
-        edgeLayouts.push({
-            id: edge.id,
-            relationType: edge.relationType,
-            color: colorForRelation(edge.relationType),
-            path: `M ${sx} ${sy} C ${cx} ${sy}, ${cx} ${ty}, ${tx} ${ty}`,
-        });
-    }
+    const flowEdges: Edge[] = rawEdges.map(e => ({
+        id: e.id,
+        source: e.sourceTicketId,
+        target: e.targetTicketId,
+        type: 'smoothstep',
+        animated: false,
+        style: { stroke: edgeColor(e.relationType), strokeWidth: 2, opacity: 0.9 },
+    }));
 
-    return {
-        width,
-        height,
-        nodes: nodeLayouts,
-        edges: edgeLayouts,
-    };
+    return { nodes: flowNodes, edges: flowEdges };
 });
-
-const shortTitle = (title: string) => {
-    const trimmed = title.trim();
-    if (trimmed.length <= 28) return trimmed;
-    return trimmed.slice(0, 27) + "...";
-};
-
-const dependencyNodeTestId = (nodeID: string) =>
-    `ticket.dependency-graph-node-${nodeID}`;
 
 const openDependencyTicket = (ticketId: string) => {
     showDependencyGraphOverlay.value = false;
@@ -1085,7 +1029,7 @@ const relationLabel = (relationType: string): string => {
                                         variant="outline"
                                         size="sm"
                                         class="mt-2"
-                                        :disabled="!dependencyGraphLayout.nodes.length"
+                                        :disabled="!depGraphFlowData.nodes.length"
                                         @click="showDependencyGraphOverlay = true"
                                     >
                                         {{ t("ticket.openGraph") }}
@@ -1506,65 +1450,17 @@ const relationLabel = (relationType: string): string => {
                     {{ t("common.close") }}
                 </Button>
             </div>
-            <div class="flex-1 overflow-auto p-4">
-                <div v-if="dependencyGraphLayout.nodes.length" class="min-w-fit">
-                    <svg
-                        class="h-[56vh]"
-                        :viewBox="`0 0 ${dependencyGraphLayout.width} ${dependencyGraphLayout.height}`"
-                        role="img"
-                        :aria-label="t('ticket.dependencyGraphAria')"
-                    >
-                        <path
-                            v-for="edge in dependencyGraphLayout.edges"
-                            :key="edge.id"
-                            :d="edge.path"
-                            :stroke="edge.color"
-                            stroke-width="2"
-                            fill="none"
-                            stroke-linecap="round"
-                            opacity="0.9"
-                        />
-                        <g
-                            v-for="node in dependencyGraphLayout.nodes"
-                            :key="node.id"
-                            class="cursor-pointer"
-                            @click="openDependencyTicket(node.id)"
-                        >
-                            <rect
-                                :data-testid="dependencyNodeTestId(node.id)"
-                                :x="node.x"
-                                :y="node.y"
-                                :width="node.width"
-                                :height="node.height"
-                                rx="8"
-                                :fill="node.isCurrent ? '#1d4ed8' : '#0f172a'"
-                                :stroke="node.isCurrent ? '#93c5fd' : '#334155'"
-                                stroke-width="1.5"
-                                @click="openDependencyTicket(node.id)"
-                            />
-                            <text
-                                class="pointer-events-none"
-                                :x="node.x + 10"
-                                :y="node.y + 17"
-                                font-size="11"
-                                font-weight="700"
-                                :fill="node.isCurrent ? '#eff6ff' : '#e2e8f0'"
-                            >
-                                {{ node.key }}
-                            </text>
-                            <text
-                                class="pointer-events-none"
-                                :x="node.x + 10"
-                                :y="node.y + 33"
-                                font-size="10"
-                                :fill="node.isCurrent ? '#dbeafe' : '#94a3b8'"
-                            >
-                                {{ shortTitle(node.title) }}
-                            </text>
-                        </g>
-                    </svg>
-                </div>
-                <p v-else class="text-sm text-muted-foreground">{{ t("ticket.noDependencyGraph") }}</p>
+            <div class="flex-1 overflow-hidden">
+                <GraphCanvas
+                    v-if="depGraphFlowData.nodes.length"
+                    :model-value="depGraphFlowData"
+                    :node-types="depGraphNodeTypes"
+                    :readonly="true"
+                    style="height: 100%"
+                />
+                <p v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    {{ t("ticket.noDependencyGraph") }}
+                </p>
             </div>
             <div class="border-t border-border px-5 py-3 text-[11px] text-muted-foreground">
                 <span class="inline-flex items-center gap-1 mr-3">
